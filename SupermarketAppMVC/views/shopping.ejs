@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreshMart Marketplace</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Fonts (Matches your Index page) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;900&display=swap" rel="stylesheet">
+  
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* --- 1. THEME VARIABLES (Matched to your Index Page) --- */
+    :root {
+      --bg: #f8fafc;           /* Slate-50 like background */
+      --card-bg: #ffffff;
+      --text-main: #0f1f28;    /* Dark slate */
+      --text-muted: #64748b;
+      --accent: #0f9d58;       /* FreshMart Green */
+      --accent-hover: #0b7441;
+      --danger: #ef4444;
+      --border: #e2e8f0;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      --radius: 16px;
+    }
+
+    body {
+      background-color: var(--bg);
+      font-family: 'Inter', sans-serif;
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .container {
+      max-width: 1440px; /* Wide but readable */
+      padding: 2rem;
+    }
+
+    /* --- 2. LAYOUT --- */
+    .shop-layout {
+      display: flex;
+      gap: 2rem;
+      align-items: flex-start;
+    }
+
+    /* Left Sidebar */
+    .shop-layout aside {
+      flex: 0 0 280px;
+      position: sticky; /* Keeps filters visible while scrolling */
+      top: 100px; /* Adjust based on your header height */
+    }
+
+    /* Main Grid */
+    .shop-layout main {
+      flex: 1;
+    }
+
+    /* --- 3. FILTER PANEL STYLING --- */
+    .filters-panel {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .filters-panel h5 {
+      font-size: 1.1rem;
+      margin-bottom: 1.2rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 2px solid #f1f5f9;
+    }
+
+    /* Search Input */
+    #shop-search-input {
+      border-radius: 50px 0 0 50px;
+      border: 1px solid var(--border);
+      padding-left: 1.2rem;
+      font-size: 0.9rem;
+    }
+    #shop-search-input:focus {
+      box-shadow: 0 0 0 3px rgba(15, 157, 88, 0.1);
+      border-color: var(--accent);
+    }
+    .btn-outline-secondary {
+      border-radius: 0 50px 50px 0;
+      border-color: var(--border);
+      color: var(--text-muted);
+    }
+    .btn-outline-secondary:hover {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    /* Custom Checkboxes */
+    .form-check {
+      margin-bottom: 0.6rem;
+      padding-left: 1.8rem;
+    }
+    .form-check-input {
+      border-radius: 6px;
+      width: 1.1em;
+      height: 1.1em;
+      margin-top: 0.2em;
+      border: 1px solid #cbd5e1;
+      cursor: pointer;
+    }
+    .form-check-input:checked {
+      background-color: var(--accent);
+      border-color: var(--accent);
+    }
+    .form-check-label {
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: var(--text-main);
+      transition: color 0.2s;
+    }
+    .form-check:hover .form-check-label {
+      color: var(--accent);
+    }
+
+    /* Scrollable Category Area */
+    .category-scroll {
+      max-height: 250px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+    /* Thin scrollbar */
+    .category-scroll::-webkit-scrollbar { width: 4px; }
+    .category-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    /* --- 4. PRODUCT GRID & CARD --- */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .product-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      border: 1px solid transparent; /* invisible border for hover transition */
+      padding: 1rem;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .product-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--accent);
+    }
+
+    /* Image Area */
+    .product-media {
+      height: 200px;
+      background: #f8fafc; /* Subtle gray bg for product to pop */
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1rem;
+      overflow: hidden;
+      position: relative;
+    }
+    .product-media img {
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+      transition: transform 0.5s ease;
+    }
+    .product-card:hover .product-media img {
+      transform: scale(1.08); /* Gentle zoom */
+    }
+
+    /* Text Content */
+    .product-meta {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .product-card h6 a {
+      font-family: 'Poppins', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+      display: -webkit-box;
+      line-clamp: 2;
+      -webkit-line-clamp: 2; /* Limit to 2 lines */
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .product-card h6 a:hover {
+      color: var(--accent);
+    }
+
+    .price {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-top: 0.5rem;
+    }
+    .price small {
+      font-size: 0.85rem;
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+
+    /* Status Badge */
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+    }
+    .badge-stock {
+      background-color: #dcfce7;
+      color: #166534;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+    .text-out-stock {
+      color: var(--danger);
+      font-weight: 600;
+      font-size: 0.8rem;
+    }
+
+    /* --- 5. CART ACTIONS --- */
+    .add-to-cart-form {
+      display: flex;
+      gap: 8px;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #f1f5f9;
+      align-items: center; /* Vertically align input and button */
+    }
+
+    .qty-input {
+      width: 50px; /* Reduced width */
+      height: 32px; /* Set a fixed height */
+      text-align: center;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-weight: 700; /* Made text bolder */
+      color: var(--accent); /* Use accent color for quantity text */
+      font-size: 0.9rem; /* Adjusted font size */
+      padding: 0.2rem 0.5rem; /* Added padding */
+    }
+    .qty-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(15, 157, 88, 0.1);
+    }
+
+    .btn-add-cart {
+      flex: 1;
+      height: 32px; /* Match qty-input height */
+      background-color: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem; /* Reduced font size */
+      padding: 0 0.75rem; /* Adjusted padding */
+      transition: background 0.2s;
+      display: flex; /* Ensure text is centered */
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap; /* Prevent text wrapping */
+    }
+    .btn-add-cart:hover {
+      background-color: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+    .btn-add-cart:active {
+      transform: translateY(0);
+    }
+
+    /* --- 6. RESPONSIVE --- */
+    @media (max-width: 992px) {
+      .shop-layout { flex-direction: column; }
+      .shop-layout aside { width: 100%; position: static; }
+      .filters-panel { margin-bottom: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  
+  <%- include('partials/header') %>
+
+  <div class="container">
+    
+    <!-- Header Title -->
+    <div class="mb-4">
+      <h2 class="mb-1">Marketplace</h2>
+      <p class="text-muted">Discover our fresh, organic collection.</p>
+    </div>
+
+    <div class="shop-layout">
+      
+      <!-- LEFT SIDEBAR: FILTERS -->
+      <aside>
+        <div class="filters-panel">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <i data-lucide="filter" class="text-success" style="width:20px;"></i>
+            <h5 class="mb-0 border-0 p-0">Filters</h5>
+          </div>
+
+          <!-- Search Form -->
+          <form id="shop-search-form" method="GET" action="/shopping" class="mb-4" aria-label="Search products">
+            <label class="form-label small fw-bold text-muted text-uppercase" style="font-size:0.75rem;">Search</label>
+            <div class="input-group">
+              <input id="shop-search-input" name="q" type="search" class="form-control" placeholder="Apple, Milk..." value="<%= typeof q !== 'undefined' ? q : '' %>">
+              <button class="btn btn-outline-secondary" type="submit">
+                <i data-lucide="search" style="width:18px;"></i>
+              </button>
+            </div>
+            <!-- Preserve Categories -->
+            <% if (Array.isArray(selectedCategories) && selectedCategories.length) { %>
+              <% selectedCategories.forEach(sc => { %>
+                <input type="hidden" name="category[]" value="<%= sc %>">
+              <% }) %>
+            <% } %>
+          </form>
+
+          <!-- Category Form -->
+          <form id="shop-category-form" method="GET" action="/shopping" class="mb-0" aria-label="Filter categories">
+            <input type="hidden" name="q" value="<%= typeof q !== 'undefined' ? q : '' %>">
+            
+            <label class="form-label small fw-bold text-muted text-uppercase mb-3" style="font-size:0.75rem;">Categories</label>
+            
+            <div class="category-scroll">
+              <% if (Array.isArray(categories) && categories.length) { %>
+                <% categories.forEach(c => { %>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="category" id="cat-<%= c.id %>" value="<%= c.id %>" <%= selectedCategories.includes(String(c.id)) ? 'checked' : '' %>>
+                    <label class="form-check-label" for="cat-<%= c.id %>"><%= c.categoryName %></label>
+                  </div>
+                <% }) %>
+              <% } else { %>
+                <div class="text-muted small">No categories available</div>
+              <% } %>
+            </div>
+          </form>
+
+          <hr class="my-4" style="opacity:0.1">
+          <div class="small text-muted d-flex align-items-center gap-1">
+            <i data-lucide="package" style="width:14px;"></i>
+            Showing <strong><%= Array.isArray(list) ? list.length : 0 %></strong> results
+          </div>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT: PRODUCTS -->
+      <main>
+        <div class="product-grid">
+           <% if (!list || list.length === 0) { %>
+             <div class="col-12 w-100 p-5 text-center bg-white rounded-4 border">
+               <div class="mb-3 text-muted"><i data-lucide="search-x" style="width:48px; height:48px;"></i></div>
+               <h4 class="text-muted">No products found</h4>
+               <p class="text-secondary mb-0">Try adjusting your filters or search query.</p>
+             </div>
+           <% } else { %>
+            <% list.forEach(p => { %>
+              
+              <!-- Product Card -->
+              <div class="product-card">
+                <!-- Image -->
+                <div class="product-media">
+                  <% if (p.image) { %>
+                    <img src="/images/<%= p.image %>" alt="<%= p.productName %>">
+                  <% } else { %>
+                    <img src="/images/placeholder.png" alt="no image">
+                  <% } %>
+                </div>
+
+                <!-- Content -->
+                <div class="mb-1">
+                  <div class="product-meta"><%= p.categoryName ? p.categoryName : 'General' %></div>
+                  <h6 class="mt-1 mb-1">
+                    <a href="/product/<%= p.id %>"><%= p.productName %></a>
+                  </h6>
+                  <div class="price">
+                    $<%= Number(p.price || 0).toFixed(2) %> 
+                    <small>/<%= p.unit || p.uom || 'pc' %></small>
+                  </div>
+                </div>
+
+                <!-- Footer / Actions -->
+                <div class="mt-auto">
+                  <div class="status-row">
+                    <% if (p.quantity > 0) { %>
+                     <span class="badge-stock">In Stock</span>
+                     <span class="small text-muted"><%= Number(p.quantity || 0) %> left</span>
+                    <% } else { %>
+                     <span class="text-out-stock">Out of Stock</span>
+                    <% } %>
+                  </div>
+
+                  <% if (Number(p.quantity || 0) > 0) { %>
+                    <form method="POST" action="/cart/add" class="add-to-cart-form">
+                      <input type="hidden" name="productId" value="<%= p.id %>">
+                      <input type="number" class="form-control qty-input" name="quantity" min="1" value="1" aria-label="Quantity">
+                      <button class="btn-add-cart">Add to Cart</button>
+                    </form>
+                  <% } else { %>
+                    <button class="btn btn-light w-100 mt-3 text-muted fw-bold" disabled style="font-size:0.85rem;">Unavailable</button>
+                  <% } %>
+                </div>
+              </div>
+              <!-- End Card -->
+
+            <% }) %>
+           <% } %>
+        </div>
+      </main>
+      
+    </div>
+  </div>
+
+  <%- include('partials/footer') %>
+
+  <script>
+    // Initialize Icons
+    lucide.createIcons();
+
+    // Auto-submit categories on change
+    (function () {
+      const categoryForm = document.getElementById('shop-category-form');
+      if (!categoryForm) return;
+
+      categoryForm.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', () => categoryForm.submit());
+      });
+    })();
+  </script>
+</body>
+</html>

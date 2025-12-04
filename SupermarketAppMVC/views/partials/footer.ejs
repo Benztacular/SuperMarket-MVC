@@ -1,0 +1,168 @@
+<!-- ============================
+      UNIVERSAL DROPDOWN FIXER
+     (Cleaned + De-duplicated)
+============================ -->
+<script>
+(function() {
+
+  function wakeUpDropdowns() {
+    if (typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+      document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(el => {
+        try {
+          if (!bootstrap.Dropdown.getInstance(el)) {
+            new bootstrap.Dropdown(el);
+          }
+        } catch (e) {
+          console.warn('Bootstrap init warning:', e);
+        }
+      });
+    }
+  }
+
+  function attachSafetyNet() {
+    if (window.__dropdownFixAttached) return;
+    window.__dropdownFixAttached = true;
+
+    document.addEventListener('click', function(e) {
+      const toggle = e.target.closest('[data-bs-toggle="dropdown"]')
+                   || e.target.closest('#avatarOverlayBtn');
+
+      if (toggle) {
+        let menu;
+        if (toggle.id === 'avatarOverlayBtn') {
+          const realLink = document.querySelector('#userMenu');
+          if (realLink) menu = realLink.nextElementSibling;
+        } else {
+          menu = toggle.nextElementSibling;
+        }
+
+        if (menu && menu.classList.contains('dropdown-menu')) {
+          setTimeout(() => {
+            if (!menu.classList.contains('show')) {
+              e.preventDefault();
+              e.stopPropagation();
+
+              document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+                if (m !== menu) m.classList.remove('show');
+              });
+
+              menu.classList.add('show');
+              menu.style.position = 'absolute';
+              menu.style.transform = 'translate3d(-20px, 40px, 0px)';
+            }
+          }, 10);
+        }
+      } else {
+        if (!e.target.closest('.dropdown-menu')) {
+          document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
+        }
+      }
+    });
+  }
+
+  function init() {
+    attachSafetyNet();
+
+    const script = document.querySelector('script[src*="bootstrap"]');
+
+    if (script) {
+      if (typeof bootstrap === 'undefined') {
+        script.addEventListener('load', wakeUpDropdowns);
+      } else {
+        wakeUpDropdowns();
+      }
+    } else {
+      if (typeof bootstrap === 'undefined') {
+        const s = document.createElement('script');
+        s.src = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js";
+        s.crossOrigin = "anonymous";
+        s.onload = wakeUpDropdowns;
+        document.body.appendChild(s);
+      } else {
+        wakeUpDropdowns();
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.addEventListener('load', wakeUpDropdowns);
+
+})();
+</script>
+
+<!-- ============================
+      FOOTER STYLING
+============================ -->
+<style>
+  html, body { height: 100%; }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding-bottom: 0;
+  }
+
+  body > .container { flex: 1 0 auto; }
+
+  .app-footer {
+    background: #222;
+    color: #fff;
+    z-index: 1050;
+    padding: 18px 0;
+    margin-top: auto;
+  }
+
+  .app-footer .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 10px 20px;
+    text-align: center;
+  }
+
+  .copyright {
+    color: #bbb;
+    font-size: 0.95rem;
+  }
+
+  a.footer-link {
+    color: #ddd;
+    text-decoration: none;
+    margin-left: 12px;
+  }
+
+  a.footer-link:hover {
+    color: #fff;
+    text-decoration: underline;
+  }
+
+  /* ALWAYS FORCE DROPDOWN ABOVE ALL */
+  .dropdown-menu {
+    z-index: 9999 !important;
+  }
+
+  @media (max-width: 768px) {
+    .app-footer .footer-inner {
+      padding: 12px;
+      max-width: 92%;
+    }
+  }
+</style>
+
+<!-- ============================
+              FOOTER
+============================ -->
+<footer class="app-footer">
+  <div class="footer-inner">
+    <div class="copyright">
+      © <%= new Date().getFullYear() %> FreshMart
+      <a class="footer-link" href="/terms">Terms</a>
+      <a class="footer-link" href="/privacy">Privacy</a>
+    </div>
+  </div>
+</footer>

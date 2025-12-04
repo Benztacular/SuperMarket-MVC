@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>2FA Setup</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{
+      --brand:#1da65a;
+      --muted:#6b7280;
+      --card-shadow:0 12px 40px rgba(2,6,23,.08);
+      --radius:12px;
+    }
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#111;background:linear-gradient(180deg,#f6fff8,#f2fff5);-webkit-font-smoothing:antialiased}
+    .wrap{max-width:920px;margin:36px auto;padding:0 18px}
+    .card{background:#fff;border-radius:var(--radius);box-shadow:var(--card-shadow);overflow:hidden}
+    .card-header{background:var(--brand);color:#fff;padding:20px 28px}
+    .card-header h1{margin:0;font-size:20px}
+    .steps{display:flex;gap:12px;align-items:center;margin-top:12px}
+    .step{flex:1;display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px;background:rgba(255,255,255,.06);transition:all .12s}
+    .step.active{background:rgba(255,255,255,.18);box-shadow:inset 0 -3px 0 rgba(0,0,0,.03)}
+    .step .num{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;color:var(--brand);font-weight:700}
+    .card-body{display:block;padding:28px}
+    .stepContent{display:none}
+    .stepContent.active{display:block}
+    .muted{color:var(--muted);font-size:14px}
+    .qr-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px;background:#fbfffb;border-radius:8px;margin-top:12px}
+    .qr-wrap img{width:210px;height:210px;object-fit:contain;background:#fff;padding:14px;border-radius:10px}
+    .secret-box{width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px;border-radius:8px;background:#fff;border:1px solid #eef6ee;margin-top:12px}
+    .secret{font-family:monospace;color:#0b6b3a}
+    .btn{cursor:pointer;border:0;padding:10px 14px;border-radius:8px}
+    .btn-primary{background:var(--brand);color:#fff}
+    .btn-ghost{background:transparent;border:1px solid #e6f4ea;color:var(--brand)}
+    input[type="text"], input[type="number"]{padding:10px;border-radius:8px;border:1px solid #e6eef0;font-size:14px;width:100%;box-sizing:border-box;margin-top:8px}
+    .actions{display:flex;gap:12px;margin-top:16px;justify-content:flex-end}
+    .notice{font-size:13px;color:var(--muted);margin-top:8px}
+    .error{background:#fdecea;color:#9b2b2b;padding:10px;border-radius:8px;margin-top:12px}
+    @media (max-width:900px){
+      .card{margin:12px}
+    }
+  </style>
+</head>
+<body>
+
+<%
+  //-- SAFELY HANDLE VARIABLES (prevents ReferenceError) -------------------------
+  const errs = (typeof errors !== "undefined" && errors)
+    ? (Array.isArray(errors) ? errors : [errors])
+    : [];
+
+  const msgs = (typeof messages !== "undefined" && messages)
+    ? (Array.isArray(messages) ? messages : [messages])
+    : [];
+
+  const hasQr = (typeof qrDataUrl === "string" && qrDataUrl.length > 0);
+
+  // Fix: do NOT re-declare "secret". Use safeSecret.
+  const safeSecret = (typeof secret === "string") ? secret : "";
+
+  const initialStep = errs.length ? 3 : (hasQr ? 2 : 1);
+%>
+
+<div id="serverData" data-initial="<%= initialStep %>" style="display:none"></div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="card-header">
+      <h1>Secure Your Account — Two-Factor Authentication (2FA)</h1>
+      <div class="steps">
+        <div id="step1El" class="step"><div class="num">1</div><div><strong>Get App</strong><div class="muted">Install an authenticator</div></div></div>
+        <div id="step2El" class="step"><div class="num">2</div><div><strong>Scan QR</strong><div class="muted">Add this account to your app</div></div></div>
+        <div id="step3El" class="step"><div class="num">3</div><div><strong>Verify</strong><div class="muted">Enter the code</div></div></div>
+      </div>
+    </div>
+
+    <div class="card-body">
+
+      <!-- STEP 1 -->
+      <div id="step1Content" class="stepContent">
+        <h2>Get an authenticator app</h2>
+        <p class="muted">Install Google Authenticator, Authy, or any TOTP app.</p>
+        <ul class="muted">
+          <li>Google Authenticator</li>
+          <li>Authy</li>
+        </ul>
+
+        <div class="actions">
+          <button id="nextFrom1Btn" class="btn btn-primary">Next →</button>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div id="step2Content" class="stepContent">
+        <h2>Scan this QR Code</h2>
+        <p class="muted">Open your authenticator app and scan the QR code.</p>
+
+        <% if (errs.length) { %>
+          <div class="error"><%= errs.join(" • ") %></div>
+        <% } %>
+
+        <div class="qr-wrap">
+          <% if (hasQr) { %>
+            <img src="<%= qrDataUrl %>" alt="QR Code">
+          <% } else { %>
+            <div style="width:210px;height:210px;background:#eee;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#666;">
+              QR Not Available
+            </div>
+          <% } %>
+
+          <div style="width:100%;max-width:420px">
+            <div class="secret-box">
+              <div>
+                <div style="font-size:12px;color:var(--muted)">Manual entry key</div>
+                <div class="secret" id="secretText"><%= safeSecret %></div>
+              </div>
+              <button id="copyBtn" class="btn btn-ghost">Copy</button>
+            </div>
+
+            <div class="notice">Use this key if scanning fails.</div>
+          </div>
+
+          <div class="actions">
+            <button id="backFrom2Btn" class="btn btn-ghost">Back</button>
+            <button id="nextBtn" class="btn btn-primary">Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div id="step3Content" class="stepContent">
+        <h2>Verify code</h2>
+        <p class="muted">Enter the 6-digit code from your authenticator app.</p>
+
+        <form method="post" action="/2fa/verify-setup">
+          <label class="muted">6-digit code</label>
+          <input name="token" maxlength="6" pattern="[0-9]*" required placeholder="123456">
+
+          <div class="actions">
+            <button id="backBtn" type="button" class="btn btn-ghost">Back</button>
+            <button type="submit" class="btn btn-primary">Verify & Enable</button>
+          </div>
+        </form>
+
+        <div class="muted" style="margin-top:18px">
+          <p>You will return to login after verification.</p>
+          <p><a href="/login">Cancel setup</a></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+
+  const steps = {
+    1: document.getElementById('step1El'),
+    2: document.getElementById('step2El'),
+    3: document.getElementById('step3El')
+  };
+
+  const content = {
+    1: document.getElementById('step1Content'),
+    2: document.getElementById('step2Content'),
+    3: document.getElementById('step3Content')
+  };
+
+  let current = Number(document.getElementById('serverData')?.dataset?.initial || 1);
+
+  function renderStep() {
+    for (let i = 1; i <= 3; i++) {
+      steps[i].classList.toggle('active', i === current);
+      content[i].classList.toggle('active', i === current);
+    }
+  }
+
+  // buttons
+  document.getElementById('nextFrom1Btn').onclick = () => { current = 2; renderStep(); };
+  document.getElementById('nextBtn').onclick      = () => { current = 3; renderStep(); };
+  document.getElementById('backFrom2Btn').onclick = () => { current = 1; renderStep(); };
+  document.getElementById('backBtn').onclick      = () => { current = 2; renderStep(); };
+
+  // copy secret
+  document.getElementById('copyBtn').onclick = () => {
+    const txt = document.getElementById('secretText').textContent.trim();
+    if (!txt) return;
+    navigator.clipboard.writeText(txt).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = "Copied!";
+      setTimeout(() => btn.textContent = "Copy", 1500);
+    });
+  };
+
+  // initial render
+  renderStep();
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Shopping Cart - FreshMart</title>
+  
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* --- 1. PREMIUM THEME VARIABLES --- */
+    :root {
+      --bg-body: #f8fafc;
+      --card-bg: #ffffff;
+      --brand-green: #0f9d58;
+      --brand-dark: #1e293b;
+      --text-main: #334155;
+      --text-muted: #94a3b8;
+      --border-color: #e2e8f0;
+      --radius: 16px;
+      --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background-color: var(--bg-body);
+      font-family: 'Inter', sans-serif;
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Poppins', sans-serif;
+      color: var(--brand-dark);
+      font-weight: 600;
+    }
+
+    /* --- 2. LAYOUT & SPACING --- */
+    .cart-page {
+      min-height: 80vh;
+      padding-top: 2rem;
+      padding-bottom: 5rem;
+    }
+
+    /* --- 2.5 PROGRESS STEPPER (NEW) --- */
+    .checkout-stepper {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 3rem;
+      position: relative;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.9rem;
+      position: relative;
+      z-index: 2;
+    }
+    .step-item.active {
+      color: var(--brand-green);
+      font-weight: 700;
+    }
+    .step-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      transition: all 0.3s;
+    }
+    .step-item.active .step-circle {
+      background: var(--brand-green);
+      color: white;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+    }
+    .step-divider {
+      width: 60px;
+      height: 2px;
+      background: #e2e8f0;
+      margin: 0 1rem;
+    }
+
+    /* --- 3. CART ITEM CARDS --- */
+    .list-group {
+      gap: 1rem; /* Space between items */
+      border-radius: var(--radius);
+    }
+
+    .cart-item-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius) !important; /* Force rounded corners */
+      padding: 1.5rem !important;
+      transition: all 0.2s ease;
+      margin-bottom: 0; /* Handled by gap */
+    }
+
+    .cart-item-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover) !important;
+      border-color: #cbd5e1;
+      z-index: 1;
+    }
+
+    .cart-item-img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 12px;
+      background-color: #f1f5f9;
+      border: 1px solid #f1f5f9;
+    }
+
+    /* --- 4. TEXT & TYPOGRAPHY --- */
+    a.h6 {
+      text-decoration: none;
+      font-size: 1.1rem;
+      color: var(--brand-dark);
+      transition: color 0.2s;
+    }
+    a.h6:hover {
+      color: var(--brand-green);
+    }
+
+    .muted-note {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      letter-spacing: 0.3px;
+    }
+
+    .price-small {
+      font-family: 'Poppins', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--brand-dark);
+    }
+
+    /* --- 5. QUANTITY CONTROLS --- */
+    .input-group {
+      background: #f1f5f9;
+      border-radius: 50px;
+      padding: 2px;
+      border: 1px solid var(--border-color);
+    }
+
+    .qty-input {
+      background: transparent;
+      border: none;
+      font-weight: 600;
+      color: var(--brand-dark);
+      width: 40px !important;
+      padding: 0;
+    }
+    .qty-input:focus {
+      background: transparent;
+      box-shadow: none;
+    }
+    /* Hide number spinners */
+    .qty-input::-webkit-inner-spin-button, 
+    .qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+    .btn-outline-secondary {
+      border: none;
+      border-radius: 50% !important;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      color: var(--brand-dark);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      transition: all 0.2s;
+    }
+    .btn-outline-secondary:hover {
+      background: var(--brand-green);
+      color: white;
+      transform: scale(1.1);
+    }
+
+    /* --- 6. BUTTONS --- */
+    .btn-primary {
+      background-color: var(--brand-green);
+      border: none;
+      font-weight: 600;
+      padding: 0.5rem 1.2rem;
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+    .btn-primary:hover {
+      background-color: #059669;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-link.text-danger {
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    .btn-link.text-danger:hover {
+      opacity: 1;
+    }
+
+    /* --- 7. ORDER SUMMARY --- */
+    .summary-card {
+      position: sticky;
+      top: 110px;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+      padding: 2rem !important;
+    }
+
+    .summary-card h5 {
+      font-size: 1.25rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px dashed var(--border-color);
+    }
+
+    .checkout-btn {
+      background: var(--brand-dark); /* Dark button for contrast */
+      color: white;
+      padding: 16px;
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .checkout-btn:hover:not(:disabled) {
+      background: black;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+    }
+    .checkout-btn:disabled {
+      background: #cbd5e1;
+      border: none;
+    }
+
+    /* --- 8. TRUST VISUALS --- */
+    .trust-badges {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #f1f5f9;
+    }
+    .trust-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.7rem;
+    }
+
+    @media (max-width: 991px) { 
+      .summary-card { position: static; margin-top: 2rem; }
+      .cart-item-img { width: 64px; height: 64px; }
+    }
+  </style>
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <div class="container cart-page">
+    
+    <!-- Visual Progress Stepper -->
+    <div class="checkout-stepper">
+      <div class="step-item active">
+        <div class="step-circle">1</div>
+        <span>Shopping Cart</span>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-item">
+        <div class="step-circle">2</div>
+        <span>Checkout</span>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-item">
+        <div class="step-circle">3</div>
+        <span>Payment</span>
+      </div>
+    </div>
+
+    <div class="row g-5"> <!-- Increased gutter for premium spacing -->
+      
+      <!-- LEFT COLUMN: CART ITEMS -->
+      <div class="col-lg-8">
+        <div class="d-flex align-items-end justify-content-between mb-4">
+          <h3 class="mb-0 fw-bold">My Cart</h3>
+          <span class="text-muted small"><%= (cartItems || items || []).length %> items</span>
+        </div>
+
+        <%
+          const rows = (cartItems || items || []);
+          function price(n){ const v = Number(n||0); return isFinite(v) ? v.toFixed(2) : '0.00'; }
+          const sum = rows.reduce((s, it)=> s + Number(it.price||0)*Number(it.quantity||0), 0);
+        %>
+
+        <div class="list-group border-0">
+          <% if (!rows.length) { %>
+            <div class="list-group-item text-center text-muted py-5 border rounded-4 bg-white shadow-sm">
+              <i data-lucide="shopping-bag" style="width: 48px; height: 48px; opacity: 0.2; margin-bottom: 1rem;"></i>
+              <p class="mb-0">Your cart is currently empty.</p>
+              <a href="/shopping" class="btn btn-primary mt-3">Start Shopping</a>
+            </div>
+          <% } else { rows.forEach(it => { %>
+            <!-- Premium Card Item -->
+            <div class="list-group-item cart-item-card d-flex align-items-center gap-4">
+              
+              <!-- Image -->
+              <% if (it.image) { %>
+                <img src="/images/<%= it.image %>" alt="<%= it.productName %>" class="cart-item-img shadow-sm">
+              <% } else { %>
+                <div class="cart-item-img d-flex align-items-center justify-content-center text-muted small">No Img</div>
+              <% } %>
+
+              <!-- Content Area -->
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <a href="/product/<%= it.id %>" class="h6 mb-1 d-block text-dark"><%= it.productName %></a>
+                    <div class="muted-note">Seller: SuperMarket • SKU: <%= it.id %></div>
+                  </div>
+                  <div class="text-end">
+                    <div class="price-small">$<%= price(it.price) %></div>
+                    <!-- Moved remove button here for better UX -->
+                    <form action="/cart/remove/<%= it.id %>" method="POST" style="display:inline">
+                      <button class="btn btn-link text-danger p-0 mt-1 text-decoration-none" type="submit">
+                        <small>Remove</small>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Controls Row -->
+                <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top border-light">
+                  
+                  <!-- Quantity Control -->
+                  <form class="d-flex align-items-center" action="/cart/update/<%= it.id %>" method="POST">
+                    <div class="input-group input-group-sm" style="width:130px">
+                      <button type="button" class="btn btn-outline-secondary qty-decrement fw-bold">−</button>
+                      <input class="form-control text-center qty-input" type="number" name="quantity" min="0" value="<%= it.quantity %>">
+                      <button type="button" class="btn btn-outline-secondary qty-increment fw-bold">+</button>
+                    </div>
+                    <button class="btn btn-light btn-sm ms-2 text-muted fw-bold border" type="submit" style="font-size: 0.75rem;">Update</button>
+                  </form>
+
+                  <!-- Item Total -->
+                  <div class="text-end">
+                    <span class="muted-note d-block" style="font-size: 0.75rem;">Total</span>
+                    <strong class="text-success">$<%= price(Number(it.price||0)*Number(it.quantity||0)) %></strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% }) } %>
+        </div>
+
+        <!-- Continue Shopping & Clear Cart Links -->
+        <div class="mt-4 pt-2 d-flex justify-content-between align-items-center">
+          <a href="/shopping" class="text-decoration-none d-flex align-items-center gap-2 text-muted fw-bold" style="font-size: 0.9rem;">
+            <i data-lucide="arrow-left" style="width: 16px;"></i> Continue Shopping
+          </a>
+
+          <% if (rows.length > 0) { %>
+            <form action="/cart/clear" method="POST" class="d-inline">
+              <button type="submit" class="btn btn-link text-danger text-decoration-none d-flex align-items-center gap-2 fw-bold p-0" style="font-size: 0.9rem;" onclick="return confirm('Are you sure you want to clear your entire cart?')">
+                <i data-lucide="trash-2" style="width: 16px;"></i> Clear Cart
+              </button>
+            </form>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: SUMMARY -->
+      <div class="col-lg-4">
+        <div class="summary-card">
+          <h5>Order Summary</h5>
+          
+          <!-- Product Breakdown (Enhanced) -->
+          <div class="mb-3">
+            <% rows.forEach(item => { %>
+              <div class="d-flex justify-content-between align-items-center mb-2 py-2 rounded"
+                  style="background:#f8fafc; border-radius:10px; padding-left:12px; padding-right:12px;
+                          border:1px solid #eceff3;">
+                
+                <!-- Left: Name + Quantity -->
+                <div class="d-flex flex-column">
+                  <span class="fw-semibold" style="color:#1e293b;">
+                    <%= item.productName %>
+                  </span>
+                  <span class="text-muted small">
+                    Quantity: <strong>x<%= item.quantity %></strong>
+                  </span>
+                </div>
+
+                <!-- Right: Price -->
+                <div class="fw-bold" style="color:#0f9d58;">
+                  $<%= price(item.price * item.quantity) %>
+                </div>
+
+              </div>
+            <% }) %>
+          </div>
+
+
+          <div class="d-flex justify-content-between mb-3 text-muted">
+            <div>Shipping</div>
+            <div class="text-success fw-bold">Free</div>
+
+          </div>
+
+          <hr class="my-4">
+
+          <div class="d-flex justify-content-between mb-4 align-items-end">
+            <span class="h5 mb-0 fw-bold">Total</span>
+            <span class="h4 mb-0 fw-bold text-dark">$<%= price(sum) %></span>
+          </div>
+
+          <form action="/cart/pay" method="GET">
+            <button class="btn btn-primary w-100 checkout-btn d-flex justify-content-between align-items-center" <%= rows.length ? '' : 'disabled' %>>
+              <span>Checkout</span>
+              <i data-lucide="arrow-right" style="width: 20px;"></i>
+            </button>
+          </form>
+
+          <!-- Trust Badges -->
+          <div class="trust-badges">
+            <div class="trust-item">
+              <i data-lucide="shield-check" class="text-success" style="width:20px;"></i>
+              <span>Secure Payment</span>
+            </div>
+            <div class="trust-item">
+              <i data-lucide="truck" class="text-primary" style="width:20px;"></i>
+              <span>Fast Delivery</span>
+            </div>
+            <div class="trust-item">
+              <i data-lucide="refresh-cw" class="text-warning" style="width:20px;"></i>
+              <span>Easy Returns</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%- include('partials/footer') %>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Qty +/- behaviour (delegated)
+    document.addEventListener('click', function (e) {
+      const dec = e.target.closest('.qty-decrement');
+      const inc = e.target.closest('.qty-increment');
+      if (!dec && !inc) return;
+      e.preventDefault();
+      const group = (dec || inc).closest('.input-group');
+      if (!group) return;
+      const input = group.querySelector('.qty-input');
+      if (!input) return;
+      let v = parseInt(input.value, 10) || 0;
+      if (dec) v = Math.max(0, v - 1);
+      if (inc) v = v + 1;
+      input.value = v;
+    });
+  </script>
+</body>
+</html>

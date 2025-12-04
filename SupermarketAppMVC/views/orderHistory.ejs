@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title><%= (typeof showDelivered !== 'undefined' && !showDelivered) ? 'Current Orders' : 'Order History' %></title>
+  
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* --- THEME VARIABLES (Matching Profile Page) --- */
+    :root {
+      --bg-body: #f8fafc;
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      --card-bg: #ffffff;
+      
+      --radius-xl: 24px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      
+      --header-height: 80px;
+    }
+
+    html, body { height: 100%; margin: 0; }
+    
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding-top: calc(var(--header-height) + 40px);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.05) 0px, transparent 40%),
+        radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.05) 0px, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    main { flex: 1 0 auto; padding-bottom: 60px; }
+
+    .container-custom {
+      max-width: 1000px; /* Slightly wider for the table */
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* --- CARD STYLING --- */
+    .order-card {
+      background: var(--card-bg);
+      border-radius: var(--radius-xl);
+      padding: 2.5rem;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--border-color);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-header-styled {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .icon-box {
+      width: 48px; height: 48px;
+      background: #ecfdf5; /* Light green bg */
+      color: var(--primary);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+    }
+
+    /* --- TABLE STYLING --- */
+    .table-container {
+      overflow-x: auto;
+      min-height: 400px; /* Prevent jumpiness when changing pages */
+    }
+
+    .table-clean {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-top: 0;
+      font-size: 0.95rem;
+    }
+
+    .table-clean th {
+      padding: 1rem 1.25rem;
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+    .table-clean th:first-child { border-top-left-radius: var(--radius-md); border-bottom-left-radius: var(--radius-md); }
+    .table-clean th:last-child { border-top-right-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); }
+
+    .table-clean td {
+      padding: 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: middle;
+      color: var(--text-main);
+      font-weight: 500;
+    }
+    
+    .table-clean tr:last-child td { border-bottom: none; }
+    .table-clean tr:hover td { background-color: #f8fafc; transition: background 0.2s; }
+
+    .table-clean .right { text-align: right; }
+    .table-clean .center { text-align: center; }
+
+    /* --- STATUS BADGES --- */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 50px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      width: fit-content;
+      margin: 0 auto;
+    }
+
+    /* Status Colors */
+    .s-pending { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .s-pending .status-dot { background: #f59e0b; }
+
+    .s-processing { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .s-processing .status-dot { background: #3b82f6; }
+
+    .s-shipping { background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
+    .s-shipping .status-dot { background: #06b6d4; }
+
+    .s-delivered { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .s-delivered .status-dot { background: #10b981; }
+
+    .s-cancelled { background: #fef2f2; color: #be123c; border: 1px solid #fecaca; }
+    .s-cancelled .status-dot { background: #ef4444; }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* --- ACTIONS --- */
+    .btn-receipt {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--primary);
+      background: #ecfdf5;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .btn-receipt:hover {
+      background: var(--primary);
+      color: white;
+      transform: translateY(-1px);
+    }
+
+    /* Admin Select Styling */
+    .status-select {
+      padding: 6px 24px 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background-color: #fff;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      background-size: 10px 10px;
+      transition: border-color 0.2s;
+    }
+    .status-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+    
+    .muted-text { color: var(--text-muted); font-size: 0.9rem; }
+    .order-id { font-family: monospace; font-weight: 600; color: var(--text-main); font-size: 0.95rem; }
+
+    /* Pagination Styling */
+    .page-link {
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      margin: 0 4px;
+      border-radius: 8px;
+      font-weight: 600;
+      padding: 8px 14px;
+    }
+    .page-link:hover {
+      color: var(--primary);
+      background-color: #ecfdf5;
+      border-color: #a7f3d0;
+    }
+    .page-item.active .page-link {
+      background-color: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+    .page-item.disabled .page-link {
+      color: #94a3b8;
+      background-color: #f8fafc;
+      border-color: #e2e8f0;
+      pointer-events: none;
+    }
+
+    @media (max-width: 768px) {
+      .order-card { padding: 1.5rem; }
+      .table-clean th, .table-clean td { padding: 0.75rem; }
+      .status-badge { padding: 4px 8px; font-size: 0.75rem; }
+      .btn-receipt { padding: 6px 12px; font-size: 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <main>
+    <div class="container-custom">
+      <div class="order-card">
+        
+        <!-- Header Section -->
+        <div class="card-header-styled">
+          <div class="icon-box">
+            <% if (typeof showDelivered !== 'undefined' && !showDelivered) { %>
+              <i data-lucide="package" width="24"></i>
+            <% } else { %>
+              <i data-lucide="history" width="24"></i>
+            <% } %>
+          </div>
+          <h2><%= (typeof showDelivered !== 'undefined' && !showDelivered) ? 'Current Orders' : 'Order History' %></h2>
+        </div>
+
+        <% 
+          // Normalized logic preserved exactly from original
+          const list = (typeof orders !== 'undefined') ? orders : ((typeof rows !== 'undefined') ? rows : []);
+          const showDeliveredLocal = (typeof showDelivered !== 'undefined') ? Boolean(showDelivered) : true;
+          const isAdminLocal = (typeof isAdmin !== 'undefined') ? Boolean(isAdmin) : false;
+
+          function fmtCurrency(n){ return '$ ' + (Number(n) || 0).toFixed(2); }
+          function fmtDate(d){ if(!d) return '-'; try { return new Date(d).toLocaleString(); } catch(e){ return '-'; } }
+          function normalizeId(o){ return o.id || o.order_id || o.orderNo || o.order_no || '-'; }
+          function normalizeTotal(o){ return Number(o.totalAmount || o.total || o.amount || o.price || 0); }
+          function normalizeCreated(o){ return o.orderDate || o.createdAt || o.created_at || o.created || o.date || o.placed || ''; }
+          function normalizeStatus(o){ return (o.status || 'pending').toString().toLowerCase(); }
+          function statusClass(s){ return ({ pending:'s-pending', processing:'s-processing', shipping:'s-shipping', delivered:'s-delivered', cancelled:'s-cancelled' }[s] || 's-pending'); }
+
+          const displayList = showDeliveredLocal ? list : list.filter(it => normalizeStatus(it) !== 'delivered');
+        %>
+
+        <div class="table-container">
+          <table class="table-clean" aria-label="Order history">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Date Placed</th>
+                <th class="right">Total</th>
+                <th class="center">Status</th>
+                <th class="center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="orderTableBody">
+              <% if (displayList && displayList.length) { %>
+                <% displayList.forEach(o => { 
+                      const orderId = normalizeId(o);
+                      const created = normalizeCreated(o);
+                      const totalVal = normalizeTotal(o);
+                      const status = normalizeStatus(o);
+                      const sClass = statusClass(status);
+                %>
+                  <tr>
+                    <td><span class="order-id">#<%= orderId %></span></td>
+                    <td class="muted-text"><%= created ? fmtDate(created) : '-' %></td>
+                    <td class="right fw-bold"><%= fmtCurrency(totalVal) %></td>
+
+                    <td class="center">
+                      <div class="d-flex align-items-center justify-content-center gap-2">
+                        <div class="status-badge <%= sClass %>" title="Status: <%= status %>">
+                          <span class="status-dot" aria-hidden="true"></span>
+                          <span><%= (status.charAt(0).toUpperCase() + status.slice(1)) %></span>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td class="center">
+                      <a class="btn-receipt" href="/orders/<%= orderId %>/receipt">
+                        <i data-lucide="receipt" width="14"></i> Receipt
+                      </a>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr class="no-data-row">
+                  <td colspan="5" class="center py-5">
+                    <div class="d-flex flex-column align-items-center">
+                      <div class="p-3 bg-light rounded-circle mb-3 text-muted">
+                        <i data-lucide="inbox" width="32"></i>
+                      </div>
+                      <h5 class="text-muted fw-bold">No orders found</h5>
+                      <p class="small text-muted mb-0">You haven't placed any orders yet.</p>
+                    </div>
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
+
+      </div>
+    </div>
+  </main>
+
+  <%- include('partials/footer') %>
+
+  <!-- NOTE: Bootstrap Bundle Script Removed here because it is already included in header.ejs -->
+  
+  <script>
+    lucide.createIcons();
+
+    // Admin: auto-submit status changes (Logic preserved)
+    document.addEventListener('change', function(e){
+      const sel = e.target;
+      if (!sel || !sel.classList.contains('status-select')) return;
+      const form = sel.closest('form');
+      if (!form) return;
+      form.submit();
+    });
+
+    // Client-side Pagination Logic
+    document.addEventListener('DOMContentLoaded', function() {
+      const tableBody = document.getElementById('orderTableBody');
+      const rows = Array.from(tableBody.querySelectorAll('tr'));
+      const paginationContainer = document.getElementById('pagination-container');
+      const itemsPerPage = 10;
+      
+      // Check if we have data or just the "No orders" message
+      const isNoData = rows.length === 1 && rows[0].classList.contains('no-data-row');
+      
+      if (rows.length === 0 || isNoData) {
+          return; // Don't show pagination if no data
+      }
+
+      const pageCount = Math.ceil(rows.length / itemsPerPage);
+      let currentPage = 1;
+
+      // REMOVED: The check that hid pagination if there was only 1 page
+      // if (pageCount <= 1) return; 
+
+      function displayRows(page) {
+        const start = (page - 1) * itemsPerPage;
+        const end = start + itemsPerPage;
+        
+        rows.forEach((row, index) => {
+          if (index >= start && index < end) {
+            row.style.display = '';
+          } else {
+            row.style.display = 'none';
+          }
+        });
+      }
+
+      function setupPagination() {
+        paginationContainer.innerHTML = '';
+        
+        const nav = document.createElement('nav');
+        const ul = document.createElement('ul');
+        ul.className = 'pagination';
+        
+        // Previous Button
+        const prevLi = document.createElement('li');
+        prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+        prevLi.innerHTML = `<a class="page-link" href="#" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a>`;
+        prevLi.onclick = (e) => { e.preventDefault(); if(currentPage > 1) { currentPage--; update(); } };
+        ul.appendChild(prevLi);
+
+        // Numbered Buttons
+        // Always show at least page 1 even if rows < itemsPerPage
+        const safePageCount = pageCount > 0 ? pageCount : 1;
+        
+        for (let i = 1; i <= safePageCount; i++) {
+          const li = document.createElement('li');
+          li.className = `page-item ${currentPage === i ? 'active' : ''}`;
+          li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+          li.onclick = (e) => { e.preventDefault(); currentPage = i; update(); };
+          ul.appendChild(li);
+        }
+
+        // Next Button
+        const nextLi = document.createElement('li');
+        nextLi.className = `page-item ${currentPage === safePageCount ? 'disabled' : ''}`;
+        nextLi.innerHTML = `<a class="page-link" href="#" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>`;
+        nextLi.onclick = (e) => { e.preventDefault(); if(currentPage < safePageCount) { currentPage++; update(); } };
+        ul.appendChild(nextLi);
+
+        nav.appendChild(ul);
+        paginationContainer.appendChild(nav);
+      }
+
+      function update() {
+        displayRows(currentPage);
+        setupPagination();
+      }
+
+      update();
+    });
+  </script>
+</body>
+</html>

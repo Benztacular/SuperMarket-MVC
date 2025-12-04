@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Register - Supermarket App</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root{
+      --brand-1:#f05a28;
+      --brand-2:#ff7a3d;
+      --muted:#667085;
+      --card-shadow:0 10px 30px rgba(15,30,50,.08);
+      --radius:12px;
+    }
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,Helvetica,sans-serif;background:#fff;color:#222;-webkit-font-smoothing:antialiased}
+    /* center the card on the page (left visual removed) */
+    .auth-layout{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:32px;box-sizing:border-box}
+    .card-wrap{width:100%;max-width:920px;display:flex;border-radius:var(--radius);overflow:hidden;box-shadow:var(--card-shadow);background:#fff}
+    .card-left{flex:1;padding:36px 44px;box-sizing:border-box}
+    .card-right{width:320px;min-width:240px;background:linear-gradient(180deg,var(--brand-1),var(--brand-2));color:#fff;padding:36px;display:flex;flex-direction:column;justify-content:center}
+    h2.title{margin-top:0;margin-bottom:12px;font-size:22px}
+    .small-muted{color:var(--muted);font-size:13px}
+    .form-control, input[type="text"], input[type="password"], input[type="email"]{
+      width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid #e9f0f5;background:#fff;font-size:14px;
+    }
+    .btn-primary{background:var(--brand-1);border:0;border-radius:8px;padding:12px 18px}
+    .terms{font-size:13px;color:var(--muted);margin-top:12px}
+    .otp-toggle{display:inline-flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);cursor:pointer;background:#fff;color:var(--muted);transition:all .15s ease;font-weight:500;}
+    .otp-toggle.on{background:rgba(11,102,35,0.08);border-color:rgba(11,102,35,0.18);color:#0b6623;box-shadow:0 2px 8px rgba(11,102,35,.04)}
+    .otp-toggle.off{background:rgba(242,139,139,0.06);border-color:rgba(220,20,60,0.06);color:#b02a37}
+    .otp-indicator{width:12px;height:12px;border-radius:50%;display:inline-block}
+    .otp-indicator.on{background:#0b6623}
+    .otp-indicator.off{background:#f28b8b}
+    @media (max-width:900px){
+      .card-wrap{flex-direction:column}
+      .card-right{display:none}
+      .card-left{padding:22px}
+    }
+  </style>
+</head>
+<body>
+  <% const msgs = Array.isArray(messages) ? messages : (messages ? [messages] : []); %>
+  <% const form = formData || {}; %>
+
+  <div class="auth-layout">
+    <div class="card-wrap">
+      <div class="card-left">
+        <h2 class="title">Start Shopping</h2>
+        <p class="small-muted">Create your profile to unlock exclusive savings.</p>
+
+        <% if (msgs.length) { %>
+          <div class="mb-3">
+            <% msgs.forEach(m => { %>
+              <div class="alert alert-danger"><%= m %></div>
+            <% }) %>
+          </div>
+        <% } %>
+
+        <form method="post" action="/register" novalidate>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small-muted">Username</label>
+              <input name="username" class="form-control" required value="<%= form.username ? form.username : '' %>">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small-muted">Email</label>
+              <input name="email" type="email" class="form-control" required value="<%= form.email ? form.email : '' %>">
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label small-muted">Password</label>
+              <input name="password" type="password" class="form-control" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small-muted">Contact</label>
+              <input name="contact" class="form-control" required value="<%= form.contact ? form.contact : '' %>">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small-muted">Address</label>
+              <input name="address" class="form-control" required value="<%= form.address ? form.address : '' %>">
+            </div>
+
+            <div class="col-12 d-flex align-items-center gap-3">
+              <!-- keep original checkbox name; hidden input updated by toggle -->
+              <input id="enable2fa_checkbox" name="enable2fa" type="checkbox" value="1" style="display:none" <%= form.enable2fa ? 'checked' : '' %> />
+              <button type="button" id="otpToggle" class="otp-toggle off" aria-pressed="false">
+                <span class="otp-indicator off" id="otpIndicator"></span>
+                <span id="otpLabel">Enable OTP Authentication</span>
+              </button>
+              <small class="small-muted">Use authenticator app for extra security</small>
+            </div>
+
+            <div class="col-12">
+              <div class="terms">
+                By creating an account you agree to the <a href="/terms">Terms of Service</a>.
+              </div>
+            </div>
+
+            <div class="col-12">
+              <button type="submit" class="btn btn-primary w-100">Create My Account</button>
+            </div>
+
+            <div class="col-12 text-center">
+              <small class="small-muted">Already have an account? <a href="/login">Sign in</a></small>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card-right d-none d-md-flex">
+        <div>
+          <h3 style="margin:0 0 8px">FreshMart</h3>
+          <p style="opacity:.95;margin-bottom:14px">Start your healthy journey. Get fresh groceries delivered to your door.</p>
+          <div style="font-weight:700;font-size:20px">Join the freshness revolution</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const btn = document.getElementById('otpToggle');
+      const chk = document.getElementById('enable2fa_checkbox');
+      const indicator = document.getElementById('otpIndicator');
+      const label = document.getElementById('otpLabel');
+
+      function setState(on) {
+        if (on) {
+          btn.classList.remove('off'); btn.classList.add('on');
+          indicator.classList.remove('off'); indicator.classList.add('on');
+          label.textContent = 'OTP Authentication: Enabled';
+          btn.setAttribute('aria-pressed','true');
+        } else {
+          btn.classList.remove('on'); btn.classList.add('off');
+          indicator.classList.remove('on'); indicator.classList.add('off');
+          label.textContent = 'Enable OTP Authentication';
+          btn.setAttribute('aria-pressed','false');
+        }
+        chk.checked = !!on;
+      }
+
+      setState(!!chk.checked);
+
+      btn.addEventListener('click', function () {
+        setState(!chk.checked);
+      });
+    })();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

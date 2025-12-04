@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Confirm Payment - FreshMart</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* --- PREMIUM THEME VARIABLES --- */
+    :root {
+      --bg-body: #f8fafc;
+      --card-bg: #ffffff;
+      --brand-green: #0f9d58;
+      --brand-dark: #1e293b;
+      --text-main: #334155;
+      --text-muted: #94a3b8;
+      --border-color: #e2e8f0;
+      --radius: 16px;
+      --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+    }
+
+    html, body { height: 100%; }
+    
+    body { 
+      background-color: var(--bg-body); 
+      font-family: 'Inter', sans-serif; 
+      color: var(--text-main); 
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Poppins', sans-serif;
+      color: var(--brand-dark);
+      font-weight: 600;
+    }
+
+    /* --- LAYOUT --- */
+    .confirm-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 5rem;
+    }
+
+    .confirm-header {
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    .confirm-header h1 { font-size: 1.75rem; letter-spacing: -0.5px; margin-bottom: 0.5rem; }
+    .confirm-header .sub { color: var(--text-muted); font-size: 0.95rem; }
+
+    /* --- PROGRESS STEPPER --- */
+    .checkout-stepper {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 3rem;
+      position: relative;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.9rem;
+      position: relative;
+      z-index: 2;
+    }
+    .step-item.active {
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+    .step-item.completed {
+      color: var(--brand-green);
+    }
+    .step-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      transition: all 0.3s;
+    }
+    .step-item.active .step-circle {
+      background: var(--brand-dark);
+      color: white;
+      box-shadow: 0 0 0 4px rgba(30, 41, 59, 0.1);
+    }
+    .step-item.completed .step-circle {
+      background: var(--brand-green);
+      color: white;
+    }
+    .step-divider {
+      width: 60px;
+      height: 2px;
+      background: #e2e8f0;
+      margin: 0 1rem;
+    }
+    .step-item.completed + .step-divider {
+      background: var(--brand-green);
+    }
+
+    /* --- MAIN BODY --- */
+    .confirm-body {
+      display: flex;
+      gap: 2rem;
+      align-items: flex-start;
+    }
+
+    /* Left: Item List Card */
+    .confirm-items {
+      flex: 1;
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+      padding: 0; /* Removing padding from container to use table styling */
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    .order-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .order-table thead th {
+      text-align: left; 
+      padding: 1.25rem 1.5rem;
+      font-weight: 600; 
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-color);
+      background: #f8fafc;
+    }
+    .order-table tbody tr td { 
+      padding: 1.25rem 1.5rem; 
+      border-bottom: 1px solid #f1f5f9; 
+      vertical-align: middle;
+    }
+    .order-table tbody tr:last-child td { border-bottom: none; }
+
+    /* Product Cell */
+    .product-cell { display: flex; align-items: center; gap: 1rem; }
+    .product-cell img {
+      width: 56px; 
+      height: 56px; 
+      object-fit: cover; 
+      border-radius: 10px; 
+      background: #f8fafc; 
+      border: 1px solid #f1f5f9;
+    }
+    .product-cell .name { 
+      font-weight: 600; 
+      color: var(--brand-dark); 
+      font-size: 0.95rem;
+    }
+
+    /* Columns */
+    .qty-cell { font-weight: 500; color: var(--text-main); font-size: 0.95rem; }
+    .price-cell { font-weight: 500; color: var(--text-muted); font-size: 0.95rem; }
+    .subtotal-cell { font-weight: 700; color: var(--brand-dark); font-size: 1rem; }
+
+    /* Right: Summary Card */
+    .confirm-summary { 
+      flex: 0 0 380px; 
+      width: 380px;
+    }
+    .summary-card {
+      background: var(--card-bg); 
+      border-radius: var(--radius); 
+      padding: 2rem; 
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--border-color);
+      position: sticky; 
+      top: 110px;
+    }
+    
+    .summary-card h5 { 
+      font-size: 1.1rem; 
+      margin-bottom: 1.5rem; 
+      padding-bottom: 1rem; 
+      border-bottom: 1px dashed var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .summary-row { 
+      display: flex; 
+      justify-content: space-between; 
+      margin-bottom: 1rem; 
+      color: var(--text-muted); 
+      font-size: 0.95rem;
+    }
+    .summary-row.total { 
+      font-weight: 700; 
+      color: var(--brand-dark); 
+      font-size: 1.25rem; 
+      margin-top: 1.5rem; 
+      padding-top: 1rem; 
+      border-top: 1px solid var(--border-color);
+      align-items: center;
+    }
+    .summary-note { 
+      font-size: 0.8rem; 
+      color: var(--text-muted); 
+      margin-top: 1.5rem; 
+      text-align: center;
+      line-height: 1.5;
+      background: #f8fafc;
+      padding: 1rem;
+      border-radius: 12px;
+      border: 1px solid #f1f5f9;
+    }
+
+    /* Buttons */
+    .btn-actions { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 12px; }
+    
+    .btn-confirm { 
+      background: var(--brand-dark); 
+      border: none; 
+      color: #fff; 
+      padding: 16px; 
+      border-radius: 12px; 
+      font-weight: 600; 
+      width: 100%;
+      font-size: 1rem;
+      transition: all 0.2s;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-confirm:hover {
+      background: black;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+    }
+
+    .btn-back { 
+      background: transparent; 
+      border: 1px solid var(--border-color); 
+      color: var(--text-muted); 
+      padding: 12px; 
+      border-radius: 12px; 
+      width: 100%;
+      font-weight: 500;
+      text-align: center;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-back:hover {
+      background: #f1f5f9;
+      color: var(--text-main);
+      border-color: #cbd5e1;
+    }
+
+    /* Responsive */
+    @media (max-width: 991px) {
+      .confirm-body { flex-direction: column; }
+      .confirm-summary { width: 100%; flex: auto; }
+      .summary-card { position: static; }
+      .product-cell img { width: 48px; height: 48px; }
+      .step-divider { width: 30px; margin: 0 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <div class="confirm-wrap">
+    
+    <!-- Progress Stepper -->
+    <div class="checkout-stepper">
+      <div class="step-item completed">
+        <div class="step-circle"><i data-lucide="check" style="width: 14px;"></i></div>
+        <span>Shopping Cart</span>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-item completed">
+        <div class="step-circle"><i data-lucide="check" style="width: 14px;"></i></div>
+        <span>Checkout</span>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-item active">
+        <div class="step-circle">3</div>
+        <span>Payment</span>
+      </div>
+    </div>
+
+    <div class="confirm-header">
+      <h1>Confirm Payment</h1>
+      <div class="sub">Please review your order details before finalizing</div>
+    </div>
+
+    <div class="confirm-body">
+      
+      <!-- LEFT: ITEMS LIST -->
+      <div class="confirm-items">
+        <table class="order-table">
+          <thead>
+            <tr>
+              <th style="width: 50%;">Product</th>
+              <th style="width: 15%; text-align: center;">Qty</th>
+              <th style="width: 15%; text-align: right;">Price</th>
+              <th style="width: 20%; text-align: right;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% 
+              const rows = (cartItems || items || []);
+              function price(n){ const v = Number(n||0); return isFinite(v) ? v.toFixed(2) : '0.00'; }
+              const sum = rows.reduce((s, it)=> s + Number(it.price||0)*Number(it.quantity||0), 0);
+            %>
+
+            <% if (!rows.length) { %>
+              <tr><td colspan="4" class="text-center text-muted py-5">Your cart is empty.</td></tr>
+            <% } else { rows.forEach(it => { %>
+              <tr>
+                <td>
+                  <div class="product-cell">
+                    <% if (it.image) { %>
+                      <img src="/images/<%= it.image %>" alt="<%= it.productName %>">
+                    <% } else { %>
+                      <div style="width:56px; height:56px; border-radius:10px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:0.7rem;">No Img</div>
+                    <% } %>
+                    <span class="name"><%= it.productName %></span>
+                  </div>
+                </td>
+                <td class="qty-cell" style="text-align: center;">
+                  x<%= (typeof it.quantity !== 'undefined' ? it.quantity : (it.qty || product && product.quantity || 0)) %>
+                </td>
+                <td class="price-cell" style="text-align: right;">
+                  $<%= Number(it.price || it.unit_price || 0).toFixed(2) %>
+                </td>
+                <td class="subtotal-cell" style="text-align: right;">
+                  $<%= Number(( (typeof it.quantity !== 'undefined' ? it.quantity : (it.qty || 0)) ) * (it.price || it.unit_price || 0)).toFixed(2) %>
+                </td>
+              </tr>
+            <% }) } %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- RIGHT: SUMMARY CARD -->
+      <div class="confirm-summary">
+        <div class="summary-card">
+          <h5>Order Details <i data-lucide="receipt" style="width: 18px; color: #94a3b8;"></i></h5>
+          
+          <div class="summary-row">
+            <span>Subtotal</span>
+            <span>$<%= price(sum) %></span>
+          </div>
+          <div class="summary-row">
+            <span>Shipping</span>
+            <span class="text-success fw-bold">Free</span>
+          </div>
+
+          <div class="summary-row total">
+            <span>Total</span>
+            <span style="font-size: 1.5rem;">$<%= price(sum) %></span>
+          </div>
+
+          <div class="btn-actions">
+            <!-- Hidden inputs preserved for backend logic -->
+            <form action="/cart/pay" method="POST">
+              <button type="submit" class="btn-confirm">
+                Confirm &amp; Pay
+                <i data-lucide="arrow-right" style="width: 18px;"></i>
+              </button>
+            </form>
+            <a href="/cart" class="btn-back">Modify Cart</a>
+          </div>
+
+          <div class="summary-note">
+            <div style="display:flex; justify-content:center; gap:8px; margin-bottom:8px; opacity:0.6;">
+               <i data-lucide="lock" style="width:14px"></i> <strong>Secure Checkout</strong>
+            </div>
+            By clicking "Confirm & Pay", you accept our Terms & Conditions.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <%- include('partials/footer') %>
+  
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

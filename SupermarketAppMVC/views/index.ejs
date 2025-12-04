@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FreshMart - Organic & Fresh</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;900&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --accent: #0f9d58;
+      --accent-2: #14c38e;
+      --dark: #0f1f28;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      /* Soft aesthetic gradient: Mint to Warm Cream */
+      background: linear-gradient(135deg, #f0fdf4 0%, #fffbeb 100%);
+      color: var(--dark);
+      min-height: 100vh;
+    }
+
+    h1, h2, h3 { font-family: 'Poppins', sans-serif; }
+
+    /* Initial Load Animation */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-up {
+      animation: fadeUp 0.8s ease-out forwards;
+    }
+
+    /* Infinite Marquee Animation */
+    @keyframes marquee {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .animate-marquee {
+      display: flex;
+      width: max-content; /* Ensure container fits content width */
+      animation: marquee 25s linear infinite;
+    }
+
+    /* Scroll Reveal Animation Classes */
+    .reveal-on-scroll {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
+    }
+    .reveal-on-scroll.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Floating Card Animation */
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .animate-float {
+      animation: float 6s ease-in-out infinite;
+    }
+    /* Delays for natural disjointed movement */
+    .delay-float-1 { animation-delay: 0s; }
+    .delay-float-2 { animation-delay: 2s; }
+    .delay-float-3 { animation-delay: 4s; }
+
+    /* Blob: Transparent so body gradient shows through */
+    .hero-blob {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 25% 30%, rgba(20,195,142,0.18), transparent 30%),
+        radial-gradient(circle at 80% 10%, rgba(15,157,88,0.12), transparent 35%);
+      pointer-events: none;
+    }
+
+    /* CRITICAL FIX: FORCE BOOTSTRAP NAVBAR VISIBILITY */
+    @media (min-width: 992px) {
+      .navbar-expand-lg .navbar-collapse {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      .navbar-expand-lg .navbar-nav {
+        flex-direction: row !important;
+        align-items: center !important;
+      }
+      .navbar-expand-lg .navbar-toggler {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="flex flex-col min-h-screen">
+
+  <!-- HEADER -->
+  <%- include('partials/header', { 
+      user: (typeof user !== 'undefined' ? user : null), 
+      cartCount: (typeof cartCount !== 'undefined' ? cartCount : 0), 
+      isAdmin: (typeof isAdmin !== 'undefined' ? isAdmin : false),
+      messages: (typeof messages !== 'undefined' ? messages : {}) 
+    }) %>
+
+  <main class="flex-grow">
+
+    <!-- HERO -->
+    <section class="relative overflow-hidden">
+      <div class="hero-blob"></div>
+
+      <div class="relative z-10 max-w-6xl mx-auto px-6 pt-14 pb-20 lg:pt-24 lg:pb-28 grid lg:grid-cols-2 gap-12 items-center">
+
+        <!-- LEFT: TEXT -->
+        <div class="space-y-7 animate-fade-up">
+
+          <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold bg-green-100 text-green-700 border border-green-300">
+            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            Trusted by thousands
+          </div>
+
+          <h1 class="text-5xl lg:text-6xl font-black text-slate-900 leading-tight">
+            Organic food, <span class="text-[var(--accent)]">fresh</span> to your door.
+          </h1>
+
+          <p class="text-lg text-slate-600 max-w-xl">
+            Premium produce, dairy, and essentials delivered fast. Fresh, healthy, and affordable groceries made simple.
+          </p>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <% if (user) { %>
+              <a href="/shopping"
+                 class="px-7 py-3 rounded-full bg-[var(--accent)] hover:bg-emerald-700 text-white font-semibold shadow-lg transition inline-flex items-center gap-2">
+                Start shopping <i data-lucide="arrow-right" class="w-5 h-5"></i>
+              </a>
+            <% } else { %>
+              <a href="/login"
+                 class="px-7 py-3 rounded-full bg-[var(--accent)] hover:bg-emerald-700 text-white font-semibold shadow-lg transition inline-flex items-center gap-2">
+                Shop now <i data-lucide="arrow-right" class="w-5 h-5"></i>
+              </a>
+
+              <a href="/register"
+                 class="px-6 py-3 rounded-full border border-emerald-300 text-[var(--accent)] font-semibold hover:bg-emerald-50 transition">
+                 Create account
+              </a>
+            <% } %>
+          </div>
+
+        </div>
+
+        <!-- RIGHT: PRODUCT SLIDESHOW -->
+        <div class="relative overflow-hidden rounded-3xl shadow-md bg-white h-[360px]">
+
+          <!-- Slides container -->
+          <div id="slideshow" class="flex h-full transition-transform duration-700">
+            <div class="min-w-full h-full">
+              <img src="/images/product1.jpg" alt="Featured product 1" class="w-full h-full object-cover" />
+            </div>
+            <div class="min-w-full h-full">
+              <img src="/images/product2.jpg" alt="Featured product 2" class="w-full h-full object-cover" />
+            </div>
+            <div class="min-w-full h-full">
+              <img src="/images/product3.jpg" alt="Featured product 3" class="w-full h-full object-cover" />
+            </div>
+          </div>
+
+          <!-- Dots -->
+          <div class="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
+            <span class="slideshow-dot w-3 h-3 rounded-full bg-white/70"></span>
+            <span class="slideshow-dot w-3 h-3 rounded-full bg-white/40"></span>
+            <span class="slideshow-dot w-3 h-3 rounded-full bg-white/40"></span>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- INFINITE TEXT SCROLL (MARQUEE) -->
+    <section class="bg-[var(--accent)] py-4 overflow-hidden border-y border-emerald-600/20">
+      <div class="animate-marquee whitespace-nowrap flex items-center gap-8 text-white/90 font-bold text-lg tracking-wider uppercase font-heading">
+        <span>• Fresh From Farm</span>
+        <span>• 100% Organic</span>
+        <span>• Sustainable Packaging</span>
+        <span>• Express Delivery</span>
+        <span>• Premium Quality</span>
+        <span>• Fresh From Farm</span>
+        <span>• 100% Organic</span>
+        <span>• Sustainable Packaging</span>
+        <span>• Express Delivery</span>
+        <span>• Premium Quality</span>
+        <span>• Fresh From Farm</span>
+        <span>• 100% Organic</span>
+        <span>• Sustainable Packaging</span>
+        <span>• Express Delivery</span>
+        <span>• Premium Quality</span>
+      </div>
+    </section>
+
+    <!-- FEATURE HIGHLIGHTS (Elevated + Floating Cards) -->
+    <section class="relative py-24">
+      <!-- Ambient Background Decoration -->
+      <div class="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white/80 pointer-events-none"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-4xl bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.08),transparent_70%)] pointer-events-none blur-3xl"></div>
+
+      <div class="relative z-10 max-w-6xl mx-auto px-6">
+        <div class="text-center mb-16 reveal-on-scroll">
+          <span class="text-emerald-600 font-bold tracking-wider uppercase text-sm">Our Promise</span>
+          <h2 class="text-4xl font-black text-slate-900 mt-2 mb-4">Why choose FreshMart?</h2>
+          <div class="w-24 h-1.5 bg-emerald-500 mx-auto rounded-full"></div>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-8">
+          
+          <!-- Card 1 -->
+          <div class="reveal-on-scroll group">
+            <div class="animate-float delay-float-1 h-full p-8 bg-white/80 backdrop-blur-md border border-white/60 rounded-[2rem] shadow-xl hover:shadow-2xl hover:bg-white transition-all duration-500 hover:border-emerald-200">
+              <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-600 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform duration-300">
+                <i data-lucide="sprout" class="w-8 h-8"></i>
+              </div>
+              <h3 class="text-2xl font-bold text-slate-900 mb-3">100% Organic</h3>
+              <p class="text-slate-600 leading-relaxed">
+                Certified produce sourced directly from trusted local farms. We ensure absolutely no harmful chemicals touch your food.
+              </p>
+            </div>
+          </div>
+
+          <!-- Card 2 -->
+          <div class="reveal-on-scroll group" style="transition-delay: 150ms;">
+            <div class="animate-float delay-float-2 h-full p-8 bg-white/80 backdrop-blur-md border border-white/60 rounded-[2rem] shadow-xl hover:shadow-2xl hover:bg-white transition-all duration-500 hover:border-blue-200">
+              <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform duration-300">
+                <i data-lucide="truck" class="w-8 h-8"></i>
+              </div>
+              <h3 class="text-2xl font-bold text-slate-900 mb-3">Fast & Reliable</h3>
+              <p class="text-slate-600 leading-relaxed">
+                Experience our lightning-fast logistics. Order now and get your fresh essentials delivered to your doorstep within 2 hours.
+              </p>
+            </div>
+          </div>
+
+          <!-- Card 3 -->
+          <div class="reveal-on-scroll group" style="transition-delay: 300ms;">
+            <div class="animate-float delay-float-3 h-full p-8 bg-white/80 backdrop-blur-md border border-white/60 rounded-[2rem] shadow-xl hover:shadow-2xl hover:bg-white transition-all duration-500 hover:border-amber-200">
+              <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100 text-amber-600 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform duration-300">
+                <i data-lucide="badge-check" class="w-8 h-8"></i>
+              </div>
+              <h3 class="text-2xl font-bold text-slate-900 mb-3">Freshness Guarantee</h3>
+              <p class="text-slate-600 leading-relaxed">
+                We stand by our quality. If you're not 100% satisfied with the freshness, we'll replace it instantly, no questions asked.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- TESTIMONIALS / REVIEWS (WITH PAZAZ!) -->
+    <section class="relative py-20 bg-slate-900 overflow-hidden">
+      <!-- Background Flair -->
+      <div class="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+         <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-[100px] mix-blend-screen"></div>
+         <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-500/20 rounded-full blur-[100px] mix-blend-screen"></div>
+      </div>
+
+      <div class="relative z-10 max-w-7xl mx-auto px-6">
+        <div class="text-center mb-16 reveal-on-scroll">
+          <h2 class="text-3xl md:text-5xl font-black text-white tracking-tight mb-4">
+            Neighborhood <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Love</span>
+          </h2>
+          <p class="text-slate-400 text-lg">Don't just take our word for it.</p>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-6">
+          
+          <!-- Review 1 -->
+          <div class="reveal-on-scroll p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg hover:bg-white/10 transition duration-300 hover:-translate-y-2">
+            <div class="flex items-center gap-1 text-yellow-400 mb-4">
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+            </div>
+            <p class="text-slate-200 mb-6 italic">"Honestly a life saver. The veggies are crisper than what I find at the local market, and I didn't even have to leave my house!"</p>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 flex items-center justify-center text-white font-bold">SJ</div>
+              <div>
+                <h4 class="text-white font-bold text-sm">Sarah Jenkins</h4>
+                <p class="text-slate-500 text-xs">Verified Buyer</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Review 2 -->
+          <div class="reveal-on-scroll p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg hover:bg-white/10 transition duration-300 hover:-translate-y-2" style="transition-delay: 100ms;">
+            <div class="flex items-center gap-1 text-yellow-400 mb-4">
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+            </div>
+            <p class="text-slate-200 mb-6 italic">"I was skeptical about ordering meat online, but the quality was restaurant grade. The 2-hour delivery promise is real!"</p>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold">MT</div>
+              <div>
+                <h4 class="text-white font-bold text-sm">Mike Thompson</h4>
+                <p class="text-slate-500 text-xs">Chef & Parent</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Review 3 -->
+          <div class="reveal-on-scroll p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg hover:bg-white/10 transition duration-300 hover:-translate-y-2" style="transition-delay: 200ms;">
+            <div class="flex items-center gap-1 text-yellow-400 mb-4">
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
+               <i data-lucide="star-half" class="w-4 h-4 fill-current"></i>
+            </div>
+            <p class="text-slate-200 mb-6 italic">"Finally, sustainable packaging that actually works. Everything arrived cold and fresh. FreshMart is my new weekly staple."</p>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white font-bold">ER</div>
+              <div>
+                <h4 class="text-white font-bold text-sm">Emily Rodriguez</h4>
+                <p class="text-slate-500 text-xs">Eco Enthusiast</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <%- include('partials/footer') %>
+
+  <script>
+    lucide.createIcons();
+
+    // Slideshow logic
+    document.addEventListener('DOMContentLoaded', () => {
+      // 1. Slideshow
+      const slides = document.getElementById('slideshow');
+      const dots = document.querySelectorAll('.slideshow-dot');
+      if(slides && dots.length > 0) {
+        const total = dots.length;
+        let index = 0;
+
+        function goToSlide(i) {
+          index = i;
+          slides.style.transform = `translateX(-${index * 100}%)`;
+          dots.forEach((d, idx) => {
+            d.classList.remove('bg-white/70');
+            d.classList.add('bg-white/40');
+            if (idx === index) d.classList.add('bg-white/70');
+          });
+        }
+
+        setInterval(() => {
+          const next = (index + 1) % total;
+          goToSlide(next);
+        }, 3500);
+      }
+
+      // 2. Scroll Reveal Observer
+      const observerOptions = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1 // Trigger when 10% of element is visible
+      };
+
+      const observer = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target); // Only animate once
+          }
+        });
+      }, observerOptions);
+
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => {
+        observer.observe(el);
+      });
+    });
+  </script>
+</body>
+</html>
