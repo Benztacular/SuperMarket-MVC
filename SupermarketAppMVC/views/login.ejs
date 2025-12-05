@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Login</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    /* FreshMart-inspired internal CSS (non-invasive, keeps markup & logic) */
+    :root{
+      --brand-1:#0f9d58;
+      --brand-2:#2fbf71;
+      --muted:#667085;
+      --card-shadow:0 6px 20px rgba(15,30,50,.06);
+      --radius:10px;
+    }
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,Helvetica, sans-serif;-webkit-font-smoothing:antialiased;color:#222;background:#f6faf8}
+    /* layout */
+    .auth-layout{display:flex;min-height:100vh;align-items:stretch}
+    .auth-left-visual{
+      width:46%;
+      min-width:360px;
+      background:linear-gradient(180deg,var(--brand-1),var(--brand-2));
+      color:#fff;
+      padding:48px 36px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    .auth-left-visual .brand{font-weight:700;font-size:22px;display:flex;align-items:center;gap:10px;margin-bottom:18px}
+    .auth-left-visual h1{font-size:36px;margin:0 0 12px;line-height:1}
+    .auth-left-visual p{opacity:.95;margin-bottom:22px;color:rgba(255,255,255,.95)}
+    .auth-right{flex:1;display:flex;align-items:center;justify-content:center;padding:40px}
+    .wrap{
+      max-width:520px;width:100%;
+      background:#fff;padding:26px;border-radius:12px;box-shadow:var(--card-shadow);
+    }
+    h1{margin:0 0 12px;font-size:20px}
+    form label{display:block;margin:10px 0;font-size:14px}
+    input[type="text"], input[type="password"], input[name="email"], input[name="token"]{
+      width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #e6eef6;border-radius:8px;font-size:14px;
+    }
+    button{background:var(--brand-1);color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer}
+    .muted{color:var(--muted);font-size:13px}
+    .links{margin-top:12px}
+    a{color:var(--brand-1);text-decoration:none}
+    .flash-error{background:#fdecea;color:#9b2b2b;padding:10px;border-radius:8px;margin-bottom:12px}
+    .flash-success{background:#e8f6ee;color:#1a7f37;padding:10px;border-radius:8px;margin-bottom:12px}
+    /* OTP modal */
+    #otpModal{display:none;position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:9999}
+    #otpModal.open{display:flex}
+    #otpModal .box{background:#fff;padding:18px;border-radius:8px;width:360px;max-width:92%;box-shadow:0 10px 28px rgba(0,0,0,.18)}
+    #otpModal .row{margin:8px 0}
+    #otpModal .title{display:flex;align-items:center;justify-content:space-between}
+    #otpModal .close{background:transparent;border:0;font-size:20px;cursor:pointer}
+    #otpModal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+    .small{font-size:13px;color:var(--muted)}
+    /* responsive */
+    @media (max-width:900px){
+      .auth-left-visual{display:block;position:relative;width:100%;min-height:180px;padding:24px}
+      .auth-layout{flex-direction:column}
+      .auth-right{padding:18px}
+      .wrap{margin-top:-30px;padding:18px}
+    }
+  </style>
+</head>
+<body>
+  <% /* safe defaults and server data */ %>
+  <% const __show2fa = Boolean(typeof show2fa !== 'undefined' ? show2fa : false); %>
+  <% const __errors = Array.isArray(errors) ? errors : []; %>
+  <% const __messages = Array.isArray(messages) ? messages : []; %>
+
+  <div id="serverData" data-server='<%- JSON.stringify({ show2fa: __show2fa }) %>' style="display:none"></div>
+
+  <div class="auth-layout">
+    <div class="auth-left-visual" aria-hidden="true">
+      <div>
+        <div class="brand">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+            <path d="M4 12c0 4.418 3.582 8 8 8s8-3.582 8-8" stroke="rgba(255,255,255,.95)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M12 4v8l3 2" stroke="rgba(255,255,255,.95)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          FreshMart
+        </div>
+        <h1>Freshness you can taste, prices you'll love.</h1>
+        <p class="small">Join 50,000+ happy customers shopping for organic produce, dairy, and daily essentials.</p>
+      </div>
+    </div>
+
+    <div class="auth-right">
+      <div class="wrap">
+        <h1>Login</h1>
+
+        <% if (__errors.length) { %>
+          <div class="flash-error"><%= __errors.join(', ') %></div>
+        <% } %>
+        <% if (__messages.length) { %>
+          <div class="flash-success"><%= __messages.join(', ') %></div>
+        <% } %>
+
+        <form method="post" action="/login" autocomplete="on">
+          <label>Email:
+            <input name="email" type="text" required value="<%= (formData && formData.email) ? formData.email : '' %>">
+          </label>
+
+          <label>Password:
+            <input type="password" name="password" required>
+          </label>
+
+          <div style="margin-top:12px">
+            <button type="submit">Login</button>
+          </div>
+        </form>
+
+        <div class="links small">
+          <p class="muted">Don't have an account? <a href="/register">Register</a></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OTP modal (unchanged behavior) -->
+  <div id="otpModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="otpTitle">
+    <div class="box" role="document">
+      <div class="title">
+        <strong id="otpTitle">Two-factor authentication</strong>
+        <button id="otpClose" class="close" aria-label="Close">&times;</button>
+      </div>
+
+      <div id="otpErrors" class="small" style="color:#b00020;margin-top:8px">
+        <% if (errors && errors.length && __show2fa) { %>
+          <%= errors.join(', ') %>
+        <% } %>
+      </div>
+
+      <form id="otpForm" method="post" action="/2fa/verify-login" style="margin-top:10px">
+        <div class="row">
+          <label>Enter code from authenticator:
+            <input name="token" type="text" inputmode="numeric" autocomplete="one-time-code" required pattern="[0-9]*" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="otpCancel" class="small">Cancel</button>
+          <button type="submit">Verify</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // read server data from DOM (safe JSON)
+      const serverEl = document.getElementById('serverData');
+      let cfg = {};
+      try { cfg = serverEl ? JSON.parse(serverEl.getAttribute('data-server') || '{}') : {}; } catch (e) { cfg = {}; }
+      const show2fa = !!cfg.show2fa;
+
+      const modal = document.getElementById('otpModal');
+      const closeBtn = document.getElementById('otpClose');
+      const cancelBtn = document.getElementById('otpCancel');
+      const tokenInput = document.querySelector('#otpForm input[name="token"]');
+
+      function openModal() {
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden','false');
+        if (tokenInput) tokenInput.focus();
+      }
+      function closeModal() {
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden','true');
+      }
+
+      if (show2fa) openModal();
+
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && modal.classList.contains('open')) closeModal();
+      });
+
+      const otpForm = document.getElementById('otpForm');
+      if (otpForm) {
+        otpForm.addEventListener('submit', function (e) {
+          const v = (tokenInput && tokenInput.value || '').trim();
+          if (!v || !/^\d{4,8}$/.test(v)) {
+            e.preventDefault();
+            const el = document.getElementById('otpErrors');
+            if (el) el.textContent = 'Enter a valid numeric code';
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

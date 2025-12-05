@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventory - Supermarket App</title>
+  
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      --bg-body: #f8fafc;
+      --card-bg: #ffffff;
+      --brand-green: #0f9d58;
+      --brand-blue: #0ea5e9;
+      --brand-dark: #1e293b;
+      --text-main: #334155;
+      --text-muted: #94a3b8;
+      --border-color: #e2e8f0;
+      --radius: 12px;
+      --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    }
+
+    body {
+      background-color: var(--bg-body);
+      font-family: 'Inter', sans-serif;
+      color: var(--text-main);
+    }
+
+    h3, h5 {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      color: var(--brand-dark);
+    }
+
+    /* --- Toolbar & Filters --- */
+    .dashboard-header {
+      background: white;
+      padding: 1.5rem;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border-color);
+    }
+
+    .form-control, .form-select {
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: var(--brand-green);
+      box-shadow: 0 0 0 3px rgba(15, 157, 88, 0.1);
+    }
+
+    /* --- Table Design --- */
+    .inventory-card {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-soft);
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    .table-dashboard {
+      margin-bottom: 0;
+    }
+
+    .table-dashboard thead th {
+      background: #f1f5f9;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .table-dashboard td {
+      padding: 1rem;
+      vertical-align: middle;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.95rem;
+    }
+
+    .table-dashboard tbody tr:hover {
+      background-color: #f8fafc;
+    }
+
+    .table-dashboard tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* --- Elements --- */
+    .product-img {
+      width: 56px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: #f8fafc;
+    }
+
+    .meta-name {
+      font-weight: 600;
+      color: var(--brand-dark);
+      text-decoration: none;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .meta-name:hover {
+      color: var(--brand-green);
+    }
+
+    .sku-badge {
+      font-family: monospace;
+      font-size: 0.8rem;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+
+    .category-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: #e0f2fe;
+      color: #0284c7;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .price-text {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Stock Status */
+    .stock-ok { color: #166534; background: #dcfce7; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; }
+    .stock-low { color: #854d0e; background: #fef9c3; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; }
+    .stock-out { color: #991b1b; background: #fee2e2; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; }
+
+    /* Buttons */
+    .btn-primary {
+      background: var(--brand-green);
+      border: none;
+    }
+    .btn-primary:hover {
+      background: #059669;
+    }
+    
+    .action-icon-btn {
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .action-icon-btn:hover {
+      background: #f1f5f9;
+      color: var(--brand-dark);
+      border-color: var(--border-color);
+    }
+    .btn-delete:hover {
+      background: #fee2e2;
+      color: #ef4444;
+      border-color: #fecaca;
+    }
+
+    /* Toast styling override */
+    .toast-container {
+      z-index: 1060;
+    }
+  </style>
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <div class="container py-4">
+    
+    <!-- Top Controls Dashboard -->
+    <div class="dashboard-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+      <div>
+        <h3 class="mb-1">Inventory Dashboard</h3>
+        <p class="text-muted small mb-0">Manage products, update stock, and organize categories.</p>
+      </div>
+      
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <!-- Filter -->
+        <div class="input-group input-group-sm" style="width: auto;">
+          <span class="input-group-text bg-white border-end-0"><i data-lucide="filter" style="width:14px"></i></span>
+          <select id="categoryFilter" class="form-select border-start-0" style="min-width:160px; box-shadow:none;">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+
+        <!-- Search -->
+        <div class="input-group input-group-sm" style="width: auto;">
+          <span class="input-group-text bg-white border-end-0"><i data-lucide="search" style="width:14px"></i></span>
+          <input id="adminSearch" type="search" class="form-control border-start-0" placeholder="Search product or SKU..." style="min-width:220px; box-shadow:none;">
+        </div>
+
+        <!-- Buttons -->
+        <div class="d-flex gap-2 ms-2">
+          <button id="manageCategoriesBtn" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2">
+            <i data-lucide="tags" style="width:14px"></i> Categories
+          </button>
+          <a href="/addProduct" class="btn btn-primary btn-sm d-flex align-items-center gap-2 text-white">
+            <i data-lucide="plus-circle" style="width:14px"></i> Add Product
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Categories Modal (Bootstrap) -->
+    <div class="modal fade" id="categoriesModal" tabindex="-1" aria-labelledby="categoriesModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+          <div class="modal-header border-bottom-0 pb-0">
+            <h5 class="modal-title fs-6 fw-bold" id="categoriesModalLabel">Manage Categories</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="input-group input-group-sm mb-3">
+              <input id="newCategoryInput" class="form-control" placeholder="New category name">
+              <!-- Added type="button" to ensure it doesn't submit vaguely -->
+              <button id="addCategoryBtn" type="button" class="btn btn-primary text-white">Add</button>
+            </div>
+            <ul id="categoriesList" class="list-group list-group-flush border rounded-3" style="max-height: 200px; overflow-y: auto;"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div id="liveToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body d-flex align-items-center gap-2" id="toastMessage">
+            <!-- Message injected here -->
+          </div>
+          <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inventory Table -->
+    <div class="inventory-card">
+      <div class="table-responsive">
+        <table class="table table-dashboard align-middle">
+          <thead>
+            <tr>
+              <th scope="col" style="width: 50px;">#</th>
+              <th scope="col" style="width: 80px;">Image</th>
+              <th scope="col">Product Details</th>
+              <th scope="col">Category</th>
+              <th scope="col">SKU / ID</th>
+              <th scope="col">Price</th>
+              <th scope="col">Stock Status</th>
+              <th scope="col" class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% const DEFAULT_IMG = 'https://static.vecteezy.com/system/resources/previews/018/765/757/original/user-profile-icon-in-flat-style-member-avatar-illustration-on-isolated-background-human-permission-sign-business-concept-vector.jpg'; %>
+
+            <% if (products && products.length) { %>
+              <% products.forEach((product, idx) => { %>
+                <% 
+                  let src = DEFAULT_IMG;
+                  if (product && product.image) {
+                    src = (/^https?:\/\//i.test(product.image)) ? product.image : ('/images/' + product.image);
+                  }
+                  
+                  // Stock Logic
+                  const qty = Number(product.quantity || 0);
+                  let stockClass = 'stock-ok';
+                  let stockText = `${qty} in stock`;
+                  if (qty === 0) {
+                    stockClass = 'stock-out';
+                    stockText = 'Out of Stock';
+                  } else if (qty <= 10) {
+                    stockClass = 'stock-low';
+                    stockText = `Low: ${qty} left`;
+                  }
+                %>
+                <tr data-category="<%= (product.category || '').toString() %>">
+                  <td class="text-muted small"><%= idx + 1 %></td>
+                  
+                  <td>
+                    <img src="<%= src %>" alt="<%= product.productName || 'Product' %>" class="product-img shadow-sm" onerror="this.onerror=null;this.src='<%= DEFAULT_IMG %>'">
+                  </td>
+                  
+                  <td>
+                    <span class="meta-name" style="cursor: default; pointer-events: none;">
+                      <%= product.productName %>
+                    </span>
+                    <div class="text-muted small" style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      <%= product.description || 'No description' %>
+                    </div>
+                  </td>
+
+                  
+                  <td class="category-cell">
+                    <span class="category-badge"><%= product.category || 'Uncategorized' %></span>
+                  </td>
+                  
+                  <td>
+                    <span class="sku-badge"><%= product.sku || product.id %></span>
+                  </td>
+                  
+                  <td class="price-text">$<%= Number(product.price || 0).toFixed(2) %></td>
+                  
+                  <td>
+                    <span class="<%= stockClass %>"><%= stockText %></span>
+                  </td>
+                  
+                  <td class="text-end">
+                    <a href="/admin/products/<%= product.id %>/edit" class="action-icon-btn me-1" title="Edit">
+                      <i data-lucide="edit-3" style="width:16px"></i>
+                    </a>
+                    <form action="/admin/products/<%= product.id %>/delete" method="post" style="display:inline;">
+                      <button type="submit" class="action-icon-btn btn-delete" onclick="return confirm('Delete this product?')" title="Delete">
+                        <i data-lucide="trash-2" style="width:16px"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="8" class="text-center py-5 text-muted">
+                  <i data-lucide="package-open" style="width: 48px; height: 48px; opacity: 0.2; margin-bottom: 1rem;"></i>
+                  <p class="mb-0">No products found in inventory.</p>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <%- include('partials/footer') %>
+
+  <!-- Bootstrap JS (REQUIRED for Modal) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Initialize Icons -->
+  <script>
+    lucide.createIcons();
+  </script>
+
+  <!-- Feedback Helper Script -->
+  <script>
+    function showFeedback(message, type = 'success') {
+      const toastEl = document.getElementById('liveToast');
+      const toastBody = document.getElementById('toastMessage');
+      
+      // Reset classes
+      toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning');
+      
+      // Set icon and style based on type
+      let icon = '';
+      if (type === 'success') {
+        toastEl.classList.add('text-bg-success');
+        icon = '<i data-lucide="check-circle" style="width:18px"></i>';
+      } else if (type === 'error') {
+        toastEl.classList.add('text-bg-danger');
+        icon = '<i data-lucide="alert-circle" style="width:18px"></i>';
+      } else {
+        toastEl.classList.add('text-bg-warning');
+      }
+
+      toastBody.innerHTML = `${icon} <span>${message}</span>`;
+      
+      // Re-init Lucide icons inside toast
+      lucide.createIcons();
+
+      const toast = new bootstrap.Toast(toastEl);
+      toast.show();
+    }
+  </script>
+
+  <!-- Logic Scripts -->
+  <script>
+    (function () {
+      /* populate categoryFilter for page */
+      const sel = document.getElementById('categoryFilter');
+      if (!sel) return;
+
+      const adminSearch = document.getElementById('adminSearch');
+
+      function filterRows() {
+        const catVal = (sel.value || '').trim().toLowerCase();
+        const q = (adminSearch && adminSearch.value) ? (adminSearch.value || '').trim().toLowerCase() : '';
+        document.querySelectorAll('tbody tr').forEach(tr => {
+          const rowCat = (tr.getAttribute('data-category') || '').trim().toLowerCase();
+          const nameEl = tr.querySelector('.meta-name'); 
+          const skuEl = tr.querySelector('td:nth-child(5)');
+          
+          const name = nameEl ? (nameEl.textContent || '').toLowerCase() : '';
+          const sku = skuEl ? (skuEl.textContent || '').toLowerCase() : '';
+
+          const catMatch = !catVal || catVal === rowCat;
+          const searchMatch = !q || name.indexOf(q) !== -1 || sku.indexOf(q) !== -1;
+
+          tr.style.display = (catMatch && searchMatch) ? '' : 'none';
+        });
+      }
+
+      window.applyCategoryFilter = filterRows;
+
+      fetch('/api/categories')
+        .then(r => r.json())
+        .then(list => {
+          list.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c;
+            o.textContent = c;
+            sel.appendChild(o);
+          });
+          const params = new URLSearchParams(location.search);
+          const qcat = params.get('category') || '';
+          if (qcat) sel.value = qcat;
+          filterRows();
+        })
+        .catch(() => {});
+
+      sel.addEventListener('change', () => { filterRows(); });
+
+      if (adminSearch) {
+        adminSearch.addEventListener('input', () => { filterRows(); });
+      }
+    })();
+  </script>
+
+  <script>
+    (function(){
+      // Category admin modal + operations
+      const manageBtn = document.getElementById('manageCategoriesBtn');
+      const addBtn = document.getElementById('addCategoryBtn');
+      const newInput = document.getElementById('newCategoryInput');
+      const listEl = document.getElementById('categoriesList');
+      const modalEl = document.getElementById('categoriesModal');
+      // This line requires bootstrap.bundle.min.js to be loaded
+      const bsModal = new bootstrap.Modal(modalEl);
+      const categorySelect = document.getElementById('categoryFilter');
+
+      function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+      function updateCategorySelect() {
+        if (!categorySelect) return Promise.resolve();
+        return fetch('/api/categories')
+          .then(r => r.json())
+          .then(list => {
+            const prev = (categorySelect.value || '').trim();
+            categorySelect.innerHTML = '<option value="">All Categories</option>';
+            list.forEach(c => {
+              const o = document.createElement('option');
+              o.value = c;
+              o.textContent = c;
+              categorySelect.appendChild(o);
+            });
+            if (prev) {
+              const found = Array.from(categorySelect.options).some(o => o.value === prev);
+              if (found) categorySelect.value = prev;
+            }
+            if (typeof window.applyCategoryFilter === 'function') window.applyCategoryFilter();
+          })
+          .catch(()=>{/* ignore */});
+      }
+
+      function fetchAndRender(){
+        return fetch('/admin/api/categories')
+          .then(r => r.json())
+          .then(rows => {
+            listEl.innerHTML = '';
+            rows.forEach(rw => {
+              const li = document.createElement('li');
+              li.className = 'list-group-item d-flex justify-content-between align-items-center small';
+              li.innerHTML = `<span class="fw-medium">${escapeHtml(rw.categoryName)}</span>
+                <span>
+                  <button data-id="${rw.id}" class="btn btn-sm btn-link text-secondary p-0 me-2 edit-btn" style="text-decoration:none">Edit</button>
+                  <button data-id="${rw.id}" class="btn btn-sm btn-link text-danger p-0 delete-btn" style="text-decoration:none">Delete</button>
+                </span>`;
+              listEl.appendChild(li);
+            });
+            return updateCategorySelect();
+          })
+          .catch(()=>{
+             showFeedback('Failed to load categories', 'error');
+          });
+      }
+
+      manageBtn.addEventListener('click', () => { fetchAndRender().then(()=> bsModal.show()); });
+
+      addBtn.addEventListener('click', () => {
+        const name = (newInput.value || '').trim();
+        if (!name) return newInput.focus();
+        fetch('/admin/api/categories', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ name })
+        }).then(r => r.json()).then(()=> {
+          newInput.value = '';
+          showFeedback('Category added successfully!', 'success');
+          return fetchAndRender();
+        }).catch(()=>{ 
+          showFeedback('Failed to add category.', 'error'); 
+        });
+      });
+
+      listEl.addEventListener('click', (ev) => {
+        const e = ev.target;
+        if (e.classList.contains('delete-btn')) {
+          const id = e.dataset.id;
+          if (!confirm('Delete this category?')) return;
+          fetch('/admin/api/categories/' + id, { method: 'DELETE' })
+            .then(()=> {
+              showFeedback('Category deleted.', 'success');
+              fetchAndRender();
+            })
+            .catch(()=>{ 
+              showFeedback('Error deleting category.', 'error');
+            });
+        } else if (e.classList.contains('edit-btn')) {
+          const id = e.dataset.id;
+          const current = e.closest('li').querySelector('span').textContent;
+          const name = prompt('Edit category name', current);
+          if (!name) return;
+          fetch('/admin/api/categories/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({ name })
+          }).then(()=> {
+             showFeedback('Category updated.', 'success');
+             fetchAndRender();
+          })
+          .catch(()=>{ 
+             showFeedback('Error updating category.', 'error');
+          });
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

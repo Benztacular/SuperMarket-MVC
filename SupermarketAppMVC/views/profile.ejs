@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>My Profile</title>
+
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  
+  <!-- Google Fonts: Plus Jakarta Sans for a tech/modern feel -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* --- THEME VARIABLES --- */
+    :root {
+      --bg-body: #f8fafc; /* Lighter, cooler gray */
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      
+      --card-bg: #ffffff;
+      --sidebar-bg: #1e293b; /* Dark Slate */
+      
+      --radius-xl: 24px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      
+      --header-height: 80px; /* Assumed nav height */
+    }
+
+    body {
+      background-color: var(--bg-body);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: var(--text-main);
+      /* Refined padding for better visual connection to navbar */
+      padding-top: calc(var(--header-height) + 40px); 
+      padding-bottom: 80px;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 40%),
+        radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    /* --- GRID LAYOUT --- */
+    .profile-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+
+    @media (min-width: 992px) {
+      .profile-container {
+        /* Wider gap for better breathing room on desktop */
+        grid-template-columns: 300px 1fr; 
+        gap: 3.5rem; 
+        align-items: start;
+      }
+    }
+
+    /* --- LEFT SIDEBAR CARD --- */
+    .sidebar-card {
+      background: var(--sidebar-bg);
+      color: white;
+      border-radius: var(--radius-xl);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+      overflow: hidden;
+      /* Sticky positioning adjusted to sit closer to navbar */
+      position: sticky;
+      top: calc(var(--header-height) + 20px); 
+      z-index: 10;
+    }
+
+    /* Decorative blob */
+    .sidebar-card::before {
+      content: '';
+      position: absolute;
+      top: -60px; left: -60px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .avatar-container {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 1.5rem;
+      border-radius: 50%;
+      padding: 4px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+      background: #fff;
+    }
+
+    .user-meta h3 { font-weight: 700; margin-bottom: 0.25rem; font-size: 1.25rem; }
+    .user-meta p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 1rem; }
+
+    .role-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 16px;
+      border-radius: 50px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .role-admin { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+    .role-user { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
+
+    .btn-photo-upload {
+      margin-top: 1.5rem;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+      padding: 0.75rem;
+      border-radius: var(--radius-md);
+      font-size: 0.85rem;
+      font-weight: 600;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-photo-upload:hover {
+      background: var(--primary);
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+
+    .sidebar-menu {
+      margin-top: 2.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 1.5rem;
+    }
+
+    .menu-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      color: #cbd5e1;
+      text-decoration: none;
+      border-radius: var(--radius-md);
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .menu-link:hover { background: rgba(255,255,255,0.05); color: white; }
+    .menu-link.danger { color: #fca5a5; }
+    .menu-link.danger:hover { background: rgba(239, 68, 68, 0.15); color: #fecaca; }
+
+    /* --- RIGHT CONTENT CARD --- */
+    .content-card {
+      background: var(--card-bg);
+      border-radius: var(--radius-xl);
+      padding: 3rem; /* Increased inner padding */
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .card-header-styled {
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .header-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .icon-box {
+      width: 44px; height: 44px;
+      background: #f0fdf4;
+      color: var(--primary);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Modern Inputs */
+    .form-label-styled {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .input-styled {
+      width: 100%;
+      padding: 0.9rem 1.1rem;
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      font-size: 0.95rem;
+      color: var(--text-main);
+      transition: all 0.2s;
+    }
+    .input-styled:focus {
+      background: #ffffff;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+      outline: none;
+    }
+
+    .btn-save-styled {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.9rem 2rem;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    }
+    .btn-save-styled:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+      color: white;
+    }
+
+    /* --- SECURITY GRID (Bento) --- */
+    .security-section { margin-top: 4rem; }
+    .security-header { margin-bottom: 1.5rem; font-weight: 700; font-size: 1.2rem; }
+
+    .bento-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+    @media (min-width: 768px) {
+      .bento-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .bento-card {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .bento-card:hover {
+      border-color: #cbd5e1;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-3px);
+    }
+
+    .bento-icon {
+      width: 42px; height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+    }
+    .bg-light-yellow { background: #fffbeb; color: #d97706; }
+    .bg-light-green { background: #ecfdf5; color: #059669; }
+
+    .bento-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.5rem; }
+    .bento-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.6; }
+
+    .btn-bento {
+      margin-top: auto;
+      width: 100%;
+      padding: 0.8rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-align: center;
+      border: none;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-bento-warning { background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
+    .btn-bento-warning:hover { background: #ffedd5; border-color: #fed7aa; }
+
+    .btn-bento-success { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+    .btn-bento-success:hover { background: #d1fae5; border-color: #a7f3d0; }
+
+    .btn-bento-danger { background: #fff1f2; color: #be123c; border: 1px solid #ffe4e6; }
+    .btn-bento-danger:hover { background: #ffe4e6; }
+
+    /* Char counters */
+    .char-count { font-size: 0.75rem; transition: color 0.2s; }
+    .char-count.near-limit { color: #f59e0b; }
+    .char-count.at-limit { color: #ef4444; }
+
+    /* Modal Styling */
+    #changePwdModal .backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
+    #changePwdModal .dialog { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+
+  <%- include('partials/header') %>
+
+  <!-- Main Grid Container -->
+  <div class="profile-container">
+
+    <!-- 1. LEFT SIDEBAR (Sticky) -->
+    <aside class="sidebar-card">
+      <div class="avatar-container">
+        <% const avatar = profileUser?.profileImage ? `/images/${profileUser.profileImage}` : '/images/placeholder.png'; %>
+        <img src="<%= avatar %>?t=<%= Date.now() %>" class="avatar-img" alt="Avatar">
+      </div>
+
+      <div class="user-meta">
+        <h3><%= profileUser.username %></h3>
+        <p><%= profileUser.email %></p>
+        
+        <div class="mb-4">
+          <% if (profileUser.role === 'admin') { %>
+            <span class="role-pill role-admin"><i data-lucide="shield" width="12"></i> Admin</span>
+          <% } else { %>
+            <span class="role-pill role-user"><i data-lucide="user" width="12"></i> User</span>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Upload Form (Hidden logic maintained) -->
+      <form action="/profile" method="post" enctype="multipart/form-data" id="avatarForm" class="w-100">
+        <input type="hidden" name="username" value="<%= profileUser.username %>">
+        <input type="hidden" name="email" value="<%= profileUser.email %>">
+        <input type="hidden" name="address" value="<%= profileUser.address || '' %>">
+        <input type="hidden" name="contact" value="<%= profileUser.contact || '' %>">
+        <input type="hidden" name="currentProfileImage" value="<%= profileUser.profileImage || '' %>">
+
+        <input type="file" id="avatarInput" name="avatar" accept="image/*" class="d-none" onchange="document.getElementById('avatarForm').submit()">
+        
+        <button type="button" class="btn-photo-upload" onclick="document.getElementById('avatarInput').click()">
+          <i data-lucide="camera" width="16"></i> Change Photo
+        </button>
+      </form>
+
+      <nav class="sidebar-menu">
+        <a href="/shopping" class="menu-link">
+          <i data-lucide="shopping-bag" width="18"></i> Return to Shop
+        </a>
+        <a href="/logout" class="menu-link danger">
+          <i data-lucide="log-out" width="18"></i> Sign Out
+        </a>
+      </nav>
+    </aside>
+
+    <!-- 2. RIGHT CONTENT (Scrollable) -->
+    <main class="content-wrapper">
+      
+      <!-- Alerts -->
+      <% if ((typeof error !== 'undefined') && (error||[]).length) { %>
+        <div class="alert alert-danger shadow-sm border-0 rounded-3 mb-4 d-flex align-items-center gap-2">
+          <i data-lucide="alert-circle" width="18"></i>
+          <div><%- error.join('<br>') %></div>
+        </div>
+      <% } %>
+      <% if ((typeof success !== 'undefined') && (success||[]).length) { %>
+        <div class="alert alert-success shadow-sm border-0 rounded-3 mb-4 d-flex align-items-center gap-2">
+          <i data-lucide="check-circle" width="18"></i>
+          <div><%- success.join('<br>') %></div>
+        </div>
+      <% } %>
+
+      <div class="content-card">
+        <div class="card-header-styled">
+          <div class="header-title">
+            <div class="icon-box"><i data-lucide="sliders" width="20"></i></div>
+            Profile Settings
+          </div>
+        </div>
+
+        <!-- Details Form -->
+        <form action="/profile" method="post" enctype="multipart/form-data" id="detailsForm">
+          <div class="row g-4">
+            
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label-styled">
+                  Username <span class="char-count" id="usernameCount">0/20</span>
+                </label>
+                <input name="username" id="usernameInput" class="input-styled" value="<%= profileUser.username %>" maxlength="20">
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label-styled">Email Address</label>
+                <input name="email" class="input-styled" value="<%= profileUser.email %>">
+              </div>
+            </div>
+
+            <div class="col-12">
+              <div class="form-group">
+                <label class="form-label-styled">Delivery Address</label>
+                <input name="address" class="input-styled" value="<%= profileUser.address || '' %>" placeholder="Enter your full address">
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="form-group">
+                <label class="form-label-styled">
+                  Contact Number <span class="char-count" id="contactCount">0/10</span>
+                </label>
+                <input name="contact" id="contactInput" class="input-styled" value="<%= profileUser.contact || '' %>" maxlength="10" placeholder="0123456789">
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end mt-4">
+            <button class="btn-save-styled" type="submit" id="saveBtn">
+              <i data-lucide="save" width="18"></i> Save Changes
+            </button>
+          </div>
+        </form>
+
+        <!-- Security Section -->
+        <div class="security-section">
+          <h5 class="security-header">Security & Access</h5>
+          
+          <div class="bento-grid">
+            <!-- Password Card -->
+            <div class="bento-card">
+              <div class="bento-icon bg-light-yellow"><i data-lucide="key" width="20"></i></div>
+              <div class="bento-title">Password</div>
+              <div class="bento-desc">Regularly updating your password helps prevent unauthorized access.</div>
+              <button id="openChangePwd" class="btn-bento btn-bento-warning">Change Password</button>
+            </div>
+
+            <!-- 2FA Card -->
+            <div class="bento-card">
+              <div class="d-flex justify-content-between align-items-start">
+                <div class="bento-icon bg-light-green"><i data-lucide="shield-check" width="20"></i></div>
+                <% if (profileUser && profileUser.twoFactorEnabled) { %>
+                  <span class="badge bg-success-subtle text-success rounded-pill">ACTIVE</span>
+                <% } else { %>
+                  <span class="badge bg-secondary-subtle text-secondary rounded-pill">OFF</span>
+                <% } %>
+              </div>
+              
+              <div class="bento-title">Two-Factor Auth</div>
+              <div class="bento-desc">Secure your account with an additional layer of protection.</div>
+              
+              <% if (profileUser && profileUser.twoFactorEnabled) { %>
+                <form method="POST" action="/profile/2fa/disable" id="disable2faForm" class="mt-auto w-100">
+                  <input type="hidden" name="otpCode" id="otpCodeHidden">
+                  <button class="btn-bento btn-bento-danger" type="button" id="openDisable2fa">Disable 2FA</button>
+                </form>
+              <% } else { %>
+                <form method="POST" action="/profile/2fa/enable" id="enable2faForm" class="mt-auto w-100">
+                  <button class="btn-bento btn-bento-success" type="submit">Enable 2FA</button>
+                </form>
+              <% } %>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <%- include('partials/footer') %>
+
+  <!-- PASSWORD MODAL (No logic changes) -->
+  <div id="changePwdModal" style="position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2000;">
+    <div class="backdrop" data-close="true" style="position: absolute; inset: 0;"></div>
+    <div class="dialog p-4 bg-white rounded-4 w-100" style="position: relative; max-width: 480px;">
+      
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="m-0 fw-bold d-flex align-items-center gap-2">
+          <i data-lucide="lock" width="18" class="text-warning"></i> Change Password
+        </h5>
+        <button id="closeChangePwd" class="btn btn-light btn-sm rounded-circle p-2 lh-1">✕</button>
+      </div>
+      
+      <div id="pwdAlert" class="alert hidden"></div>
+      
+      <!-- Step 1 -->
+      <div class="p-3 mb-3 bg-light rounded-3 border">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-dark rounded-pill">1</span>
+          <strong class="small text-uppercase text-muted">Verify Current</strong>
+        </div>
+        <input id="curPwd" type="password" class="form-control form-control-sm mb-2" placeholder="Enter current password...">
+        <button id="verifyPwdBtn" class="btn btn-dark btn-sm w-100">Verify Identity</button>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="p-3 rounded-3 border">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-warning text-dark rounded-pill">2</span>
+          <strong class="small text-uppercase text-muted">Set New</strong>
+        </div>
+        <input id="newPwd" type="password" class="form-control form-control-sm mb-2" placeholder="New Password" disabled>
+        <input id="confirmPwd" type="password" class="form-control form-control-sm mb-3" placeholder="Confirm Password" disabled>
+        <button id="submitChangePwd" class="btn btn-warning w-100 fw-bold" disabled>Update Password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Disable 2FA Modal -->
+  <div id="disable2faModal" style="position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2000;">
+    <div class="backdrop" data-close="true" style="position: absolute; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);"></div>
+    <div class="dialog p-4 bg-white rounded-4 w-100" style="position: relative; max-width: 420px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid #e2e8f0;">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="m-0 fw-bold d-flex align-items-center gap-2">
+          <i data-lucide="shield-off" width="18" class="text-danger"></i> Confirm Disable
+        </h5>
+        <button type="button" class="btn btn-light btn-sm rounded-circle p-2 lh-1" id="closeDisable2fa">✕</button>
+      </div>
+      <p class="text-muted small mb-3">Enter the 6-digit code from your authenticator app to disable two-factor authentication.</p>
+      <input type="text" maxlength="6" inputmode="numeric" pattern="\\d{6}" class="form-control fw-semibold text-center tracking-widest" placeholder="000000" id="otpConfirmInput">
+      <div id="disable2faError" class="text-danger small mt-2 d-none">Enter a valid 6-digit code.</div>
+      <div class="d-flex gap-2 mt-4">
+        <button type="button" class="btn btn-outline-secondary w-50" id="cancelDisable2fa">Cancel</button>
+        <button type="button" class="btn btn-danger w-50" id="confirmDisable2fa">Disable</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    lucide.createIcons();
+
+    // 1. Char Count Logic (Preserved)
+    function setupCharCount(inputId, countId, max) {
+      const input = document.getElementById(inputId);
+      const counter = document.getElementById(countId);
+      if (!input || !counter) return;
+
+      const updateCount = () => {
+        const len = input.value.length;
+        counter.textContent = `${len}/${max}`;
+        
+        counter.classList.remove('near-limit', 'at-limit');
+        counter.style.color = '#94a3b8';
+        if (len >= max) {
+            counter.classList.add('at-limit');
+            counter.style.color = ''; // let class handle it
+        } else if (len >= max * 0.8) {
+            counter.classList.add('near-limit');
+            counter.style.color = '';
+        }
+      };
+      input.addEventListener('input', updateCount);
+      updateCount();
+    }
+    setupCharCount('usernameInput', 'usernameCount', 20);
+    setupCharCount('contactInput', 'contactCount', 10);
+
+    // 2. Loading State (Preserved)
+    function setButtonLoading(btn, text) {
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${text || 'Processing'}`;
+      btn.style.opacity = '0.75';
+      btn.style.pointerEvents = 'none';
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+      }, 5000);
+    }
+
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) saveBtn.closest('form').addEventListener('submit', () => setButtonLoading(saveBtn, 'Saving...'));
+
+    const enable2faForm = document.getElementById('enable2faForm');
+    if (enable2faForm) enable2faForm.addEventListener('submit', function() {
+      setButtonLoading(this.querySelector('button'), 'Enabling...');
+    });
+
+    // 3. Modal Logic (Preserved)
+    (function () {
+      const modal = document.getElementById('changePwdModal');
+      const alertEl = document.getElementById('pwdAlert');
+      const cur = document.getElementById('curPwd');
+      const nw = document.getElementById('newPwd');
+      const cf = document.getElementById('confirmPwd');
+      const openBtn = document.getElementById('openChangePwd');
+      const closeBtn = document.getElementById('closeChangePwd');
+      const verifyBtn = document.getElementById('verifyPwdBtn');
+      const submitBtn = document.getElementById('submitChangePwd');
+
+      function show(msg, ok) {
+        alertEl.textContent = msg;
+        alertEl.classList.remove('hidden');
+        alertEl.className = ok ? 'alert alert-success' : 'alert alert-danger';
+        alertEl.style.display = 'block';
+      }
+      function hideMsg() { 
+        alertEl.classList.add('hidden'); 
+        alertEl.style.display = 'none';
+      }
+      function setStep(isOk) { nw.disabled = cf.disabled = submitBtn.disabled = !isOk; }
+      function openModal() { hideMsg(); modal.style.display = 'flex'; cur.value = nw.value = cf.value = ''; setStep(false); }
+      function closeModal() { modal.style.display = 'none'; }
+
+      if(openBtn) openBtn.onclick = openModal;
+      if(closeBtn) closeBtn.onclick = closeModal;
+      if(modal) modal.querySelector('.backdrop').onclick = closeModal;
+
+      if(verifyBtn) verifyBtn.onclick = async () => {
+        const pwd = cur.value.trim();
+        if (!pwd) return show("Enter current password", false);
+        const originalText = verifyBtn.innerText;
+        verifyBtn.innerText = "Verifying...";
+        try {
+          const res = await fetch('/profile/password/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword: pwd })
+          });
+          const data = await res.json();
+          if (data.success) {
+            show("Verified ✔", true);
+            setStep(true);
+          } else {
+            show(data.message || "Incorrect password", false);
+          }
+        } catch(e) { show("Error verifying", false); } 
+        finally { verifyBtn.innerText = originalText; }
+      };
+
+      if(submitBtn) submitBtn.onclick = async () => {
+        const newPwd = nw.value.trim();
+        const confirm = cf.value.trim();
+        const originalText = submitBtn.innerText;
+        submitBtn.innerText = "Updating...";
+        try {
+          const res = await fetch('/profile/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newPassword: newPwd, confirmPassword: confirm })
+          });
+          const data = await res.json();
+          if (data.success) {
+            show("Password updated ✔", true);
+            setTimeout(closeModal, 1000);
+          } else {
+            show(data.message || "Failed", false);
+            submitBtn.innerText = originalText;
+          }
+        } catch(e) { 
+          show("Error updating", false); 
+          submitBtn.innerText = originalText;
+        }
+      };
+    })();
+
+    (function () {
+      const modal = document.getElementById('disable2faModal');
+      const openBtn = document.getElementById('openDisable2fa');
+      const closeBtn = document.getElementById('closeDisable2fa');
+      const cancelBtn = document.getElementById('cancelDisable2fa');
+      const confirmBtn = document.getElementById('confirmDisable2fa');
+      const backdrop = modal ? modal.querySelector('.backdrop') : null;
+      const otpInput = document.getElementById('otpConfirmInput');
+      const errorBox = document.getElementById('disable2faError');
+      const form = document.getElementById('disable2faForm');
+      const hiddenField = document.getElementById('otpCodeHidden');
+
+      if (!modal || !form || !openBtn || !hiddenField) return;
+
+      function showModal() {
+        errorBox?.classList.add('d-none');
+        otpInput.value = '';
+        modal.style.display = 'flex';
+        setTimeout(() => otpInput.focus(), 100);
+      }
+      function hideModal() {
+        modal.style.display = 'none';
+      }
+      function showError(msg) {
+        if (!errorBox) return;
+        errorBox.textContent = msg;
+        errorBox.classList.remove('d-none');
+      }
+
+      openBtn.addEventListener('click', showModal);
+      closeBtn?.addEventListener('click', hideModal);
+      cancelBtn?.addEventListener('click', hideModal);
+      backdrop?.addEventListener('click', hideModal);
+
+      confirmBtn?.addEventListener('click', () => {
+        const code = otpInput.value.trim();
+        if (!/^\d{6}$/.test(code)) {
+          showError('Enter a valid 6-digit code.');
+          return;
+        }
+        hiddenField.value = code;
+        hideModal();
+        setButtonLoading(openBtn, 'Disabling...');
+        form.submit();
+      });
+    })();
+  </script>
+</body>
+</html>
