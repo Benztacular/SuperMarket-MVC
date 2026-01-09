@@ -107,9 +107,13 @@ async function captureOrder(req, res, next) {
                       if (ptErr) return conn.rollback(() => next(ptErr));
 
                       conn.commit((cmErr) => {
-                        if (cmErr) return conn.rollback(() => next(cmErr));
-                        return res.json({ success: true, redirect: `/orders/${orderId}/receipt` });
-                      });
+                            if (cmErr) return conn.rollback(() => next(cmErr));
+                            // prefer a dedicated payment success page that shows masked method and CTA
+                            const txnId = (payments && payments.id) ? payments.id : orderID;
+                            const encodedTxn = encodeURIComponent(txnId || '');
+                            const encodedAmount = encodeURIComponent(amount || total || '');
+                            return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                          });
                     });
                 });
               })

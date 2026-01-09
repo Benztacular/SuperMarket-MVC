@@ -108,14 +108,21 @@
     padding-bottom: 0;
   }
 
-  body > .container { flex: 1 0 auto; }
+  /* Reserve bottom space dynamically so footer does not visually overlap content
+     `--footer-height` is updated by script below on load/resize/mutations */
+  :root { --footer-height: 80px; }
+    body > .container { flex: 1 0 auto; padding-bottom: calc(var(--footer-height) + 16px); }
+    /* Ensure primary full-height page wrapper participates in flex layout so footer is pushed after content */
+    body > .min-vh-100 { flex: 1 0 auto; }
+    /* Pages that use a full-height wrapper (like orderHistory) also need bottom padding */
+    .min-vh-100 { padding-bottom: calc(var(--footer-height) + 40px) !important; }
 
   .app-footer {
     background: #222;
     color: #fff;
-    z-index: 1050;
     padding: 18px 0;
-    margin-top: auto;
+    margin-top: 0; /* let flex positioning handle footer placement */
+    position: static; /* keep footer in normal flow so it doesn't overlay content */
   }
 
   .app-footer .footer-inner {
@@ -166,3 +173,24 @@
     </div>
   </div>
 </footer>
+
+
+<script>
+  // Ensure there is always reserved space for the footer so expanded content isn't covered
+  (function(){
+    const apply = () => {
+      const footer = document.querySelector('.app-footer');
+      if (!footer) return;
+      const h = footer.offsetHeight || 80;
+      document.documentElement.style.setProperty('--footer-height', h + 'px');
+    };
+
+    window.addEventListener('load', apply);
+    window.addEventListener('resize', apply);
+    // watch for DOM changes that may change footer height (e.g., language changes)
+    const mo = new MutationObserver(() => apply());
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true });
+    // initial call
+    setTimeout(apply, 50);
+  })();
+</script>

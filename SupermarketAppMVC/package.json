@@ -18,9 +18,10 @@
     "express-session": "^1.18.2",
     "multer": "^2.0.2",
     "mysql2": "^3.14.1",
+    "node-fetch": "^2.6.7",
     "nodemon": "^3.1.10",
+    "puppeteer": "^24.34.0",
     "qrcode": "^1.5.4",
-    "speakeasy": "^2.0.0",
-    "node-fetch": "^2.6.7"
+    "speakeasy": "^2.0.0"
   }
 }

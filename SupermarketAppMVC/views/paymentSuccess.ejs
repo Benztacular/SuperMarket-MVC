@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* * THEME CONFIGURATION
+         * Adjust these variables to match your specific 'image_f46da3.jpg' theme perfectly.
+         */
+        :root {
+            /* Dark Theme Base */
+            --bg-color: #0f1115;       /* Very dark background */
+            --card-bg: #181a20;        /* Slightly lighter card background */
+            --card-border: #2a2d35;    /* Subtle border */
+            
+            /* Typography */
+            --text-main: #ffffff;
+            --text-muted: #9ca3af;
+            
+            /* Accents */
+            --success-color: #10b981;  /* Emerald Green */
+            --primary-btn: #4f46e5;    /* Indigo/Purple accent */
+            --primary-btn-hover: #4338ca;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-image: radial-gradient(circle at top right, #1e293b 0%, transparent 40%),
+                              radial-gradient(circle at bottom left, #1e1b4b 0%, transparent 40%);
+        }
+
+        .glass-card {
+            background: rgba(30, 32, 38, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Success Animation */
+        .checkmark-circle {
+            width: 80px;
+            height: 80px;
+            position: relative;
+            display: inline-block;
+            vertical-align: top;
+            border-radius: 50%;
+            background-color: rgba(16, 185, 129, 0.1); /* transparent green */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .checkmark {
+            width: 40px;
+            height: 40px;
+            stroke-width: 3;
+            stroke: var(--success-color);
+            stroke-miterlimit: 10;
+            fill: none;
+            animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+        }
+
+        @keyframes stroke {
+            0% { stroke-dasharray: 0, 100; stroke-dashoffset: 0; }
+            100% { stroke-dasharray: 100, 0; stroke-dashoffset: 0; }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease-out forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        @keyframes fadeInUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <!-- Main Card -->
+    <div class="glass-card w-full max-w-md rounded-2xl p-8 text-center fade-in-up">
+        
+        <!-- Icon -->
+        <div class="mb-6 flex justify-center">
+            <div class="checkmark-circle">
+                <svg class="checkmark" viewBox="0 0 52 52">
+                    <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+                    <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Heading -->
+        <h1 class="text-3xl font-bold mb-2">Payment Successful!</h1>
+        <p class="text-gray-400 mb-8 text-sm">Thank you for your purchase. A confirmation email has been sent to your inbox.</p>
+
+        <!-- Receipt Details Box -->
+        <div class="bg-black/20 rounded-xl p-5 mb-8 text-left border border-white/5">
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-gray-400 text-sm">Transaction ID</span>
+                <span class="font-mono text-sm text-gray-200"><%= transactionId || '—' %></span>
+            </div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-gray-400 text-sm">Date</span>
+                <span class="text-sm text-gray-200"><%= date || '' %></span>
+            </div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-gray-400 text-sm">Payment Method</span>
+                <div class="flex items-center gap-2">
+                    <% if (paymentMethod === 'PayPal') { %>
+                        <span class="text-sm text-gray-200">PayPal</span>
+                    <% } else if (maskedCard) { %>
+                        <span class="text-sm text-gray-200"><%= maskedCard %></span>
+                    <% } else { %>
+                        <span class="text-sm text-gray-200"><%= paymentMethod || 'Card' %></span>
+                    <% } %>
+                </div>
+            </div>
+            <div class="h-px bg-white/10 my-3"></div>
+            <div class="flex justify-between items-center">
+                <span class="text-gray-300 font-medium">Amount Paid</span>
+                <span class="text-xl font-bold text-white"><%= amount ? ('$' + Number(amount).toFixed(2)) : '—' %></span>
+            </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex flex-col gap-3">
+            <a href="/shopping" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2">
+                <span>Back To Shopping</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+            </a>
+            
+            <a href="/orders/<%= orderId %>/receipt?download=pdf" target="_blank" rel="noopener" class="w-full py-3 px-4 bg-transparent border border-white/10 hover:bg-white/5 text-gray-300 font-medium rounded-lg transition-colors">
+                Download Invoice
+            </a>
+        </div>
+        
+    </div>
+
+</body>
+</html>

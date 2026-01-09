@@ -2,8 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Receipt - Order <%= orderId %></title>
-  <!-- Bootstrap 5 (if needed by header/footer, though custom CSS handles the receipt) -->
+  <title>Invoice - Order #<%= orderId %></title>
+
+  <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -14,260 +15,342 @@
     :root {
       --bg-body: #f3f4f6;
       --paper: #ffffff;
-      --ink: #1f2937;
-      --muted: #6b7280;
-      --accent: #0f9d58; /* FreshMart Green */
-      --border-dashed: 2px dashed #e5e7eb;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --accent: #16a34a;
+      --border-light: #e5e7eb;
     }
 
     html, body { height: 100%; margin: 0; }
-    
+
     body {
       font-family: "Inter", sans-serif;
       background: var(--bg-body);
-      color: var(--ink);
+      color: var(--text-main);
       display: flex;
       flex-direction: column;
       min-height: 100vh;
     }
 
-    /* Main content grows */
-    main { flex: 1 0 auto; padding: 40px 20px; display: flex; justify-content: center; align-items: flex-start; }
-
-    /* --- RECEIPT STYLING --- */
-    .receipt-container { width: 100%; display: flex; justify-content: center; }
-
-    .receipt-card {
-      max-width: 600px;
-      width: 100%;
-      background: var(--paper);
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-      padding: 40px;
-      position: relative;
-      border-top: 6px solid var(--accent); /* Brand Top Border */
-      border-radius: 4px; /* Slight rounding like cardstock */
-    }
-
-    /* Success Icon */
-    .success-icon {
-      width: 64px;
-      height: 64px;
-      background: #dcfce7;
-      color: var(--accent);
-      border-radius: 50%;
+    main {
+      flex: 1 0 auto;
+      padding: 40px 20px;
       display: flex;
-      align-items: center;
       justify-content: center;
-      margin: 0 auto 20px;
     }
 
-    /* Header Text */
-    h1 {
-      margin: 0 0 4px;
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--ink);
-      text-align: center;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .receipt-subtitle {
-      text-align: center;
-      color: var(--muted);
-      font-size: 14px;
-      margin-bottom: 30px;
-    }
-
-    /* Meta Details (Monospace for numbers) */
-    .meta-box {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
+    /* ⭐ FIX: Invoice paper container */
+    #invoice-paper {
+      width: 100%;
+      max-width: 800px;
+      background: var(--paper);
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
       border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 24px;
+      padding: 48px;
+      position: relative;
+    }
+
+    .invoice-header {
       display: flex;
       justify-content: space-between;
-      flex-wrap: wrap;
+      align-items: flex-start;
+      margin-bottom: 48px;
+    }
+
+    .brand-section h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #111827;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-details {
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .invoice-title-block { text-align: right; }
+
+    .invoice-label {
+      font-size: 36px;
+      font-weight: 700;
+      color: #e5e7eb;
+      margin: 0 0 8px 0;
+    }
+
+    .invoice-id {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .info-grid {
+      display: grid;
+      /* reserve a fixed right column so date/due/order/payment stack neatly */
+      grid-template-columns: 1fr 260px;
+      gap: 32px;
+      margin-bottom: 48px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid var(--border-light);
+      align-items: start;
+    }
+
+    /* right column: stack rows and align to the end for consistent layout */
+    .info-grid > div:last-child {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      text-align: right;
       gap: 12px;
     }
-    .meta-item { display: flex; flex-direction: column; gap: 4px; }
-    .meta-label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 0.5px; }
-    .meta-value { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink); font-weight: 500; }
 
-    /* Table Styling */
-    .table-receipt { width: 100%; border-collapse: collapse; font-size: 14px; }
-    
-    .table-receipt th {
-      text-align: left;
-      padding: 12px 0;
-      color: var(--muted);
-      font-weight: 600;
+    .info-label {
       font-size: 12px;
+      font-weight: 700;
       text-transform: uppercase;
-      border-bottom: 2px solid #e5e7eb;
-    }
-    
-    .table-receipt td {
-      padding: 16px 0;
-      border-bottom: 1px solid #f3f4f6;
-      vertical-align: top;
+      color: #9ca3af;
+      margin-bottom: 8px;
+      display: block;
     }
 
-    /* Alignments */
-    .right { text-align: right; }
-    .center { text-align: center; }
-    .price-col { font-family: 'JetBrains Mono', monospace; }
+    .info-value { font-size: 15px; font-weight: 500; }
+    .info-sub { font-size: 13px; color: var(--text-muted); }
 
-    /* Total Section */
-    .table-receipt tfoot td {
-      border-top: var(--border-dashed); /* Dashed line separator */
-      border-bottom: none;
-      padding-top: 20px;
-      font-size: 16px;
-    }
-    .total-label { font-weight: 700; color: var(--ink); }
-    .total-amount { 
-      font-family: 'JetBrains Mono', monospace; 
-      font-weight: 700; 
-      font-size: 20px; 
-      color: var(--accent); 
-    }
-
-    /* Actions */
-    .actions {
-      margin-top: 40px;
+    .date-row {
       display: flex;
-      justify-content: center;
-      gap: 16px;
-      border-top: 1px solid #f3f4f6;
-      padding-top: 24px;
+      flex-direction: column;
+      align-items: flex-end;
+      width: 100%;
+      margin-bottom: 6px;
     }
 
-    .btn {
+    .date-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #9ca3af;
+      letter-spacing: 0.6px;
+      margin-bottom: 4px;
+    }
+
+    .date-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #111827;
+      white-space: nowrap;
+    }
+
+    /* make sure the title block stays at the top-right and aligns with right column */
+    .invoice-title-block { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+
+    .invoice-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 48px;
+    }
+
+    .invoice-table th {
+      background: #f9fafb;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border-light);
+      padding: 12px 16px;
+    }
+
+    .invoice-table td {
+      padding: 16px;
+      border-bottom: 1px dashed var(--border-light);
+      font-size: 14px;
+    }
+
+    .text-right { text-align: right; }
+    .font-mono { font-family: "JetBrains Mono", monospace; }
+
+    .totals-section {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 48px;
+    }
+
+    .totals-box { max-width: 300px; width: 100%; }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .grand-total {
+      border-top: 1px solid var(--border-light);
+      padding-top: 12px;
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .grand-total-label { font-weight: 700; font-size: 16px; }
+    .grand-total-value { font-size: 24px; font-weight: 700; }
+
+    .actions { text-align: center; margin-top: 32px; }
+    .btn-invoice {
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 20px;
-      border-radius: 6px;
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s;
+    }
+
+    .btn-outline {
+      border: 1px solid #d1d5db;
+      color: var(--text-main);
+      background: white;
+      margin-right: 12px;
+    }
+
+    .btn-print {
+      background: var(--accent);
+      color: white;
       border: none;
-      cursor: pointer;
     }
 
-    .btn-primary { background: var(--ink); color: #fff; }
-    .btn-primary:hover { background: #000; transform: translateY(-1px); }
-
-    .btn-secondary { background: #fff; border: 1px solid #d1d5db; color: var(--ink); }
-    .btn-secondary:hover { background: #f9fafb; border-color: #9ca3af; }
-
-    .btn-print { background: #fff; color: var(--accent); border: 1px dashed var(--accent); }
-    .btn-print:hover { background: #f0fdf4; }
-
-    /* Responsive */
-    @media (max-width: 640px) {
-      .receipt-card { padding: 24px; }
-      .table-receipt th, .table-receipt td { font-size: 13px; }
-      .actions { flex-direction: column; }
-      .btn { width: 100%; justify-content: center; }
-    }
-
-    /* Print Styles */
+    /* ⭐ FIX: Print isolation */
     @media print {
-      body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      nav, footer, .actions { display: none !important; } /* Hide header/footer/buttons */
-      main { padding: 0; }
-      .receipt-card { box-shadow: none; border: 1px solid #ccc; max-width: 100%; padding: 0; margin: 0; }
-      .success-icon { border: 2px solid #ddd; } /* Color bg might not print */
+      body * { visibility: hidden; }
+      #invoice-paper, #invoice-paper * {
+        visibility: visible;
+      }
+      #invoice-paper {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        box-shadow: none;
+        padding: 24px;
+      }
+      .actions { display: none !important; }
     }
   </style>
 </head>
+
 <body>
-  
-  <%- include('partials/header') %>
 
-  <main>
-    <div class="receipt-container">
-      <div class="receipt-card">
-        
-        <!-- Success Icon -->
-        <div class="success-icon">
-          <i data-lucide="check" style="width:32px; height:32px;"></i>
+<%- include('partials/header') %>
+
+<main>
+
+  <!-- ⭐ FIX: ID added -->
+  <div id="invoice-paper">
+
+    <!-- HEADER -->
+    <div class="invoice-header">
+      <div class="brand-section">
+        <h1>
+          <i data-lucide="shopping-bag" style="color: var(--accent);"></i>
+          FRESHMART
+        </h1>
+        <div class="brand-details">
+          <div>9 Woodlands Ave 9</div>
+          <div>Singapore, 738964</div>
+          <div>contact@freshmart.com</div>
         </div>
+      </div>
 
-        <h1>Payment Successful</h1>
-        <div class="receipt-subtitle">Thank you for your purchase at FreshMart</div>
-
-        <div class="meta-box">
-          <div class="meta-item">
-            <span class="meta-label">Order ID</span>
-            <span class="meta-value">#<%= orderId %></span>
-          </div>
-          <div class="meta-item right">
-            <span class="meta-label">Date Placed</span>
-            <span class="meta-value"><%= (createdAt ? (new Date(createdAt)).toLocaleString() : '-') %></span>
-          </div>
-        </div>
-
-        <table class="table-receipt" aria-label="Order items">
-          <thead>
-            <tr>
-              <th style="width: 50%;">Item Description</th>
-              <th class="center" style="width: 15%;">Qty</th>
-              <th class="right" style="width: 15%;">Price</th>
-              <th class="right" style="width: 20%;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% let computedTotal = 0; %>
-            <% items.forEach(function(it){ 
-                 const qty = Number(it.quantity || it.cartQty || 0);
-                 const price = Number(it.price || 0);
-                 const subtotal = qty * price;
-                 computedTotal += subtotal;
-            %>
-            <tr>
-              <td>
-                <div style="font-weight: 500; color: #1f2937;"><%= it.productName || ('Product #' + (it.product_id||'—')) %></div>
-                <div style="font-size: 12px; color: #9ca3af; margin-top: 2px;">SKU: <%= it.product_id || 'N/A' %></div>
-              </td>
-              <td class="center" style="color: #4b5563;">x<%= qty %></td>
-              <td class="right price-col" style="color: #6b7280;">$<%= price.toFixed(2) %></td>
-              <td class="right price-col" style="color: #1f2937; font-weight: 600;">$<%= subtotal.toFixed(2) %></td>
-            </tr>
-            <% }) %>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" class="right total-label">Total Amount</td>
-              <td class="right total-amount">$<%= (typeof totalAmount !== 'undefined' && totalAmount != null) ? Number(totalAmount).toFixed(2) : computedTotal.toFixed(2) %></td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <div class="actions">
-          <a class="btn btn-secondary" href="/shopping">
-            <i data-lucide="arrow-left" style="width:16px;"></i> Continue Shopping
-          </a>
-          <a class="btn btn-secondary" href="/orders">
-            <i data-lucide="package" style="width:16px;"></i> Order History
-          </a>
-          <button class="btn btn-print" onclick="window.print()">
-            <i data-lucide="printer" style="width:16px;"></i> Print Receipt
-          </button>
-        </div>
-
+      <div class="invoice-title-block">
+        <div class="invoice-label">INVOICE</div>
+        <div class="invoice-id">#INV-<%= orderId %></div>
       </div>
     </div>
-  </main>
 
-  <%- include('partials/footer') %>
+    <!-- INFO -->
+    <div class="info-grid">
+      <div>
+          <span class="info-label">Bill To</span>
+          <div class="info-value"><%= userName || 'Valued Customer' %></div>
+          <div class="info-sub"><%= userAddress || '' %></div>
+          <% if (userPhone) { %>
+            <div class="info-sub">Phone: <%= userPhone %></div>
+          <% } %>
+        </div>
 
-  <!-- Initialize Icons -->
-  <script>
-    lucide.createIcons();
-  </script>
+      <div>
+        <div class="date-row"><span class="date-label">Date:</span><span class="date-value"><%= new Date(createdAt).toLocaleDateString() %></span></div>
+        <div class="date-row"><span class="date-label">Order:</span><span class="date-value">#<%= orderId %></span></div>
+        <div class="date-row"><span class="date-label">Payment:</span><span class="date-value"><%= paymentMethod || 'Card' %></span></div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <table class="invoice-table">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="text-right">Qty</th>
+          <th class="text-right">Unit</th>
+          <th class="text-right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% let computedTotal = 0; %>
+        <% items.forEach(it => { 
+          const qty = Number(it.quantity || 0);
+          const price = Number(it.price || 0);
+          const subtotal = qty * price;
+          computedTotal += subtotal;
+        %>
+        <tr>
+          <td><%= it.productName %></td>
+          <td class="text-right"><%= qty %></td>
+          <td class="text-right font-mono">$<%= price.toFixed(2) %></td>
+          <td class="text-right font-mono">$<%= subtotal.toFixed(2) %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+
+    <!-- TOTAL -->
+    <div class="totals-section">
+      <div class="totals-box">
+        <div class="total-row">
+          <span>Subtotal</span>
+          <span class="font-mono">$<%= computedTotal.toFixed(2) %></span>
+        </div>
+        <div class="grand-total">
+          <span class="grand-total-label">Total</span>
+          <span class="grand-total-value font-mono">$<%= computedTotal.toFixed(2) %></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="actions no-print">
+      <a href="/orders" class="btn-invoice btn-outline">Back to Orders</a>
+
+      <!-- ⭐ FIX: PDF download (use query param supported by controller) -->
+      <a href="/orders/<%= orderId %>/receipt?download=pdf" class="btn-invoice btn-print">
+        <i data-lucide="download"></i>
+        Download Invoice
+      </a>
+    </div>
+
+  </div>
+</main>
+
+<%- include('partials/footer') %>
+
+<script>
+  lucide.createIcons();
+</script>
+
 </body>
 </html>

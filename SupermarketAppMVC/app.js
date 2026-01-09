@@ -159,24 +159,21 @@ app.post('/cart/pay', requireUser, (req, res, next) => OrderController.checkout(
 app.post('/cart/checkout', requireUser, ensure(OrderController.checkout, 'OrderController.checkout'));
 app.post('/cart/clear', requireUser, CartController.clear);
 
+// Payment success landing page
+app.get('/payment/success', requireUser, ensure(OrderController.paymentSuccess, 'OrderController.paymentSuccess'));
+
 // Orders
 app.get('/orders/:id/receipt', requireUser, ensure(OrderController.showReceipt, 'OrderController.showReceipt'));
+// backward-compatible route used by some templates: redirect to query-based PDF download
+app.get('/orders/:id/receipt/pdf', requireUser, (req, res) => {
+  return res.redirect(`/orders/${req.params.id}/receipt?download=pdf`);
+});
 app.get('/orders', requireUser, ensure(OrderController.history, 'OrderController.history'));
 app.post('/orders/place', (req, res, next) => {
   if (!req.session?.user && !req.session?.userId) return res.redirect('/login');
   return OrderController.placeOrder(req, res, next);
 });
-app.get('/orderHistory', requireUser, (req, res, next) => {
-  const uid = req.session.user?.id || req.session.userId;
-  db.query(
-    'SELECT id, user_id AS userId, orderDate, totalAmount, status, createdAt FROM orders WHERE user_id = ? ORDER BY orderDate DESC',
-    [uid],
-    (err, orders) => {
-      if (err) return next(err);
-      res.render('orderHistory', { orders: orders || [] });
-    }
-  );
-});
+app.get('/orderHistory', requireUser, ensure(OrderController.orderHistoryPage || OrderController.history, 'OrderController.orderHistoryPage'));
 
 // Auth & profile
 app.get('/login', ensure(UserController.loginPage, 'UserController.loginPage'));

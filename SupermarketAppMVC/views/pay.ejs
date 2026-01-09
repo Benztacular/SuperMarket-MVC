@@ -396,8 +396,8 @@
   <%- include('partials/footer') %>
   <script>
     (function(){
-      const clientId = '<%= paypalClientId || '' %>';
-      const currency = '<%= paypalCurrency || 'SGD' %>';
+      const clientId = '<%= paypalClientId || "" %>';
+      const currency = '<%= paypalCurrency || "SGD" %>';
       if (!clientId) return console.warn('PayPal Client ID not configured');
 
       const sdkUrl = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=${encodeURIComponent(currency)}`;

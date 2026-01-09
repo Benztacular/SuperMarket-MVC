@@ -381,8 +381,11 @@ exports.confirmPayment = function (req, res) {
 
               // finalize: clear cart, commit transaction, release connection and redirect
               const finalize = () => {
-                // after commit succeed, send the shopper to the canonical receipt route
-                return res.redirect(`/orders/${orderId}/receipt`);
+                // after commit succeed, send shopper to payment success page
+                const last4 = (req.body && (req.body.cardLast4 || req.body.card_last4 || req.body.last4)) || '';
+                const encodedLast4 = encodeURIComponent(last4 || '');
+                const encodedAmount = encodeURIComponent(total || '');
+                return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
               };
 
               if (itemsToDecrement.length === 0) {

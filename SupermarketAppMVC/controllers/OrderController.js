@@ -65,10 +65,9 @@ async function placeOrder(req, res) {
     // insert order_items then clear cart and redirect
     function proceedInsertItems(orderId, items, createdAt) {
       if (!items.length) {
-        // nothing to insert
         if (req.session) req.session.cart = null;
-        if (Cart.clearByUser) Cart.clearByUser(userId, () => {});
-        return res.redirect('/orders/receipt/' + orderId);
+        if (Cart.clearByUser) return Cart.clearByUser(userId, () => res.redirect(`/orders/${orderId}/receipt`));
+        return db.query('DELETE FROM cart_items WHERE user_id = ?', [userId], () => res.redirect(`/orders/${orderId}/receipt`));
       }
 
       let pending = items.length;
@@ -87,7 +86,6 @@ async function placeOrder(req, res) {
             if (--pending === 0) finish();
           });
         } else {
-          // fallback to direct insert
           const insertSql = 'INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES (?, ?, ?, ?, ?)';
           db.query(insertSql, [payload.orderId, payload.productId, payload.quantity, payload.price, payload.createdAt], (iErr) => {
             if (iErr) console.error('order_items insert error', iErr);
@@ -97,36 +95,23 @@ async function placeOrder(req, res) {
       });
 
       function finish() {
-        // clear cart_items (model or direct)
         if (req.session) req.session.cart = null;
         if (typeof Cart.clearByUser === 'function') {
-          Cart.clearByUser(userId, (cErr) => {
+          return Cart.clearByUser(userId, (cErr) => {
             if (cErr) console.error('Cart.clearByUser error', cErr);
-            return res.redirect('/orders/receipt/' + orderId);
-          });
-        } else {
-          db.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (dErr) => {
-            if (dErr) console.error('Failed to clear cart', dErr);
             return res.redirect(`/orders/${orderId}/receipt`);
           });
         }
+
+        db.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (dErr) => {
+          if (dErr) console.error('Failed to clear cart', dErr);
+          return res.redirect(`/orders/${orderId}/receipt`);
+        });
       }
     }
-
-    // use Cart.getByUser if available
-    if (typeof Cart.getByUser === 'function') {
-      Cart.getByUser(userId, handleCartRows);
-    } else {
-      const sqlCart = `
-        SELECT ci.id, ci.user_id, ci.product_id, ci.quantity, p.price, p.productName
-        FROM cart_items ci
-        LEFT JOIN products p ON p.id = ci.product_id
-        WHERE ci.user_id = ?`;
-      db.query(sqlCart, [userId], handleCartRows);
-    }
-  } catch (ex) {
-    console.error(ex);
-    res.status(500).send('Server error');
+  } catch (err) {
+    console.error('placeOrder error', err);
+    return res.status(500).send('Failed to place order');
   }
 }
 
@@ -299,7 +284,8 @@ const checkout = function (req, res, next) {
                     conn.commit((commitErr) => {
                       if (commitErr) return rollback('COMMIT_FAIL', commitErr);
                       release();
-                      return res.redirect(`/orders/${orderId}/receipt`);
+                      const encodedAmount = encodeURIComponent(totalAmount || '');
+                      return res.redirect(`/payment/success?orderId=${orderId}&method=card&amount=${encodedAmount}`);
                     });
                   });
                 })
@@ -339,12 +325,39 @@ function showReceipt(req, res) {
     db.query(itemsSql, [orderId], (iErr, itemRows) => {
       if (iErr) { console.error(iErr); return res.status(500).send('Failed to load order items'); }
       const items = itemRows || [];
-      return res.render('receipt', {
+      const data = {
         orderId: order.id,
         createdAt: order.createdAt,
         items,
         totalAmount: order.totalAmount
-      });
+      };
+
+      // support download as PDF when ?download=pdf or ?pdf=1 is present
+      const wantsPdf = (req.query && (String(req.query.download || '').toLowerCase() === 'pdf' || String(req.query.pdf || '') === '1' || String(req.query.pdf || '').toLowerCase() === 'true'));
+      if (wantsPdf) {
+        return res.render('receipt', data, async (err, html) => {
+          if (err) { console.error('render receipt for pdf error', err); return res.status(500).send('Failed to render receipt'); }
+          try {
+            // try to use puppeteer if available
+            const puppeteer = require('puppeteer');
+            const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+            const page = await browser.newPage();
+            await page.setContent(html, { waitUntil: 'networkidle0' });
+            const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+            await browser.close();
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.pdf`);
+            return res.send(pdfBuffer);
+          } catch (pdfErr) {
+            console.error('PDF generation failed, falling back to HTML attachment', pdfErr);
+            res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.html`);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            return res.send(html);
+          }
+        });
+      }
+
+      return res.render('receipt', data);
     });
   });
 }
@@ -358,12 +371,42 @@ function history(req, res) {
   db.query('SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC', [userId], (err, rows = []) => {
     if (err) { console.error(err); return res.status(500).send('Failed to load orders'); }
 
-    res.render('orderHistory', {
-      orders: rows,
-      pageTitle: 'Current Orders',
-      showDelivered: false,
-      user: sessionUser,
-      isAdmin: sessionUser?.role === 'admin'
+    const orders = rows || [];
+    const orderIds = orders.map(o => o.id).filter(Boolean);
+    if (!orderIds.length) {
+      return res.render('orderHistory', {
+        orders,
+        pageTitle: 'Current Orders',
+        showDelivered: false,
+        user: sessionUser,
+        isAdmin: sessionUser?.role === 'admin'
+      });
+    }
+
+    const itemsSql = `
+      SELECT oi.order_id, oi.quantity AS qty, oi.price, p.productName, p.image
+      FROM order_items oi
+      LEFT JOIN products p ON p.id = oi.product_id
+      WHERE oi.order_id IN (?)
+    `;
+    db.query(itemsSql, [orderIds], (iErr, itemRows = []) => {
+      if (iErr) { console.error(iErr); /* fall back to rendering without items */ }
+      const itemsByOrder = (itemRows || []).reduce((acc, r) => {
+        const id = r.order_id;
+        acc[id] = acc[id] || [];
+        acc[id].push({ name: r.productName || r.product_name || '', qty: r.qty || r.quantity || 0, price: Number(r.price || 0), image: r.image || r.product_image || '' });
+        return acc;
+      }, {});
+
+      orders.forEach(o => { o.items = itemsByOrder[o.id] || []; });
+
+      return res.render('orderHistory', {
+        orders,
+        pageTitle: 'Current Orders',
+        showDelivered: false,
+        user: sessionUser,
+        isAdmin: sessionUser?.role === 'admin'
+      });
     });
   });
 }
@@ -376,12 +419,42 @@ function orderHistoryPage(req, res) {
   db.query('SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC', [userId], (err, rows = []) => {
     if (err) { console.error(err); return res.status(500).send('Failed to load orders'); }
 
-    res.render('orderHistory', {
-      orders: rows,
-      pageTitle: 'Order History',
-      showDelivered: true,
-      user: sessionUser,
-      isAdmin: sessionUser?.role === 'admin'
+    const orders = rows || [];
+    const orderIds = orders.map(o => o.id).filter(Boolean);
+    if (!orderIds.length) {
+      return res.render('orderHistory', {
+        orders,
+        pageTitle: 'Order History',
+        showDelivered: true,
+        user: sessionUser,
+        isAdmin: sessionUser?.role === 'admin'
+      });
+    }
+
+    const itemsSql = `
+      SELECT oi.order_id, oi.quantity AS qty, oi.price, p.productName
+      FROM order_items oi
+      LEFT JOIN products p ON p.id = oi.product_id
+      WHERE oi.order_id IN (?)
+    `;
+    db.query(itemsSql, [orderIds], (iErr, itemRows = []) => {
+      if (iErr) { console.error(iErr); }
+      const itemsByOrder = (itemRows || []).reduce((acc, r) => {
+        const id = r.order_id;
+        acc[id] = acc[id] || [];
+        acc[id].push({ name: r.productName || r.product_name || '', qty: r.qty || r.quantity || 0, price: Number(r.price || 0) });
+        return acc;
+      }, {});
+
+      orders.forEach(o => { o.items = itemsByOrder[o.id] || []; });
+
+      return res.render('orderHistory', {
+        orders,
+        pageTitle: 'Order History',
+        showDelivered: true,
+        user: sessionUser,
+        isAdmin: sessionUser?.role === 'admin'
+      });
     });
   });
 }
@@ -480,6 +553,158 @@ module.exports = {
   showReceipt,
   history,
   details,
+  paymentSuccess,
+  adminList: exports.adminList,
+  adminDetails: exports.adminDetails
+};
+
+// Render payment success page with masked method and order info
+function paymentSuccess(req, res) {
+  const sessionUser = req.session?.user;
+  if (!sessionUser) return res.redirect('/login');
+
+  const userId = sessionUser.id || req.session?.userId;
+  const { orderId, method, txn, last4, amount } = req.query || {};
+
+  const renderPage = (opts = {}) => {
+    return res.render('paymentSuccess', {
+      transactionId: opts.transactionId || txn || null,
+      date: opts.date || (new Date()).toLocaleString(),
+      paymentMethod: opts.paymentMethod || (method === 'paypal' ? 'PayPal' : (method === 'card' ? 'Card' : method)),
+      maskedCard: opts.maskedCard || (last4 ? ('**** ' + String(last4).slice(-4)) : null),
+      amount: opts.amount || amount || null,
+      orderId: opts.orderId || orderId || null
+    });
+  };
+
+  if (!orderId) return renderPage();
+
+  // load order to confirm ownership and get createdAt / total
+  db.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId], (err, rows) => {
+    if (err) { console.error('paymentSuccess - db error', err); return res.status(500).send('Failed to load order'); }
+    const order = rows && rows[0];
+    if (!order) return res.status(404).send('Order not found');
+
+    if (Number(order.user_id) !== Number(userId) && !(sessionUser.role === 'admin')) {
+      return res.status(403).send('Forbidden');
+    }
+
+    const opts = {};
+    opts.amount = opts.amount || order.totalAmount;
+    opts.date = new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString();
+
+    if (method === 'paypal') {
+      // try to fetch stored paypal transaction for nicer txn id/date
+      db.query('SELECT paypal_order_id, payment_time FROM paypal_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [orderId], (pErr, pRows) => {
+        if (!pErr && pRows && pRows[0]) {
+          opts.transactionId = pRows[0].paypal_order_id || txn || '';
+          if (pRows[0].payment_time) opts.date = new Date(pRows[0].payment_time).toLocaleString();
+        }
+        return renderPage({ transactionId: opts.transactionId, date: opts.date, paymentMethod: 'PayPal', maskedCard: null, amount: opts.amount });
+      });
+      return;
+    }
+
+    // card or other (use last4 if provided)
+    opts.transactionId = txn || null;
+    opts.maskedCard = last4 ? ('**** ' + String(last4).slice(-4)) : null;
+    return renderPage({ transactionId: opts.transactionId, date: opts.date, paymentMethod: method === 'card' ? 'Card' : method, maskedCard: opts.maskedCard, amount: opts.amount });
+  });
+}
+
+// showReceipt: load order and its items (joined to products) and render receipt.ejs
+function showReceipt(req, res) {
+  const sessionUser = req.session && (req.session.user || null);
+  const userId = (req.session && req.session.userId) || (sessionUser && sessionUser.id) || null;
+  if (!userId) return res.redirect('/login');
+
+  const orderId = req.params.id;
+  db.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId], (err, rows) => {
+    if (err) { console.error(err); return res.status(500).send('Failed to load order'); }
+    const order = Array.isArray(rows) ? rows[0] : rows;
+    if (!order) return res.status(404).send('Order not found');
+
+    // ensure ownership
+    if (Number(order.user_id) !== Number(userId) && !(req.session.user && req.session.user.role === 'admin')) {
+      return res.status(403).send('Forbidden');
+    }
+
+    const itemsSql = `
+      SELECT oi.id, oi.product_id, oi.quantity, oi.price, p.productName, p.image
+      FROM order_items oi
+      LEFT JOIN products p ON p.id = oi.product_id
+      WHERE oi.order_id = ?`;
+    db.query(itemsSql, [orderId], (iErr, itemRows) => {
+      if (iErr) { console.error(iErr); return res.status(500).send('Failed to load order items'); }
+      const items = itemRows || [];
+
+      // fetch user details and paypal transaction (if any)
+      const userSql = 'SELECT id, username, email, contact, address FROM users WHERE id = ? LIMIT 1';
+      db.query(userSql, [order.user_id], (uErr, uRows) => {
+        if (uErr) { console.error('Failed to load user for receipt', uErr); }
+        const user = (uRows && uRows[0]) || null;
+
+        const paypalSql = 'SELECT * FROM paypal_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1';
+        db.query(paypalSql, [orderId], (pErr, pRows) => {
+          if (pErr) { console.error('Failed to load paypal transaction', pErr); }
+          const paypalTxn = (pRows && pRows[0]) || null;
+
+          const paymentMethod = paypalTxn ? 'PayPal' : (order.paymentMethod || order.payment_method || (order.status && String(order.status).toLowerCase().includes('paid') ? 'Card' : 'Card'));
+
+          const data = {
+            orderId: order.id,
+            createdAt: order.createdAt || order.orderDate || new Date(),
+            items,
+            totalAmount: order.totalAmount,
+            userName: user ? (user.username || user.email || 'Valued Customer') : 'Valued Customer',
+            userAddress: user ? (user.address || '') : '',
+            userPhone: user ? (user.contact || '') : '',
+            paymentMethod,
+            paypalTxn
+          };
+
+          // support download as PDF when ?download=pdf or ?pdf=1 is present
+          const wantsPdf = (req.query && (String(req.query.download || '').toLowerCase() === 'pdf' || String(req.query.pdf || '') === '1' || String(req.query.pdf || '').toLowerCase() === 'true'));
+          if (wantsPdf) {
+            return res.render('receipt', data, async (err, html) => {
+              if (err) { console.error('render receipt for pdf error', err); return res.status(500).send('Failed to render receipt'); }
+              try {
+                const puppeteer = require('puppeteer');
+                const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                const page = await browser.newPage();
+                await page.setContent(html, { waitUntil: 'networkidle0' });
+                const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+                await browser.close();
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.pdf`);
+                return res.send(pdfBuffer);
+              } catch (pdfErr) {
+                console.error('PDF generation failed, falling back to HTML attachment', pdfErr);
+                res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.html`);
+                res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                return res.send(html);
+              }
+            });
+          }
+
+          return res.render('receipt', data);
+        });
+      });
+    });
+  });
+}
+
+module.exports = {
+  placeOrder,
+  orderHistory,
+  viewOrder,
+  adminOrdersPage,
+  adminUpdateOrderStatus,
+  checkout,
+  showReceipt,
+  history,
+  details,
+  paymentSuccess,
   adminList: exports.adminList,
   adminDetails: exports.adminDetails
 };

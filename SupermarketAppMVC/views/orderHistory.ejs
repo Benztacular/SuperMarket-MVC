@@ -1,455 +1,655 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title><%= (typeof showDelivered !== 'undefined' && !showDelivered) ? 'Current Orders' : 'Order History' %></title>
-  
-  <!-- Bootstrap 5 CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  
-  <!-- Google Fonts: Plus Jakarta Sans -->
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-  <!-- Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-
-  <style>
-    /* --- THEME VARIABLES (Matching Profile Page) --- */
-    :root {
-      --bg-body: #f8fafc;
-      --primary: #10b981;
-      --primary-hover: #059669;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --border-color: #e2e8f0;
-      --card-bg: #ffffff;
-      
-      --radius-xl: 24px;
-      --radius-lg: 16px;
-      --radius-md: 12px;
-      
-      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-      
-      --header-height: 80px;
-    }
-
-    html, body { height: 100%; margin: 0; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freshmart - Order History</title>
     
-    body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      background-color: var(--bg-body);
-      color: var(--text-main);
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-      padding-top: calc(var(--header-height) + 40px);
-      background-image: 
-        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.05) 0px, transparent 40%),
-        radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.05) 0px, transparent 40%);
-      background-attachment: fixed;
-    }
-
-    main { flex: 1 0 auto; padding-bottom: 60px; }
-
-    .container-custom {
-      max-width: 1000px; /* Slightly wider for the table */
-      margin: 0 auto;
-      padding: 0 1.5rem;
-    }
-
-    /* --- CARD STYLING --- */
-    .order-card {
-      background: var(--card-bg);
-      border-radius: var(--radius-xl);
-      padding: 2.5rem;
-      box-shadow: var(--shadow-md);
-      border: 1px solid var(--border-color);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card-header-styled {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 2rem;
-      padding-bottom: 1.5rem;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .icon-box {
-      width: 48px; height: 48px;
-      background: #ecfdf5; /* Light green bg */
-      color: var(--primary);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    h2 {
-      margin: 0;
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--text-main);
-      letter-spacing: -0.02em;
-    }
-
-    /* --- TABLE STYLING --- */
-    .table-container {
-      overflow-x: auto;
-      min-height: 400px; /* Prevent jumpiness when changing pages */
-    }
-
-    .table-clean {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      margin-top: 0;
-      font-size: 0.95rem;
-    }
-
-    .table-clean th {
-      padding: 1rem 1.25rem;
-      background: #f8fafc;
-      color: var(--text-muted);
-      font-weight: 600;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-bottom: 1px solid var(--border-color);
-      white-space: nowrap;
-    }
-    .table-clean th:first-child { border-top-left-radius: var(--radius-md); border-bottom-left-radius: var(--radius-md); }
-    .table-clean th:last-child { border-top-right-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); }
-
-    .table-clean td {
-      padding: 1.25rem;
-      border-bottom: 1px solid var(--border-color);
-      vertical-align: middle;
-      color: var(--text-main);
-      font-weight: 500;
-    }
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    .table-clean tr:last-child td { border-bottom: none; }
-    .table-clean tr:hover td { background-color: #f8fafc; transition: background 0.2s; }
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
 
-    .table-clean .right { text-align: right; }
-    .table-clean .center { text-align: center; }
-
-    /* --- STATUS BADGES --- */
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 50px;
-      font-weight: 700;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
-      width: fit-content;
-      margin: 0 auto;
-    }
-
-    /* Status Colors */
-    .s-pending { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-    .s-pending .status-dot { background: #f59e0b; }
-
-    .s-processing { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
-    .s-processing .status-dot { background: #3b82f6; }
-
-    .s-shipping { background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
-    .s-shipping .status-dot { background: #06b6d4; }
-
-    .s-delivered { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
-    .s-delivered .status-dot { background: #10b981; }
-
-    .s-cancelled { background: #fef2f2; color: #be123c; border: 1px solid #fecaca; }
-    .s-cancelled .status-dot { background: #ef4444; }
-
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    /* --- ACTIONS --- */
-    .btn-receipt {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border-radius: 8px;
-      text-decoration: none;
-      color: var(--primary);
-      background: #ecfdf5;
-      font-weight: 600;
-      font-size: 0.85rem;
-      transition: all 0.2s;
-      border: 1px solid transparent;
-    }
-    .btn-receipt:hover {
-      background: var(--primary);
-      color: white;
-      transform: translateY(-1px);
-    }
-
-    /* Admin Select Styling */
-    .status-select {
-      padding: 6px 24px 6px 10px;
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      background-color: #fff;
-      font-size: 0.85rem;
-      color: var(--text-main);
-      cursor: pointer;
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-      background-size: 10px 10px;
-      transition: border-color 0.2s;
-    }
-    .status-select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-    }
-    
-    .muted-text { color: var(--text-muted); font-size: 0.9rem; }
-    .order-id { font-family: monospace; font-weight: 600; color: var(--text-main); font-size: 0.95rem; }
-
-    /* Pagination Styling */
-    .page-link {
-      color: var(--text-main);
-      border: 1px solid var(--border-color);
-      margin: 0 4px;
-      border-radius: 8px;
-      font-weight: 600;
-      padding: 8px 14px;
-    }
-    .page-link:hover {
-      color: var(--primary);
-      background-color: #ecfdf5;
-      border-color: #a7f3d0;
-    }
-    .page-item.active .page-link {
-      background-color: var(--primary);
-      border-color: var(--primary);
-      color: white;
-    }
-    .page-item.disabled .page-link {
-      color: #94a3b8;
-      background-color: #f8fafc;
-      border-color: #e2e8f0;
-      pointer-events: none;
-    }
-
-    @media (max-width: 768px) {
-      .order-card { padding: 1.5rem; }
-      .table-clean th, .table-clean td { padding: 0.75rem; }
-      .status-badge { padding: 4px 8px; font-size: 0.75rem; }
-      .btn-receipt { padding: 6px 12px; font-size: 0.8rem; }
-    }
-  </style>
-</head>
-<body>
-  <%- include('partials/header') %>
-
-  <main>
-    <div class="container-custom">
-      <div class="order-card">
-        
-        <!-- Header Section -->
-        <div class="card-header-styled">
-          <div class="icon-box">
-            <% if (typeof showDelivered !== 'undefined' && !showDelivered) { %>
-              <i data-lucide="package" width="24"></i>
-            <% } else { %>
-              <i data-lucide="history" width="24"></i>
-            <% } %>
-          </div>
-          <h2><%= (typeof showDelivered !== 'undefined' && !showDelivered) ? 'Current Orders' : 'Order History' %></h2>
-        </div>
-
-        <% 
-          // Normalized logic preserved exactly from original
-          const list = (typeof orders !== 'undefined') ? orders : ((typeof rows !== 'undefined') ? rows : []);
-          const showDeliveredLocal = (typeof showDelivered !== 'undefined') ? Boolean(showDelivered) : true;
-          const isAdminLocal = (typeof isAdmin !== 'undefined') ? Boolean(isAdmin) : false;
-
-          function fmtCurrency(n){ return '$ ' + (Number(n) || 0).toFixed(2); }
-          function fmtDate(d){ if(!d) return '-'; try { return new Date(d).toLocaleString(); } catch(e){ return '-'; } }
-          function normalizeId(o){ return o.id || o.order_id || o.orderNo || o.order_no || '-'; }
-          function normalizeTotal(o){ return Number(o.totalAmount || o.total || o.amount || o.price || 0); }
-          function normalizeCreated(o){ return o.orderDate || o.createdAt || o.created_at || o.created || o.date || o.placed || ''; }
-          function normalizeStatus(o){ return (o.status || 'pending').toString().toLowerCase(); }
-          function statusClass(s){ return ({ pending:'s-pending', processing:'s-processing', shipping:'s-shipping', delivered:'s-delivered', cancelled:'s-cancelled' }[s] || 's-pending'); }
-
-          const displayList = showDeliveredLocal ? list : list.filter(it => normalizeStatus(it) !== 'delivered');
-        %>
-
-        <div class="table-container">
-          <table class="table-clean" aria-label="Order history">
-            <thead>
-              <tr>
-                <th>Order ID</th>
-                <th>Date Placed</th>
-                <th class="right">Total</th>
-                <th class="center">Status</th>
-                <th class="center">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="orderTableBody">
-              <% if (displayList && displayList.length) { %>
-                <% displayList.forEach(o => { 
-                      const orderId = normalizeId(o);
-                      const created = normalizeCreated(o);
-                      const totalVal = normalizeTotal(o);
-                      const status = normalizeStatus(o);
-                      const sClass = statusClass(status);
-                %>
-                  <tr>
-                    <td><span class="order-id">#<%= orderId %></span></td>
-                    <td class="muted-text"><%= created ? fmtDate(created) : '-' %></td>
-                    <td class="right fw-bold"><%= fmtCurrency(totalVal) %></td>
-
-                    <td class="center">
-                      <div class="d-flex align-items-center justify-content-center gap-2">
-                        <div class="status-badge <%= sClass %>" title="Status: <%= status %>">
-                          <span class="status-dot" aria-hidden="true"></span>
-                          <span><%= (status.charAt(0).toUpperCase() + status.slice(1)) %></span>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td class="center">
-                      <a class="btn-receipt" href="/orders/<%= orderId %>/receipt">
-                        <i data-lucide="receipt" width="14"></i> Receipt
-                      </a>
-                    </td>
-                  </tr>
-                <% }) %>
-              <% } else { %>
-                <tr class="no-data-row">
-                  <td colspan="5" class="center py-5">
-                    <div class="d-flex flex-column align-items-center">
-                      <div class="p-3 bg-light rounded-circle mb-3 text-muted">
-                        <i data-lucide="inbox" width="32"></i>
-                      </div>
-                      <h5 class="text-muted fw-bold">No orders found</h5>
-                      <p class="small text-muted mb-0">You haven't placed any orders yet.</p>
-                    </div>
-                  </td>
-                </tr>
-              <% } %>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Pagination Controls -->
-        <div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
-
-      </div>
-    </div>
-  </main>
-
-  <%- include('partials/footer') %>
-
-  <!-- NOTE: Bootstrap Bundle Script Removed here because it is already included in header.ejs -->
-  
-  <script>
-    lucide.createIcons();
-
-    // Admin: auto-submit status changes (Logic preserved)
-    document.addEventListener('change', function(e){
-      const sel = e.target;
-      if (!sel || !sel.classList.contains('status-select')) return;
-      const form = sel.closest('form');
-      if (!form) return;
-      form.submit();
-    });
-
-    // Client-side Pagination Logic
-    document.addEventListener('DOMContentLoaded', function() {
-      const tableBody = document.getElementById('orderTableBody');
-      const rows = Array.from(tableBody.querySelectorAll('tr'));
-      const paginationContainer = document.getElementById('pagination-container');
-      const itemsPerPage = 10;
-      
-      // Check if we have data or just the "No orders" message
-      const isNoData = rows.length === 1 && rows[0].classList.contains('no-data-row');
-      
-      if (rows.length === 0 || isNoData) {
-          return; // Don't show pagination if no data
-      }
-
-      const pageCount = Math.ceil(rows.length / itemsPerPage);
-      let currentPage = 1;
-
-      // REMOVED: The check that hid pagination if there was only 1 page
-      // if (pageCount <= 1) return; 
-
-      function displayRows(page) {
-        const start = (page - 1) * itemsPerPage;
-        const end = start + itemsPerPage;
-        
-        rows.forEach((row, index) => {
-          if (index >= start && index < end) {
-            row.style.display = '';
-          } else {
-            row.style.display = 'none';
-          }
-        });
-      }
-
-      function setupPagination() {
-        paginationContainer.innerHTML = '';
-        
-        const nav = document.createElement('nav');
-        const ul = document.createElement('ul');
-        ul.className = 'pagination';
-        
-        // Previous Button
-        const prevLi = document.createElement('li');
-        prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
-        prevLi.innerHTML = `<a class="page-link" href="#" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a>`;
-        prevLi.onclick = (e) => { e.preventDefault(); if(currentPage > 1) { currentPage--; update(); } };
-        ul.appendChild(prevLi);
-
-        // Numbered Buttons
-        // Always show at least page 1 even if rows < itemsPerPage
-        const safePageCount = pageCount > 0 ? pageCount : 1;
-        
-        for (let i = 1; i <= safePageCount; i++) {
-          const li = document.createElement('li');
-          li.className = `page-item ${currentPage === i ? 'active' : ''}`;
-          li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
-          li.onclick = (e) => { e.preventDefault(); currentPage = i; update(); };
-          ul.appendChild(li);
+    <!-- Custom Styles -->
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8fafc;
         }
 
-        // Next Button
-        const nextLi = document.createElement('li');
-        nextLi.className = `page-item ${currentPage === safePageCount ? 'disabled' : ''}`;
-        nextLi.innerHTML = `<a class="page-link" href="#" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>`;
-        nextLi.onclick = (e) => { e.preventDefault(); if(currentPage < safePageCount) { currentPage++; update(); } };
-        ul.appendChild(nextLi);
+        .card-premium {
+            background: white;
+            border: 1px solid #f1f5f9;
+            border-radius: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.01), 0 2px 4px -1px rgba(0, 0, 0, 0.01);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-premium:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01);
+            border-color: #e2e8f0;
+        }
 
-        nav.appendChild(ul);
-        paginationContainer.appendChild(nav);
-      }
+        .status-step {
+            position: relative;
+            z-index: 1;
+        }
+        .status-line {
+            position: absolute;
+            top: 16px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: #e2e8f0;
+            z-index: 0;
+        }
+        .status-line-progress {
+            position: absolute;
+            top: 16px;
+            left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #10b981, #059669);
+            z-index: 0;
+            transition: width 0.5s ease;
+        }
 
-      function update() {
-        displayRows(currentPage);
-        setupPagination();
-      }
+        /* Marker styling for the step bubbles */
+        .status-step .marker {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(0,0,0,0.06);
+            background: #fff;
+            color: #6b7280; /* muted */
+            box-shadow: 0 2px 6px rgba(2,6,23,0.06);
+            transition: all 0.25s ease;
+        }
 
-      update();
-    });
-  </script>
+        .status-step .marker.completed {
+            background: #10b981; /* primary */
+            color: #fff;
+            border-color: rgba(16,185,129,0.9);
+        }
+
+        .status-step svg {
+            width: 16px; height: 16px; stroke-width: 1.5; color: currentColor; fill: none;
+        }
+
+        .status-step .marker.completed svg { fill: currentColor; }
+
+        .banner-image {
+            background-image: linear-gradient(rgba(6, 78, 59, 0.85), rgba(6, 95, 70, 0.7)), url('https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=80');
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .slide-down {
+            animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .star-rating-btn {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .star-rating-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Utility classes for toggling */
+        .details-section {
+            display: none;
+        }
+        .details-section.open {
+            display: block;
+        }
+        .rotate-180 {
+            transform: rotate(180deg);
+        }
+        .transition-transform {
+            transition: transform 0.3s ease;
+        }
+        
+        /* Filter Active State */
+        .filter-btn.active {
+            background-color: white !important;
+            color: #198754 !important; /* text-success */
+            box-shadow: 0 .125rem .25rem rgba(0,0,0,.075) !important;
+        }
+        .filter-btn {
+            color: #6c757d; /* text-muted */
+        }
+        .filter-btn:hover {
+            color: #212529; /* text-dark */
+        }
+        /* Stat bubbles next to search */
+        .stat-bubbles { display:flex; gap:12px; align-items:center; }
+        .stat-bubble {
+            background: linear-gradient(135deg,#052e16,#0b8a4a);
+            color: #fff; padding:10px 14px; border-radius:14px; box-shadow: 0 8px 24px rgba(2,6,23,0.08);
+            display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:72px;
+        }
+        .stat-bubble .num { font-weight:800; font-size:1.05rem; }
+        .stat-bubble .label { font-size:0.7rem; opacity:0.9; }
+
+        /* Left-side status bubble buttons (clickable filters) */
+            .status-bubble-btn {
+                min-width:48px; height:48px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+                background: #fff; color: #059669; border: 1px solid rgba(5,150,105,0.08); box-shadow: 0 6px 14px rgba(2,6,23,0.04);
+                overflow: hidden; white-space: nowrap;
+                transition: width .18s ease, padding .18s ease, transform .14s ease, box-shadow .14s ease, background .18s ease;
+                padding: 6px; padding-left: 10px; padding-right: 10px;
+            }
+            .status-bubble-btn:hover { transform: translateY(-3px); }
+            .status-bubble-btn.active { background: linear-gradient(135deg,#06b26a,#059669); color: #fff; box-shadow: 0 18px 36px rgba(2,6,23,0.12); transform: translateY(-4px); border-color: rgba(5,150,105,0.2); }
+            .status-bubble-label { font-size:0.72rem; display:block; text-align:center; margin-top:6px; color:#374151; }
+
+            /* Bubble label animation */
+            .status-bubble-btn .bubble-text { display: inline-block; opacity: 0; max-width: 0; margin-left: 4px; transition: max-width .18s ease, opacity .18s ease; }
+            .status-bubble-btn.expanded { padding: 8px 12px; border-radius: 999px; }
+            .status-bubble-btn.expanded .bubble-text { opacity: 1; max-width: 160px; }
+
+            /* (clean) bubble label animation handled above */
+
+        /* Make cards feel lighter and elevated */
+        .card-premium { border-radius:18px; padding:0; }
+        .card-premium .p-4 { padding:1.25rem !important; }
+        .order-card { transition: transform .18s ease, box-shadow .18s ease; }
+        .order-card.open { transform: translateY(-4px); box-shadow: 0 22px 45px rgba(2,6,23,0.06); }
+    </style>
+</head>
+<body>
+
+    <%- include('partials/header') %>
+
+        <div class="min-vh-100 py-5">
+        <div class="container" style="max-width: 1000px;">
+            
+            <!-- Banner with Image -->
+            <div class="banner-image rounded-4 p-5 mb-5 shadow-lg text-white">
+                <div class="position-relative z-1 text-center text-md-start">
+                    <div class="d-flex flex-column flex-md-row align-items-center justify-content-between">
+                        <div>
+                            <h1 class="fw-bold display-5 mb-2 text-shadow-sm"><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Order History' %></h1>
+                            <p class="text-white text-opacity-90 fs-5 mb-0" style="max-width: 500px;">
+                                Track your fresh deliveries and manage past purchases.
+                            </p>
+                        </div>
+                        <div class="d-none d-md-block bg-black bg-opacity-25 rounded-4 p-3 backdrop-blur-sm border border-white border-opacity-10 mt-3 mt-md-0">
+                           <div class="d-flex gap-4 text-center">
+                                <% const totalOrders = (orders && orders.length) ? orders.length : 0; %>
+                                <% const completedCount = (orders && orders.filter) ? orders.filter(o => (o.status||'').toString().toLowerCase() === 'delivered').length : 0; %>
+                                <div>
+                                    <div class="fs-3 fw-bold"><%= totalOrders %></div>
+                                    <div class="small text-white text-opacity-75 text-uppercase fw-bold" style="font-size: 0.65rem;">Total Orders</div>
+                                </div>
+                                <div class="border-start border-white border-opacity-25"></div>
+                                <div>
+                                    <div class="fs-3 fw-bold"><%= completedCount %></div>
+                                    <div class="small text-white text-opacity-75 text-uppercase fw-bold" style="font-size: 0.65rem;">Completed</div>
+                                </div>
+                           </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    
+            <!-- Filter & Search Controls -->
+            <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 mb-4 sticky-top bg-white bg-opacity-75 p-3 rounded-4 backdrop-blur shadow-sm" style="backdrop-filter: blur(10px); top: 10px; z-index: 100;">
+              
+                <!-- (Removed duplicate pill filters; using circular status bubbles instead) -->
+    
+                <!-- Left-side status bubbles (quick toggle) -->
+                <div class="d-none d-md-flex flex-column align-items-center me-3">
+                    <div class="d-flex flex-column align-items-center">
+                        <div class="d-flex flex-row gap-2 align-items-center">
+                            <button type="button" class="status-bubble-btn active expanded" onclick="filterOrders('All')" title="All" data-filter="All">
+                                <i data-lucide="list" style="width:18px;height:18px;"></i>
+                                <span class="bubble-text">All</span>
+                            </button>
+                            <button type="button" class="status-bubble-btn" onclick="filterOrders('Processing')" title="Processing" data-filter="Processing">
+                                <i data-lucide="clock" style="width:18px;height:18px;"></i>
+                                <span class="bubble-text">Processing</span>
+                            </button>
+                            <button type="button" class="status-bubble-btn" onclick="filterOrders('Shipped')" title="Shipped" data-filter="Shipped">
+                                <i data-lucide="truck" style="width:18px;height:18px;"></i>
+                                <span class="bubble-text">Shipped</span>
+                            </button>
+                            <button type="button" class="status-bubble-btn" onclick="filterOrders('Delivered')" title="Delivered" data-filter="Delivered">
+                                <i data-lucide="check-circle" style="width:18px;height:18px;"></i>
+                                <span class="bubble-text">Delivered</span>
+                            </button>
+                            <button type="button" class="status-bubble-btn" onclick="filterOrders('Cancelled')" title="Cancelled" data-filter="Cancelled">
+                                <i data-lucide="x-circle" style="width:18px;height:18px;"></i>
+                                <span class="bubble-text">Cancelled</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search - Pushed to far right -->
+                <div class="position-relative flex-shrink-0" style="width: 360px; max-width: 42%; min-width: 180px;">
+                    <i data-lucide="search" class="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="width: 16px; height: 16px;"></i>
+                    <input 
+                        type="text" 
+                        id="searchInput"
+                        class="form-control border-0 bg-light rounded-pill ps-5 py-2 fw-medium" 
+                        placeholder="Search..." 
+                        style="width: 100%; max-width: 100%;"
+                        onkeyup="searchOrders()"
+                    >
+                </div>
+            </div>
+    
+            <!-- Orders List Container -->
+            <div class="d-flex flex-column gap-2" id="ordersContainer">
+                
+                <% if (orders && orders.length > 0) { %>
+                                <% orders.forEach((order, index) => { %>
+                                                <% 
+                                                    const orderIdStr = (order && (order.id || order.order_id || order.orderNo || order.order_no)) ? (order.id || order.order_id || order.orderNo || order.order_no).toString() : '';
+                                                    const itemsList = (order && order.items && Array.isArray(order.items)) ? order.items : [];
+                                                    const searchTerms = (orderIdStr + ' ' + itemsList.map(function(i){ return (i && i.name) ? i.name.toString() : ''; }).join(' ')).toLowerCase();
+                                                    const displayShortId = orderIdStr.includes('-') ? orderIdStr.split('-').pop() : orderIdStr;
+                                                    const totalVal = Number(order && (order.total || order.totalAmount || order.amount) ? (order.total || order.totalAmount || order.amount) : 0);
+                                                    const orderDate = order && (order.date || order.createdAt || order.created || order.orderDate) ? (order.date || order.createdAt || order.created || order.orderDate) : '';
+                                                %>
+                                                <div class="card-premium order-card" 
+                                                         data-status="<%= (order && order.status) ? order.status : '' %>" 
+                                                         data-id="<%= orderIdStr %>"
+                                                         data-search-terms="<%= searchTerms %>">
+                            
+                                                        <!-- Card Header -->
+                                                        <div class="p-4 cursor-pointer" onclick="toggleDetails('<%= orderIdStr %>')" style="cursor: pointer;">
+                                <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-4">
+                                    
+                                    <!-- Main Info -->
+                                    <div class="d-flex align-items-center gap-4">
+                                        <div class="d-flex align-items-center justify-content-center rounded-4 flex-shrink-0 <%= order.status === 'Delivered' ? 'bg-success bg-opacity-10 text-success' : 'bg-light text-secondary' %>" style="width: 64px; height: 64px;">
+                                            <i data-lucide="package" style="width: 28px; height: 28px;" stroke-width="1.5"></i>
+                                        </div>
+                                        
+                                        <div>
+                                            <div class="d-flex align-items-center gap-3 mb-1">
+                                                <h5 class="mb-0 fw-bold text-dark">Order #<%= displayShortId %></h5>
+                                                
+                                                <% 
+                                                let badgeClass = 'bg-primary bg-opacity-10 text-primary';
+                                                if(order.status === 'Delivered') badgeClass = 'bg-success bg-opacity-10 text-success';
+                                                else if(order.status === 'Shipped') badgeClass = 'bg-warning bg-opacity-10 text-warning-emphasis';
+                                                else if(order.status === 'Cancelled') badgeClass = 'bg-danger bg-opacity-10 text-danger';
+                                                %>
+                                                
+                                                <span class="badge rounded-pill fw-bold px-3 py-1 <%= badgeClass %>">
+                                                    <%= order.status %>
+                                                </span>
+                                            </div>
+                                            <p class="text-muted small mb-0 fw-medium">
+                                                <%= orderDate ? new Date(orderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-' %> • <%= itemsList.length %> Items
+                                            </p>
+                                        </div>
+                                    </div>
+    
+                                    <!-- Right Info -->
+                                    <div class="d-flex align-items-center justify-content-between gap-5 ms-md-auto">
+                                        <div class="text-end d-none d-sm-block">
+                                            <span class="d-block text-muted small fw-bold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">Total</span>
+                                            <span class="d-block fw-bolder text-dark fs-5">$<%= totalVal.toFixed(2) %></span>
+                                        </div>
+                                        <div class="transition-transform" id="chevron-<%= order.id %>">
+                                            <i data-lucide="chevron-down" class="text-muted"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+    
+                            <!-- Expanded Section -->
+                            <div class="border-top border-light bg-light bg-opacity-10 slide-down details-section" id="details-<%= order.id %>">
+                                <div class="p-4">
+                                    
+                                    <!-- Progress Bar Logic -->
+                                    <% if (order.status === 'Cancelled') { %>
+                                        <div class="bg-danger bg-opacity-10 text-danger rounded-3 p-3 mb-4 d-flex align-items-center gap-2">
+                                            <i data-lucide="x-circle" style="width: 20px;"></i>
+                                            <span class="fw-medium">This order has been cancelled.</span>
+                                        </div>
+                                    <% } else { %>
+                                        <% 
+                                            const rawStatus = (order && order.status) ? order.status.toString().toLowerCase() : '';
+                                            function mapStatusToStep(s) {
+                                              if(!s) return 'Payment Received';
+                                              if (s.includes('paid') || s.includes('payment')) return 'Payment Received';
+                                              if (s.includes('processing')) return 'Processing';
+                                              if (s.includes('shipped')) return 'Shipped';
+                                              if (s.includes('deliver') || s.includes('delivered') || s.includes('completed')) return 'Delivered';
+                                              return 'Payment Received';
+                                            }
+                                            const steps = ['Payment Received','Processing', 'Shipped', 'Delivered'];
+                                            const currentStepName = mapStatusToStep(rawStatus);
+                                            const currentStepIndex = steps.indexOf(currentStepName) === -1 ? 0 : steps.indexOf(currentStepName);
+                                            const progressWidthStr = ((currentStepIndex / (steps.length - 1)) * 100) + '%';
+                                        %>
+                                        <div class="position-relative mb-5 px-3 mt-2">
+                                            <div class="status-line"></div>
+                                            <div class="status-line-progress" data-width="<%= progressWidthStr %>"></div>
+                                            <div class="d-flex justify-content-between position-relative">
+                                                <% steps.forEach((step, stepIndex) => { 
+                                                    const isCompleted = stepIndex <= currentStepIndex;
+                                                    const isCurrent = stepIndex === currentStepIndex;
+                                                    let iconName = 'credit-card';
+                                                    if(step === 'Processing') iconName = 'clock';
+                                                    if(step === 'Shipped') iconName = 'truck';
+                                                    if(step === 'Delivered') iconName = 'check-circle';
+                                                %>
+                                                    <div class="d-flex flex-column align-items-center status-step" style="width: 80px;">
+                                                        <div class="marker mb-2 transition-all shadow-sm <%= isCompleted ? 'completed' : '' %>" style="transition: all 0.3s;">
+                                                                <i data-lucide="<%= iconName %>"></i>
+                                                            </div>
+                                                        <span class="small fw-bold <%= isCurrent ? 'text-dark' : 'text-muted' %>"><%= step %></span>
+                                                    </div>
+                                                <% }); %>
+                                            </div>
+                                        </div>
+                                    <% } %>
+    
+                                    <div class="row g-4">
+                                        <!-- Items List -->
+                                        <div class="col-lg-8">
+                                            <div class="bg-white rounded-4 p-4 border border-light shadow-sm h-100">
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <h6 class="fw-bold text-dark mb-0">Order Items</h6>
+                                                    <button class="btn btn-sm btn-white text-primary fw-bold border-0 d-flex align-items-center gap-1 hover-opacity">
+                                                        <i data-lucide="refresh-cw" style="width: 14px;"></i> Buy Again
+                                                    </button>
+                                                </div>
+                                                
+                                                <div class="d-flex flex-column gap-3">
+                                                    <% itemsList.forEach(function(item) { %>
+                                                        <div class="d-flex align-items-center justify-content-between p-2 rounded-3 hover-bg-light transition-all">
+                                                            <div class="d-flex align-items-center gap-3">
+                                                                    <div style="width: 48px; height: 48px;" class="d-flex align-items-center justify-content-center text-secondary bg-light rounded-3 overflow-hidden">
+                                                                        <img src="/images/<%= item.image || 'default.png' %>" alt="" style="width:100%;height:100%;object-fit:cover;"/>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p class="fw-bold text-dark mb-0 small"><%= item.name %></p>
+                                                                        <p class="text-muted small mb-0" style="font-size: 0.75rem;">Qty: <%= item.qty %></p>
+                                                                    </div>
+                                                                </div>
+                                                            <div class="fw-bold text-dark small px-2">
+                                                                $<%= (item.price * item.qty).toFixed(2) %>
+                                                            </div>
+                                                        </div>
+                                                    <% }); %>
+                                                </div>
+                                            </div>
+                                        </div>
+    
+                                        <!-- Actions & Review Sidebar -->
+                                        <div class="col-lg-4">
+                                            <div class="d-flex flex-column gap-3 h-100">
+                                                
+                                                <!-- Action Buttons -->
+                                                <div class="bg-white rounded-4 p-4 border border-light shadow-sm">
+                                                    <h6 class="fw-bold mb-3">Quick Actions</h6>
+                                                    <div class="d-grid gap-2">
+                                                        <% if ((order && (order.status || '')).toString().toLowerCase() === 'shipped') { %>
+                                                            <button class="btn btn-dark rounded-pill fw-bold btn-sm py-2">
+                                                                Track Order
+                                                            </button>
+                                                        <% } %>
+                                                        <a href="/orders/<%= orderIdStr %>/receipt" target="" rel="noopener noreferrer" class="btn btn-outline-secondary rounded-pill fw-bold btn-sm py-2">
+                                                            View Invoice
+                                                        </a>
+                                                        <% if (order.status === 'Delivered') { %>
+                                                            <button 
+                                                                onclick="toggleReview('<%= order.id %>')"
+                                                                id="review-btn-<%= order.id %>"
+                                                                class="btn btn-success text-white rounded-pill fw-bold btn-sm py-2 d-flex align-items-center justify-content-center gap-2"
+                                                            >
+                                                                <i data-lucide="star" style="width: 14px;"></i> Write Review
+                                                            </button>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+    
+                                                <!-- Review Form Container -->
+                                                <% if (order.status === 'Delivered') { %>
+                                                    <div id="review-form-<%= order.id %>" class="details-section bg-white rounded-4 p-4 border border-light shadow-sm slide-down">
+                                                        <h6 class="fw-bold mb-3 d-flex align-items-center gap-2">
+                                                            <i data-lucide="star" class="text-warning fill-warning" style="width: 18px;"></i> 
+                                                            Write a Review
+                                                        </h6>
+                                                        <form onsubmit="submitReview(event, '<%= order.id %>')">
+                                                            <div class="mb-3 text-center">
+                                                                <p class="small text-muted mb-2">How was your experience?</p>
+                                                                <div class="d-flex justify-content-center gap-2">
+                                                                    <% for(let i=1; i<=5; i++) { %>
+                                                                        <button type="button" class="star-rating-btn" data-order-id="<%= order.id %>" data-rating="<%= i %>" onclick="setRating(this.dataset.orderId, Number(this.dataset.rating))">
+                                                                            <i data-lucide="star" id="star-<%= order.id %>-<%= i %>" class="text-secondary" style="width: 28px; height: 28px;"></i>
+                                                                        </button>
+                                                                    <% } %>
+                                                                    <input type="hidden" id="rating-input-<%= order.id %>" value="0">
+                                                                </div>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <textarea class="form-control bg-light border-0" rows="3" placeholder="Tell us about your order..." style="resize: none;"></textarea>
+                                                            </div>
+                                                            <div class="d-flex justify-content-end gap-2">
+                                                                <button type="submit" class="btn btn-dark rounded-pill px-4 btn-sm fw-bold d-flex align-items-center gap-2">
+                                                                    Submit Review <i data-lucide="send" style="width: 14px;"></i>
+                                                                </button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                    
+                                                    <!-- Success Message (Hidden by default) -->
+                                                    <div id="review-success-<%= order.id %>" class="details-section bg-success bg-opacity-10 rounded-4 p-4 text-center slide-down border border-success border-opacity-25">
+                                                        <div class="bg-white rounded-circle d-inline-flex p-3 text-success mb-3 shadow-sm">
+                                                            <i data-lucide="check-circle" style="width: 24px;"></i>
+                                                        </div>
+                                                        <h6 class="fw-bold text-success mb-1">Thanks for your feedback!</h6>
+                                                        <p class="text-muted small mb-0">Your review helps us improve.</p>
+                                                    </div>
+                                                <% } %>
+                                                
+                                            </div>
+                                        </div>
+                                    </div>
+    
+                                </div>
+                            </div>
+                        </div>
+                    <% }); %>
+                <% } else { %>
+                    <div class="text-center py-5 slide-down">
+                        <div class="bg-white rounded-circle d-inline-flex p-4 shadow-sm mb-3 border border-light">
+                            <i data-lucide="shopping-bag" class="text-muted opacity-50" style="width: 48px; height: 48px;"></i>
+                        </div>
+                        <h4 class="fw-bold text-dark">No orders found</h4>
+                        <p class="text-muted">Try adjusting your search or filters.</p>
+                        <button class="btn btn-success rounded-pill fw-bold px-4 mt-2" onclick="resetFilters()">Clear Filters</button>
+                    </div>
+                <% } %>
+                
+            </div>
+    
+            </div>
+        </div>
+
+      <%- include('partials/footer') %>
+
+        <!-- Lucide Icons Script -->
+        <script src="https://unpkg.com/lucide@latest"></script>
+    
+        <!-- Bootstrap JS (fallback if footer didn't inject) -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+
+    <!-- Client-side Logic -->
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Apply widths from data attribute to avoid EJS tokens inside inline style (prevents CSS parse errors)
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.status-line-progress[data-width]').forEach(function(el) {
+                var w = el.getAttribute('data-width') || '';
+                el.style.width = w;
+            });
+        });
+
+        // Expand/Collapse Details
+        function toggleDetails(id) {
+            const detailsElement = document.getElementById(`details-${id}`);
+            const chevron = document.getElementById(`chevron-${id}`);
+            
+            if (detailsElement.classList.contains('open')) {
+                detailsElement.classList.remove('open');
+                chevron.classList.remove('rotate-180');
+            } else {
+                detailsElement.classList.add('open');
+                chevron.classList.add('rotate-180');
+            }
+        }
+
+        // Filtering Logic
+        let currentFilter = 'All';
+        
+        function filterOrders(status) {
+            currentFilter = status;
+            
+            // Update UI buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if(btn.dataset.filter && btn.dataset.filter.toString().toLowerCase() === status.toString().toLowerCase()) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            // sync left-side bubble buttons and expand the active one
+            document.querySelectorAll('.status-bubble-btn').forEach(b => {
+                if(b.dataset.filter && b.dataset.filter.toString().toLowerCase() === status.toString().toLowerCase()) {
+                    b.classList.add('active');
+                    b.classList.add('expanded');
+                } else {
+                    b.classList.remove('active');
+                    b.classList.remove('expanded');
+                }
+            });
+            
+            applyFilters();
+        }
+
+        // Search Logic
+        function searchOrders() {
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const searchQuery = (document.getElementById('searchInput').value || '').toLowerCase();
+            const cards = document.querySelectorAll('.order-card');
+            let hasVisible = false;
+
+            cards.forEach(card => {
+                    const status = (card.dataset.status || '').toString().toLowerCase();
+                    const terms = (card.dataset.searchTerms || '').toString().toLowerCase();
+                    const filterNorm = (currentFilter || '').toString().toLowerCase();
+                
+                    let matchesFilter = false;
+                    if (filterNorm === 'all' || !filterNorm) {
+                        matchesFilter = true;
+                    } else if (filterNorm === 'processing') {
+                        // treat 'processing' as including paid/payment statuses
+                        matchesFilter = status.includes('process') || status.includes('paid') || status.includes('payment');
+                    } else {
+                        matchesFilter = status === filterNorm;
+                    }
+
+                    const matchesSearch = terms.includes(searchQuery);
+
+                    if (matchesFilter && matchesSearch) {
+                        card.classList.remove('d-none');
+                        hasVisible = true;
+                    } else {
+                        card.classList.add('d-none');
+                    }
+                });
+
+            // Handle empty state (optional visual improvement)
+            // You could toggle a "No results" div here if hasVisible is false
+        }
+
+        function resetFilters() {
+            document.getElementById('searchInput').value = '';
+            filterOrders('All');
+        }
+
+        // Review Logic
+        function toggleReview(id) {
+            const form = document.getElementById(`review-form-${id}`);
+            const btn = document.getElementById(`review-btn-${id}`);
+            
+            if (form.classList.contains('open')) {
+                form.classList.remove('open');
+                btn.classList.remove('btn-light', 'text-muted');
+                btn.classList.add('btn-success', 'text-white');
+                btn.innerHTML = '<i data-lucide="star" style="width: 14px;"></i> Write Review';
+            } else {
+                form.classList.add('open');
+                btn.classList.remove('btn-success', 'text-white');
+                btn.classList.add('btn-light', 'text-muted');
+                btn.innerText = 'Cancel Review';
+            }
+            lucide.createIcons();
+        }
+
+        function setRating(id, rating) {
+            document.getElementById(`rating-input-${id}`).value = rating;
+            
+            for(let i=1; i<=5; i++) {
+                const star = document.getElementById(`star-${id}-${i}`);
+                if (i <= rating) {
+                    star.classList.remove('text-secondary');
+                    star.classList.add('text-warning', 'fill-warning');
+                    star.setAttribute('fill', 'currentColor');
+                } else {
+                    star.classList.remove('text-warning', 'fill-warning');
+                    star.setAttribute('fill', 'none');
+                    star.classList.add('text-secondary');
+                }
+            }
+        }
+
+        function submitReview(e, id) {
+            e.preventDefault();
+            // Hide form
+            document.getElementById(`review-form-${id}`).classList.remove('open');
+            // Hide button
+            document.getElementById(`review-btn-${id}`).style.display = 'none';
+            // Show success
+            document.getElementById(`review-success-${id}`).classList.add('open');
+        }
+    </script>
 </body>
 </html>

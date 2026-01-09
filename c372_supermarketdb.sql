@@ -149,6 +149,18 @@ CREATE TABLE order_items (
   FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE paypal_transactions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    order_id INT NOT NULL,
+    paypal_order_id VARCHAR(100) NOT NULL,
+    payer_email VARCHAR(255),
+    amount DECIMAL(10,2),
+    currency VARCHAR(10),
+    payment_status VARCHAR(50),
+    payment_time DATETIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- ============================================================
 -- RESTORE MYSQL DUMP VARIABLES
