@@ -2,6 +2,7 @@ const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const db = require('../db'); // adjust path if different
 const ProductController = require('./ProductController'); // add near top of file (with other requires)
+const DeliveryAddress = require('../models/DeliveryAddress');
 
 function uid(req) {
   const u = req.session?.user;
@@ -416,6 +417,8 @@ exports.pay = function (req, res) {
   const userId = uid(req);
   if (!userId) return res.redirect('/login');
 
+  const shippingSql = 'SELECT id, method_name, price, estimated_days FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC';
+
   const sql = `
     SELECT
       ci.id AS cart_id,
@@ -448,12 +451,167 @@ exports.pay = function (req, res) {
 
     const total = items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
 
-    return res.render('pay', {
-      items,
-      cartItems: items,
-      total,
-      paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
-      paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+    // load delivery addresses to mirror checkout selection
+    DeliveryAddress.findByUser(userId, (addrErr, addresses = []) => {
+      if (addrErr) {
+        console.error('Cart.pay addresses error', addrErr);
+      }
+
+      const selectedAddressId = req.session.selectedAddressId
+        || (addresses.find(a => a.is_default)?.id)
+        || (addresses[0]?.id)
+        || null;
+
+      if (!req.session.selectedAddressId && selectedAddressId) {
+        req.session.selectedAddressId = selectedAddressId;
+      }
+
+      const selectedAddress = addresses.find(a => Number(a.id) === Number(selectedAddressId)) || null;
+
+      db.query(shippingSql, [], (shipErr, shippingMethods = []) => {
+        if (shipErr) {
+          console.error('Cart.pay shipping methods error', shipErr);
+          shippingMethods = [];
+        }
+
+        let selectedShippingMethodId = req.session.selectedShippingMethodId || null;
+        const validSelectedShipping = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
+        if (!validSelectedShipping) {
+          selectedShippingMethodId = shippingMethods[0]?.id || null;
+        }
+        if (!req.session.selectedShippingMethodId && selectedShippingMethodId) {
+          req.session.selectedShippingMethodId = selectedShippingMethodId;
+        }
+        const selectedShippingMethod = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
+        const shippingFee = Number(selectedShippingMethod?.price || 0);
+        const totalWithShipping = total + shippingFee;
+
+        return res.render('pay', {
+          items,
+          cartItems: items,
+          total,
+          totalWithShipping,
+          shippingFee,
+          shippingMethods,
+          selectedShippingMethodId,
+          selectedShippingMethod,
+          addresses,
+          selectedAddressId,
+          selectedAddress,
+          paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+          paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+        });
+      });
     });
+  });
+};
+
+// Render intermediate checkout confirmation page (cart -> checkout -> payment)
+exports.checkoutPage = function (req, res) {
+  const userId = uid(req);
+  if (!userId) return res.redirect('/login');
+
+  const shippingSql = 'SELECT id, method_name, price, estimated_days FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC';
+
+  const sql = `
+    SELECT
+      ci.id AS cart_id,
+      ci.quantity AS quantity,
+      p.id AS product_id,
+      p.productName,
+      p.price,
+      p.image,
+      p.quantity AS stock
+    FROM cart_items ci
+    JOIN products p ON p.id = ci.product_id
+    WHERE ci.user_id = ?
+  `;
+
+  db.query(sql, [userId], (err, rows) => {
+    if (err) {
+      console.error('Cart.checkoutPage - db error', err);
+      return res.status(500).render('checkout', { items: [], cartItems: [], total: 0, error: 'Failed to load checkout' });
+    }
+
+    const items = (rows || []).map(r => ({
+      id: r.product_id,
+      cartId: r.cart_id,
+      productName: r.productName || '',
+      price: Number(r.price || 0),
+      quantity: Number(r.quantity || 0), // cart quantity preserved here
+      image: r.image || '',
+      stock: Number(r.stock || 0)
+    }));
+
+    const total = items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
+
+    DeliveryAddress.findByUser(userId, (addrErr, addresses = []) => {
+      if (addrErr) {
+        console.error('checkoutPage addresses error', addrErr);
+      }
+      const selectedAddressId = req.session.selectedAddressId
+        || (addresses.find(a => a.is_default)?.id)
+        || (addresses[0]?.id)
+        || null;
+      if (!req.session.selectedAddressId && selectedAddressId) {
+        req.session.selectedAddressId = selectedAddressId;
+      }
+      const selectedAddress = addresses.find(a => a.id === selectedAddressId) || null;
+
+      db.query(shippingSql, [], (shipErr, shippingMethods = []) => {
+        if (shipErr) {
+          console.error('checkoutPage shipping methods error', shipErr);
+          shippingMethods = [];
+        }
+
+        let selectedShippingMethodId = req.session.selectedShippingMethodId || null;
+        const validSelected = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
+        if (!validSelected) {
+          selectedShippingMethodId = shippingMethods[0]?.id || null;
+        }
+        if (!req.session.selectedShippingMethodId && selectedShippingMethodId) {
+          req.session.selectedShippingMethodId = selectedShippingMethodId;
+        }
+        const selectedShippingMethod = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
+        const shippingFee = Number(selectedShippingMethod?.price || 0);
+        const totalWithShipping = total + shippingFee;
+
+        return res.render('checkout', {
+          items,
+          cartItems: items,
+          total,
+          totalWithShipping,
+          shippingFee,
+          shippingMethods,
+          selectedShippingMethodId,
+          selectedShippingMethod,
+          addresses,
+          selectedAddressId,
+          selectedAddress,
+          paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+          paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+        });
+      });
+    });
+  });
+};
+
+// Persist selected shipping method in session
+exports.selectShippingMethod = function (req, res) {
+  const userId = uid(req);
+  if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated' });
+
+  const shippingMethodId = Number(req.body.shipping_method_id || req.body.id || req.body.shippingMethodId || 0);
+  if (!shippingMethodId) return res.status(400).json({ success: false, message: 'Missing shipping method id' });
+
+  db.query('SELECT id FROM shipping_methods WHERE id = ? AND is_active = 1 LIMIT 1', [shippingMethodId], (err, rows = []) => {
+    if (err) {
+      console.error('selectShippingMethod error', err);
+      return res.status(500).json({ success: false, message: 'Failed to save shipping selection' });
+    }
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Shipping method not found' });
+
+    req.session.selectedShippingMethodId = shippingMethodId;
+    return res.json({ success: true, shippingMethodId });
   });
 };

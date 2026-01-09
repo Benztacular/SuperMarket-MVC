@@ -5,73 +5,45 @@ USE c372_supermarketdb;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================
--- MySQL dump set variables (fixed NULL issue)
+-- CATEGORIES
 -- ============================================================
-SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT;
-SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS;
-SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION;
-SET NAMES utf8;
-SET @OLD_TIME_ZONE=@@TIME_ZONE;
-SET TIME_ZONE='+00:00';
-SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS;
-SET UNIQUE_CHECKS=0;
-SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS;
-SET FOREIGN_KEY_CHECKS=0;
-SET @OLD_SQL_MODE=@@SQL_MODE;
-SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
-SET @OLD_SQL_NOTES=@@SQL_NOTES;
-SET SQL_NOTES=0;
-
--- ============================================================
--- CREATE TABLES IN CORRECT ORDER
--- ============================================================
-
--- Categories (you added this first)
 DROP TABLE IF EXISTS categories;
 CREATE TABLE categories (
-    id INT NOT NULL AUTO_INCREMENT,
-    categoryName VARCHAR(100) NOT NULL,
-    PRIMARY KEY (id)
+  id INT NOT NULL AUTO_INCREMENT,
+  categoryName VARCHAR(100) NOT NULL,
+  PRIMARY KEY (id)
 );
 
-LOCK TABLES categories WRITE;
-INSERT INTO categories (categoryName) VALUES
-('Fruits'),
-('Vegetables'),
-('Dairy'),
-('Bakery');
-UNLOCK TABLES;
+INSERT INTO categories (categoryName)
+VALUES ('Fruits'),('Vegetables'),('Dairy'),('Bakery');
 
-
--- Products
+-- ============================================================
+-- PRODUCTS
+-- ============================================================
 DROP TABLE IF EXISTS products;
 CREATE TABLE products (
   id INT NOT NULL AUTO_INCREMENT,
-  productName VARCHAR(200) COLLATE utf8mb4_general_ci NOT NULL,
+  productName VARCHAR(200) NOT NULL,
   quantity INT NOT NULL,
   price DOUBLE(10,2) NOT NULL,
-  image VARCHAR(50) COLLATE utf8mb4_general_ci NOT NULL,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  image VARCHAR(50) NOT NULL,
+  category_id INT NULL,
+  averageRating DECIMAL(3,2) DEFAULT 0.00,
+  reviewCount INT DEFAULT 0,
+  PRIMARY KEY (id),
+  FOREIGN KEY (category_id) REFERENCES categories(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Now add the category FK (previously caused error)
-ALTER TABLE products
-ADD COLUMN category_id INT NULL,
-ADD FOREIGN KEY (category_id) REFERENCES categories(id);
-
--- Insert product data
-LOCK TABLES products WRITE;
 INSERT INTO products VALUES
-(1,'Apples',50,1.50,'apples.png',1),
-(2,'Bananas',75,0.80,'bananas.png',1),
-(3,'Milk',50,3.50,'milk.png',3),
-(4,'Bread',80,1.80,'bread.png',4),
-(14,'Tomatoes',80,1.50,'tomatoes.png',2),
-(19,'Broccoli',100,5.00,'Broccoli.png',2);
-UNLOCK TABLES;
+(1,'Apples',50,1.50,'apples.png',1,0,0),
+(2,'Bananas',75,0.80,'bananas.png',1,0,0),
+(3,'Milk',50,3.50,'milk.png',3,0,0),
+(4,'Bread',80,1.80,'bread.png',4,0,0),
+(14,'Tomatoes',80,1.50,'tomatoes.png',2,0,0),
+(19,'Broccoli',100,5.00,'Broccoli.png',2,0,0);
 
 -- ============================================================
--- USERS TABLE (your updated version with 2FA + profileImage)
+-- USERS
 -- ============================================================
 DROP TABLE IF EXISTS users;
 CREATE TABLE users (
@@ -82,95 +54,184 @@ CREATE TABLE users (
   address VARCHAR(255) NOT NULL,
   contact VARCHAR(10) NOT NULL,
   role VARCHAR(10) NOT NULL,
-
-  twoFactorSecret VARCHAR(255) NULL,
-  twoFactorEnabled TINYINT(1) NOT NULL DEFAULT 0,
-
-  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  profileImage VARCHAR(255) NULL DEFAULT 'default.png',
-
+  twoFactorSecret VARCHAR(255),
+  twoFactorEnabled TINYINT(1) DEFAULT 0,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  profileImage VARCHAR(255) DEFAULT 'default.png',
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
--- Insert users
-LOCK TABLES users WRITE;
-INSERT INTO users
-(id, username, email, password, address, contact, role, twoFactorSecret, twoFactorEnabled, createdAt, profileImage)
-VALUES
+INSERT INTO users VALUES
 (1,'Peter Lim','peter@peter.com','7c4a8d09ca3762af61e59520943dc26494f8941b','Woodlands Ave 2','98765432','admin',NULL,0,CURRENT_TIMESTAMP,'default.png'),
 (2,'Mary Tan','mary@mary.com','7c4a8d09ca3762af61e59520943dc26494f8941b','Tampines Ave 1','12345678','user',NULL,0,CURRENT_TIMESTAMP,'default.png'),
 (3,'bobochan','bobochan@gmail.com','7c4a8d09ca3762af61e59520943dc26494f8941b','Woodlands','98765432','user',NULL,0,CURRENT_TIMESTAMP,'default.png'),
 (4,'sarahlee','sarahlee@gmail.com','7c4a8d09ca3762af61e59520943dc26494f8941b','Woodlands','98765432','user',NULL,0,CURRENT_TIMESTAMP,'default.png');
-UNLOCK TABLES;
 
 -- ============================================================
--- CART ITEMS (unchanged functionality)
+-- DELIVERY ADDRESSES
+-- ============================================================
+DROP TABLE IF EXISTS delivery_addresses;
+CREATE TABLE delivery_addresses (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  recipient_name VARCHAR(100) NOT NULL,
+  contact_number VARCHAR(20) NOT NULL,
+  block_number VARCHAR(20) NOT NULL,
+  street_name VARCHAR(255) NOT NULL,
+  unit_number VARCHAR(20) NOT NULL,
+  postal_code VARCHAR(20) NOT NULL,
+  country VARCHAR(100) DEFAULT 'Singapore',
+  is_default TINYINT(1) DEFAULT 0,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO delivery_addresses
+(user_id, recipient_name, contact_number, block_number, street_name, unit_number, postal_code, is_default)
+VALUES
+(3,'Bobo Chan','98765432','Blk 123','Tampines Ave 1','#12-34','520123',1);
+
+-- ============================================================
+-- SHIPPING METHODS
+-- ============================================================
+DROP TABLE IF EXISTS shipping_methods;
+CREATE TABLE shipping_methods (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  method_name VARCHAR(100) NOT NULL,
+  description VARCHAR(255),
+  price DECIMAL(10,2) NOT NULL,
+  estimated_days VARCHAR(50),
+  is_active TINYINT(1) DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO shipping_methods
+(method_name, description, price, estimated_days)
+VALUES
+('Same Day Delivery', 'Delivered today', 10.00, 'Today'),
+('Standard Shipping', 'Delivered in 3–5 days', 4.50, '3–5 days');
+
+-- ============================================================
+-- CART ITEMS
 -- ============================================================
 DROP TABLE IF EXISTS cart_items;
 CREATE TABLE cart_items (
-  id INT NOT NULL AUTO_INCREMENT,
+  id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   product_id INT NOT NULL,
   quantity INT NOT NULL,
-  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- ORDERS (with status column you added)
+-- ORDERS (ADDRESS + SHIPPING METHOD + SHIPPING FEE)
 -- ============================================================
 DROP TABLE IF EXISTS orders;
 CREATE TABLE orders (
-  id INT NOT NULL AUTO_INCREMENT,
+  id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
-  orderDate DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  delivery_address_id INT NOT NULL,
+  shipping_method_id INT NOT NULL,
+  shipping_fee DECIMAL(10,2) NOT NULL,
+  orderDate DATETIME DEFAULT CURRENT_TIMESTAMP,
   totalAmount DOUBLE(10,2) NOT NULL,
-  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  status VARCHAR(20) NOT NULL DEFAULT 'Pending',
-  PRIMARY KEY (id),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  status VARCHAR(20) DEFAULT 'Pending',
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (delivery_address_id) REFERENCES delivery_addresses(id)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  FOREIGN KEY (shipping_method_id) REFERENCES shipping_methods(id)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- ORDER ITEMS (unchanged)
+-- ORDER ITEMS
 -- ============================================================
 DROP TABLE IF EXISTS order_items;
 CREATE TABLE order_items (
-  id INT NOT NULL AUTO_INCREMENT,
+  id INT AUTO_INCREMENT PRIMARY KEY,
   order_id INT NOT NULL,
   product_id INT NOT NULL,
   quantity INT NOT NULL,
   price DOUBLE(10,2) NOT NULL,
-  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
   FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ============================================================
+-- PAYPAL TRANSACTIONS
+-- ============================================================
+DROP TABLE IF EXISTS paypal_transactions;
 CREATE TABLE paypal_transactions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    order_id INT NOT NULL,
-    paypal_order_id VARCHAR(100) NOT NULL,
-    payer_email VARCHAR(255),
-    amount DECIMAL(10,2),
-    currency VARCHAR(10),
-    payment_status VARCHAR(50),
-    payment_time DATETIME,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  order_id INT NOT NULL,
+  paypal_order_id VARCHAR(100) NOT NULL,
+  payer_email VARCHAR(255),
+  amount DECIMAL(10,2),
+  currency VARCHAR(10),
+  payment_status VARCHAR(50),
+  payment_time DATETIME,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (order_id) REFERENCES orders(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- RESTORE MYSQL DUMP VARIABLES
+-- PRODUCT REVIEWS
 -- ============================================================
-SET TIME_ZONE=@OLD_TIME_ZONE;
-SET SQL_MODE=@OLD_SQL_MODE;
-SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
-SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
-SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT;
-SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS;
-SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION;
-SET SQL_NOTES=@OLD_SQL_NOTES;
+DROP TABLE IF EXISTS product_reviews;
+CREATE TABLE product_reviews (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  product_id INT NOT NULL,
+  order_id INT NOT NULL,
+  rating INT NOT NULL,
+  review TEXT,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_review_per_order (user_id, product_id, order_id),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  FOREIGN KEY (order_id) REFERENCES orders(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- USER WALLETS
+-- ============================================================
+DROP TABLE IF EXISTS user_wallets;
+CREATE TABLE user_wallets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL UNIQUE,
+  balance DECIMAL(10,2) DEFAULT 0.00,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO user_wallets (user_id)
+SELECT id FROM users;
+
+-- ============================================================
+-- WALLET TRANSACTIONS
+-- ============================================================
+DROP TABLE IF EXISTS wallet_transactions;
+CREATE TABLE wallet_transactions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  wallet_id INT NOT NULL,
+  user_id INT NOT NULL,
+  type ENUM('TOP_UP','PAYMENT','REFUND','ADJUSTMENT') NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  reference_type VARCHAR(50),
+  reference_id INT,
+  description VARCHAR(255),
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (wallet_id) REFERENCES user_wallets(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

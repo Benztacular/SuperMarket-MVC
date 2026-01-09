@@ -13,6 +13,8 @@ const OrderController = require('./controllers/OrderController');
 const UserController = require('./controllers/UserController');
 const CategoryController = require('./controllers/CategoryController');
 const PaypalController = require('./controllers/PaypalController');
+const ReviewController = require('./controllers/ReviewController');
+const DeliveryAddressController = require('./controllers/DeliveryAddressController');
 
 const db = require('./db');
 const AdminModel = require('./models/Admin'); // kept for compatibility
@@ -53,10 +55,44 @@ app.use((req, res, next) => {
   res.locals.isAdmin = !!(req.session.user && req.session.user.role === 'admin');
   res.locals.cartCount = req.session.cartCount || 0;
 
-  res.locals.success_msg = req.flash('success_msg');
-  res.locals.error_msg = req.flash('error_msg');
-  res.locals.error = req.flash('error');
-  res.locals.messages = req.flash();
+  // Support session-based flash messages set directly on req.session (per your requirement)
+  const takeSessionMsg = (key) => {
+    if (!req.session) return null;
+    const v = req.session[key];
+    if (!v) return null;
+    try { delete req.session[key]; } catch (e) { req.session[key] = null; }
+    return Array.isArray(v) ? v : [v];
+  };
+
+  const sessSuccess = takeSessionMsg('success_msg');
+  const sessError = takeSessionMsg('error_msg');
+
+  // Normalize to arrays so views can iterate uniformly
+  // Prefer session-set messages, otherwise fall back to connect-flash keys.
+  if (sessSuccess) {
+    res.locals.success_msg = sessSuccess;
+  } else if (req.flash) {
+    const sf = req.flash('success_msg') || [];
+    const s = sf.length ? sf : (req.flash('success') || []);
+    res.locals.success_msg = s;
+  } else {
+    res.locals.success_msg = [];
+  }
+
+  if (sessError) {
+    res.locals.error_msg = sessError;
+  } else if (req.flash) {
+    const ef = req.flash('error_msg') || [];
+    const e = ef.length ? ef : (req.flash('error') || []);
+    res.locals.error_msg = e;
+  } else {
+    res.locals.error_msg = [];
+  }
+
+  // keep a raw 'error' array available for compatibility
+  res.locals.error = (req.flash && req.flash('error')) || [];
+  res.locals.messages = (req.flash && req.flash()) || {};
+
   next();
 });
 
@@ -153,11 +189,19 @@ app.post('/addToCart', requireUser, CartController.add);
 app.post('/cart/update', requireUser, CartController.update);
 app.post('/cart/remove', requireUser, CartController.remove);
 app.get('/cart/pay', CartController.pay);
+app.get('/cart/checkout', requireUser, CartController.checkoutPage);
+app.post('/shipping/select', requireUser, ensure(CartController.selectShippingMethod, 'CartController.selectShippingMethod'));
 app.post('/paypal/create-order', requireUser, ensure(PaypalController.createOrder, 'PaypalController.createOrder'));
 app.post('/paypal/capture-order', requireUser, ensure(PaypalController.captureOrder, 'PaypalController.captureOrder'));
 app.post('/cart/pay', requireUser, (req, res, next) => OrderController.checkout(req, res, next));
 app.post('/cart/checkout', requireUser, ensure(OrderController.checkout, 'OrderController.checkout'));
 app.post('/cart/clear', requireUser, CartController.clear);
+
+// Delivery addresses
+app.get('/api/delivery-addresses', requireUser, ensure(DeliveryAddressController.list, 'DeliveryAddressController.list'));
+app.post('/delivery-addresses', requireUser, ensure(DeliveryAddressController.create, 'DeliveryAddressController.create'));
+app.post('/delivery-addresses/select', requireUser, ensure(DeliveryAddressController.select, 'DeliveryAddressController.select'));
+app.post('/delivery-addresses/:id/default', requireUser, ensure(DeliveryAddressController.setDefault, 'DeliveryAddressController.setDefault'));
 
 // Payment success landing page
 app.get('/payment/success', requireUser, ensure(OrderController.paymentSuccess, 'OrderController.paymentSuccess'));
@@ -266,6 +310,11 @@ app.get('/admin/orders/:id', requireAdmin, ensure(OrderController.adminDetails, 
 
 // Product details
 app.get('/product/:id', ProductController.show);
+app.post('/product/:id/review', ensure(ReviewController.post, 'ReviewController.post'));
+
+// Order-level review page (review items in a specific order)
+app.get('/orders/:id/review', requireUser, ensure(ReviewController.orderReviewPage, 'ReviewController.orderReviewPage'));
+app.post('/orders/:id/review/:productId', requireUser, ensure(ReviewController.saveForOrder, 'ReviewController.saveForOrder'));
 
 /* ---------- errors & server ---------- */
 app.use((req, res) => res.status(404).send('Not found'));

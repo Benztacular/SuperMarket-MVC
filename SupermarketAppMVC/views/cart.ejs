@@ -1,62 +1,81 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <title>Shopping Cart - FreshMart</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   
   <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700&display=swap" rel="stylesheet">
 
   <!-- Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
-    /* --- 1. PREMIUM THEME VARIABLES --- */
+    /* --- MODERN FRESH THEME VARIABLES --- */
     :root {
-      --bg-body: #f8fafc;
+      /* Brand Colors */
+      --brand-primary: #10b981; /* Fresh Mint Green */
+      --brand-primary-dark: #059669;
+      --brand-primary-light: #d1fae5;
+      --brand-dark: #0f172a;    /* Deep Slate */
+      
+      /* UI Colors */
+      --bg-body: #f1f5f9;       /* Light Gray Blue */
       --card-bg: #ffffff;
-      --brand-green: #0f9d58;
-      --brand-dark: #1e293b;
-      --text-main: #334155;
-      --text-muted: #94a3b8;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
       --border-color: #e2e8f0;
-      --radius: 16px;
-      --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-      --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+      
+      /* Spacing & Shapes */
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      
+      /* Effects */
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+      --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);
+      --shadow-button: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+      --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    html {
-      scroll-behavior: smooth;
-    }
-
-    body {
-      background-color: var(--bg-body);
-      font-family: 'Inter', sans-serif;
-      color: var(--text-main);
+    body { 
+      background-color: var(--bg-body); 
+      font-family: 'Inter', sans-serif; 
+      color: var(--text-main); 
       -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
     }
 
     h1, h2, h3, h4, h5, h6 {
-      font-family: 'Poppins', sans-serif;
+      font-family: 'Plus Jakarta Sans', sans-serif;
       color: var(--brand-dark);
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: -0.025em;
     }
 
-    /* --- 2. LAYOUT & SPACING --- */
+    a { text-decoration: none; color: inherit; transition: var(--transition); }
+
+    /* --- LAYOUT UTILS --- */
     .cart-page {
       min-height: 80vh;
-      padding-top: 2rem;
-      padding-bottom: 5rem;
+      padding-top: 1.25rem;
+      padding-bottom: 4rem;
+      max-width: 1200px;
     }
 
-    /* --- 2.5 PROGRESS STEPPER (NEW) --- */
+    /* --- STEPPER (MATCHING CONFIRM PAYMENT) --- */
     .checkout-stepper {
       display: flex;
       justify-content: center;
-      margin-bottom: 3rem;
+      margin-bottom: 2rem;
       position: relative;
     }
     .step-item {
@@ -70,8 +89,11 @@
       z-index: 2;
     }
     .step-item.active {
-      color: var(--brand-green);
+      color: var(--brand-dark);
       font-weight: 700;
+    }
+    .step-item.completed {
+      color: var(--brand-primary);
     }
     .step-circle {
       width: 28px;
@@ -86,35 +108,40 @@
       transition: all 0.3s;
     }
     .step-item.active .step-circle {
-      background: var(--brand-green);
+      background: var(--brand-dark);
       color: white;
-      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+      box-shadow: 0 0 0 4px rgba(30, 41, 59, 0.1);
+    }
+    .step-item.completed .step-circle {
+      background: var(--brand-primary);
+      color: white;
     }
     .step-divider {
       width: 60px;
       height: 2px;
       background: #e2e8f0;
       margin: 0 1rem;
+      align-self: center;
+    }
+    .step-item.completed + .step-divider {
+      background: var(--brand-primary);
     }
 
-    /* --- 3. CART ITEM CARDS --- */
-    .list-group {
-      gap: 1rem; /* Space between items */
-      border-radius: var(--radius);
-    }
+    /* --- CART ITEMS LIST --- */
+    .list-group { gap: 1rem; border-radius: var(--radius-lg); }
 
     .cart-item-card {
       background: var(--card-bg);
       border: 1px solid var(--border-color);
-      border-radius: var(--radius) !important; /* Force rounded corners */
+      border-radius: var(--radius-lg) !important;
       padding: 1.5rem !important;
-      transition: all 0.2s ease;
-      margin-bottom: 0; /* Handled by gap */
+      transition: var(--transition);
+      margin-bottom: 0;
+      box-shadow: var(--shadow-sm);
     }
-
     .cart-item-card:hover {
       transform: translateY(-2px);
-      box-shadow: var(--shadow-hover) !important;
+      box-shadow: var(--shadow-md) !important;
       border-color: #cbd5e1;
       z-index: 1;
     }
@@ -123,163 +150,181 @@
       width: 80px;
       height: 80px;
       object-fit: cover;
-      border-radius: 12px;
+      border-radius: var(--radius-md);
       background-color: #f1f5f9;
       border: 1px solid #f1f5f9;
     }
 
-    /* --- 4. TEXT & TYPOGRAPHY --- */
-    a.h6 {
-      text-decoration: none;
-      font-size: 1.1rem;
+    .product-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 600;
       color: var(--brand-dark);
-      transition: color 0.2s;
+      font-size: 1.05rem;
+      margin-bottom: 0.25rem;
+      display: block;
     }
-    a.h6:hover {
-      color: var(--brand-green);
-    }
+    .product-title:hover { color: var(--brand-primary); }
 
     .muted-note {
       font-size: 0.85rem;
       color: var(--text-muted);
-      letter-spacing: 0.3px;
     }
 
-    .price-small {
-      font-family: 'Poppins', sans-serif;
+    .price-tag {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 700;
+      color: var(--brand-dark);
       font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--brand-dark);
     }
 
-    /* --- 5. QUANTITY CONTROLS --- */
-    .input-group {
-      background: #f1f5f9;
-      border-radius: 50px;
-      padding: 2px;
+    /* --- QUANTITY CONTROLS --- */
+    .qty-group {
+      background: #fff;
       border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      width: 120px;
     }
-
-    .qty-input {
-      background: transparent;
+    .qty-btn {
+      width: 28px;
+      height: 28px;
       border: none;
-      font-weight: 600;
+      background: #f1f5f9;
+      border-radius: var(--radius-sm);
       color: var(--brand-dark);
-      width: 40px !important;
-      padding: 0;
-    }
-    .qty-input:focus {
-      background: transparent;
-      box-shadow: none;
-    }
-    /* Hide number spinners */
-    .qty-input::-webkit-inner-spin-button, 
-    .qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-
-    .btn-outline-secondary {
-      border: none;
-      border-radius: 50% !important;
-      width: 32px;
-      height: 32px;
-      padding: 0;
+      font-weight: 600;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: white;
-      color: var(--brand-dark);
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      transition: all 0.2s;
+      transition: var(--transition);
     }
-    .btn-outline-secondary:hover {
-      background: var(--brand-green);
-      color: white;
-      transform: scale(1.1);
-    }
-
-    /* --- 6. BUTTONS --- */
-    .btn-primary {
-      background-color: var(--brand-green);
+    .qty-btn:hover { background: var(--brand-dark); color: white; }
+    
+    .qty-input {
       border: none;
+      width: 100%;
+      text-align: center;
       font-weight: 600;
-      padding: 0.5rem 1.2rem;
-      border-radius: 10px;
-      transition: all 0.2s;
+      color: var(--brand-dark);
+      background: transparent;
+      padding: 0;
     }
-    .btn-primary:hover {
-      background-color: #059669;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-    }
+    .qty-input:focus { outline: none; }
+    /* Hide spinners */
+    .qty-input::-webkit-inner-spin-button, .qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-    .btn-link.text-danger {
-      text-decoration: none;
-      font-size: 0.85rem;
-      font-weight: 500;
-      opacity: 0.7;
-      transition: opacity 0.2s;
-    }
-    .btn-link.text-danger:hover {
-      opacity: 1;
-    }
-
-    /* --- 7. ORDER SUMMARY --- */
+    /* --- SUMMARY CARD --- */
     .summary-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      padding: 1.75rem !important;
       position: sticky;
       top: 110px;
-      background: white;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-soft);
-      padding: 2rem !important;
     }
 
-    .summary-card h5 {
-      font-size: 1.25rem;
-      margin-bottom: 1.5rem;
-      padding-bottom: 1rem;
+    .summary-card h5 { 
+      font-size: 1.1rem; 
+      margin-bottom: 1.5rem; 
+      padding-bottom: 1rem; 
       border-bottom: 1px dashed var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    .checkout-btn {
-      background: var(--brand-dark); /* Dark button for contrast */
-      color: white;
-      padding: 16px;
-      font-size: 1.1rem;
-      letter-spacing: 0.5px;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+      color: var(--text-muted);
     }
-    .checkout-btn:hover:not(:disabled) {
-      background: black;
+
+    .summary-row.total {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-color);
+      color: var(--brand-dark);
+      font-weight: 700;
+      font-size: 1.25rem;
+      align-items: center;
+    }
+
+    /* --- BUTTONS --- */
+    .btn-checkout {
+      background: var(--brand-dark);
+      border: none;
+      color: #fff;
+      padding: 16px;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      width: 100%;
+      font-size: 1rem;
+      transition: var(--transition);
+      box-shadow: var(--shadow-button);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .btn-checkout:hover:not(:disabled) {
+      background: #000;
       transform: translateY(-2px);
       box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+      color: white;
     }
-    .checkout-btn:disabled {
-      background: #cbd5e1;
-      border: none;
-    }
+    .btn-checkout:disabled { background: #cbd5e1; cursor: not-allowed; box-shadow: none; }
 
-    /* --- 8. TRUST VISUALS --- */
+    .btn-continue {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.9rem;
+      transition: var(--transition);
+    }
+    .btn-continue:hover { color: var(--brand-primary); }
+
+    .btn-remove {
+      color: #ef4444; 
+      font-size: 0.85rem; 
+      font-weight: 500;
+      opacity: 0.8;
+      transition: var(--transition);
+      background: none;
+      border: none;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-remove:hover { opacity: 1; text-decoration: underline; }
+
+    /* Trust Badges */
     .trust-badges {
       display: flex;
-      justify-content: space-around;
-      margin-top: 1.5rem;
+      justify-content: space-between;
+      margin-top: 2rem;
       padding-top: 1.5rem;
       border-top: 1px solid #f1f5f9;
+      gap: 10px;
     }
     .trust-item {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
       text-align: center;
       color: var(--text-muted);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
+      flex: 1;
     }
 
     @media (max-width: 991px) { 
       .summary-card { position: static; margin-top: 2rem; }
-      .cart-item-img { width: 64px; height: 64px; }
+      .step-divider { width: 30px; margin: 0 0.5rem; }
     }
   </style>
 </head>
@@ -288,7 +333,7 @@
 
   <div class="container cart-page">
     
-    <!-- Visual Progress Stepper -->
+    <!-- Progress Stepper -->
     <div class="checkout-stepper">
       <div class="step-item active">
         <div class="step-circle">1</div>
@@ -306,13 +351,13 @@
       </div>
     </div>
 
-    <div class="row g-5"> <!-- Increased gutter for premium spacing -->
+    <div class="row g-4 g-lg-5"> 
       
       <!-- LEFT COLUMN: CART ITEMS -->
       <div class="col-lg-8">
         <div class="d-flex align-items-end justify-content-between mb-4">
-          <h3 class="mb-0 fw-bold">My Cart</h3>
-          <span class="text-muted small"><%= (cartItems || items || []).length %> items</span>
+          <h2 class="mb-0">My Cart</h2>
+          <span class="badge bg-secondary-subtle text-secondary rounded-pill px-3"><%= (cartItems || items || []).length %> items</span>
         </div>
 
         <%
@@ -329,8 +374,8 @@
               <a href="/shopping" class="btn btn-primary mt-3">Start Shopping</a>
             </div>
           <% } else { rows.forEach(it => { %>
-            <!-- Premium Card Item -->
-            <div class="list-group-item cart-item-card d-flex align-items-center gap-4">
+            <!-- Modern Card Item -->
+            <div class="cart-item-card d-flex flex-column flex-sm-row align-items-sm-center gap-4">
               
               <!-- Image -->
               <% if (it.image) { %>
@@ -340,41 +385,36 @@
               <% } %>
 
               <!-- Content Area -->
-              <div class="flex-grow-1">
-                <div class="d-flex justify-content-between align-items-start">
+              <div class="flex-grow-1 w-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
                   <div>
-                    <a href="/product/<%= it.id %>" class="h6 mb-1 d-block text-dark"><%= it.productName %></a>
-                    <div class="muted-note">Seller: SuperMarket • SKU: <%= it.id %></div>
+                    <a href="/product/<%= it.id %>" class="product-title"><%= it.productName %></a>
+                    <div class="muted-note">SKU: <%= it.id %></div>
                   </div>
                   <div class="text-end">
-                    <div class="price-small">$<%= price(it.price) %></div>
-                    <!-- Moved remove button here for better UX -->
-                    <form action="/cart/remove/<%= it.id %>" method="POST" style="display:inline">
-                      <button class="btn btn-link text-danger p-0 mt-1 text-decoration-none" type="submit">
-                        <small>Remove</small>
-                      </button>
-                    </form>
+                    <div class="price-tag">$<%= price(it.price) %></div>
                   </div>
                 </div>
 
                 <!-- Controls Row -->
-                <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top border-light">
+                <div class="d-flex justify-content-between align-items-end mt-3">
                   
                   <!-- Quantity Control -->
-                  <form class="d-flex align-items-center" action="/cart/update/<%= it.id %>" method="POST">
-                    <div class="input-group input-group-sm" style="width:130px">
-                      <button type="button" class="btn btn-outline-secondary qty-decrement fw-bold">−</button>
-                      <input class="form-control text-center qty-input" type="number" name="quantity" min="0" value="<%= it.quantity %>">
-                      <button type="button" class="btn btn-outline-secondary qty-increment fw-bold">+</button>
+                  <form class="d-flex align-items-center gap-3" action="/cart/update/<%= it.id %>" method="POST">
+                    <div class="qty-group">
+                      <button type="button" class="qty-btn qty-decrement">−</button>
+                      <input class="qty-input" type="number" name="quantity" min="0" value="<%= it.quantity %>">
+                      <button type="button" class="qty-btn qty-increment">+</button>
                     </div>
-                    <button class="btn btn-light btn-sm ms-2 text-muted fw-bold border" type="submit" style="font-size: 0.75rem;">Update</button>
+                    <button class="btn btn-sm text-primary fw-semibold p-0" type="submit" style="font-size: 0.8rem; background:none; border:none;">Update</button>
                   </form>
 
-                  <!-- Item Total -->
-                  <div class="text-end">
-                    <span class="muted-note d-block" style="font-size: 0.75rem;">Total</span>
-                    <strong class="text-success">$<%= price(Number(it.price||0)*Number(it.quantity||0)) %></strong>
-                  </div>
+                  <!-- Remove Action -->
+                  <form action="/cart/remove/<%= it.id %>" method="POST" style="display:inline">
+                    <button class="btn-remove" type="submit">
+                      <i data-lucide="trash-2" style="width: 14px;"></i> Remove
+                    </button>
+                  </form>
                 </div>
               </div>
             </div>
@@ -383,14 +423,14 @@
 
         <!-- Continue Shopping & Clear Cart Links -->
         <div class="mt-4 pt-2 d-flex justify-content-between align-items-center">
-          <a href="/shopping" class="text-decoration-none d-flex align-items-center gap-2 text-muted fw-bold" style="font-size: 0.9rem;">
+          <a href="/shopping" class="btn-continue d-flex align-items-center gap-2">
             <i data-lucide="arrow-left" style="width: 16px;"></i> Continue Shopping
           </a>
 
           <% if (rows.length > 0) { %>
             <form action="/cart/clear" method="POST" class="d-inline">
-              <button type="submit" class="btn btn-link text-danger text-decoration-none d-flex align-items-center gap-2 fw-bold p-0" style="font-size: 0.9rem;" onclick="return confirm('Are you sure you want to clear your entire cart?')">
-                <i data-lucide="trash-2" style="width: 16px;"></i> Clear Cart
+              <button type="submit" class="btn btn-link text-danger text-decoration-none d-flex align-items-center gap-2 fw-medium p-0" style="font-size: 0.9rem;" onclick="return confirm('Are you sure you want to clear your entire cart?')">
+                Clear Cart
               </button>
             </form>
           <% } %>
@@ -400,52 +440,27 @@
       <!-- RIGHT COLUMN: SUMMARY -->
       <div class="col-lg-4">
         <div class="summary-card">
-          <h5>Order Summary</h5>
+          <h5>Order Summary <i data-lucide="receipt" style="width: 18px; color: #94a3b8;"></i></h5>
           
-          <!-- Product Breakdown (Enhanced) -->
-          <div class="mb-3">
-            <% rows.forEach(item => { %>
-              <div class="d-flex justify-content-between align-items-center mb-2 py-2 rounded"
-                  style="background:#f8fafc; border-radius:10px; padding-left:12px; padding-right:12px;
-                          border:1px solid #eceff3;">
-                
-                <!-- Left: Name + Quantity -->
-                <div class="d-flex flex-column">
-                  <span class="fw-semibold" style="color:#1e293b;">
-                    <%= item.productName %>
-                  </span>
-                  <span class="text-muted small">
-                    Quantity: <strong>x<%= item.quantity %></strong>
-                  </span>
-                </div>
+          <!-- Product breakdown removed to keep summary concise (subtotal shown below) -->
 
-                <!-- Right: Price -->
-                <div class="fw-bold" style="color:#0f9d58;">
-                  $<%= price(item.price * item.quantity) %>
-                </div>
-
-              </div>
-            <% }) %>
+          <div class="summary-row">
+            <span>Subtotal</span>
+            <span>$<%= price(sum) %></span>
+          </div>
+          <div class="summary-row">
+            <span>Shipping</span>
+            <span class="text-success fw-bold">$0.00</span>
           </div>
 
-
-          <div class="d-flex justify-content-between mb-3 text-muted">
-            <div>Shipping</div>
-            <div class="text-success fw-bold">Free</div>
-
+          <div class="summary-row total">
+            <span>Total</span>
+            <span>$<%= price(sum) %></span>
           </div>
 
-          <hr class="my-4">
-
-          <div class="d-flex justify-content-between mb-4 align-items-end">
-            <span class="h5 mb-0 fw-bold">Total</span>
-            <span class="h4 mb-0 fw-bold text-dark">$<%= price(sum) %></span>
-          </div>
-
-          <form action="/cart/pay" method="GET">
-            <button class="btn btn-primary w-100 checkout-btn d-flex justify-content-between align-items-center" <%= rows.length ? '' : 'disabled' %>>
-              <span>Checkout</span>
-              <i data-lucide="arrow-right" style="width: 20px;"></i>
+          <form action="/cart/checkout" method="GET" class="mt-4">
+            <button class="btn-checkout" <%= rows.length ? '' : 'disabled' %>>
+              Checkout <i data-lucide="arrow-right" style="width: 18px;"></i>
             </button>
           </form>
 
@@ -483,7 +498,7 @@
       const inc = e.target.closest('.qty-increment');
       if (!dec && !inc) return;
       e.preventDefault();
-      const group = (dec || inc).closest('.input-group');
+      const group = (dec || inc).closest('.qty-group'); // Updated selector
       if (!group) return;
       const input = group.querySelector('.qty-input');
       if (!input) return;

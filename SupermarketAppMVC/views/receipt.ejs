@@ -275,18 +275,21 @@
     <!-- INFO -->
     <div class="info-grid">
       <div>
-          <span class="info-label">Bill To</span>
-          <div class="info-value"><%= userName || 'Valued Customer' %></div>
-          <div class="info-sub"><%= userAddress || '' %></div>
-          <% if (userPhone) { %>
-            <div class="info-sub">Phone: <%= userPhone %></div>
-          <% } %>
+          <span class="info-label">Ship To</span>
+          <div class="info-value"><%= (typeof deliveryAddress !== 'undefined' && deliveryAddress && (deliveryAddress.recipient_name || deliveryAddress.full_name)) || (typeof userName !== 'undefined' && userName) || 'Valued Customer' %></div>
+          <% const da = (typeof deliveryAddress !== 'undefined' && deliveryAddress) ? deliveryAddress : null; %>
+          <div class="info-sub"><%= (da && (da.contact_number || da.phone)) || (typeof userPhone !== 'undefined' && userPhone) || '' %></div>
+          <div class="info-sub"><%= da ? ([da.block_number, da.street_name].filter(Boolean).join(' ')) : (typeof userAddress !== 'undefined' ? userAddress : '') %></div>
+          <div class="info-sub"><%= da ? (da.unit_number || '') : '' %></div>
+          <div class="info-sub"><%= da ? (da.country || '') : '' %></div>
+          <div class="info-sub"><%= da ? (da.postal_code || '') : '' %></div>
         </div>
 
       <div>
         <div class="date-row"><span class="date-label">Date:</span><span class="date-value"><%= new Date(createdAt).toLocaleDateString() %></span></div>
         <div class="date-row"><span class="date-label">Order:</span><span class="date-value">#<%= orderId %></span></div>
-        <div class="date-row"><span class="date-label">Payment:</span><span class="date-value"><%= paymentMethod || 'Card' %></span></div>
+        <div class="date-row"><span class="date-label">Payment:</span><span class="date-value"><%= (typeof paymentMethod !== 'undefined' && paymentMethod) || 'Card' %></span></div>
+        <div class="date-row"><span class="date-label">Shipping:</span><span class="date-value"><%= (typeof shippingMethod !== 'undefined' && shippingMethod && (shippingMethod.method_name || shippingMethod.name)) || 'Standard' %></span></div>
       </div>
     </div>
 
@@ -325,9 +328,13 @@
           <span>Subtotal</span>
           <span class="font-mono">$<%= computedTotal.toFixed(2) %></span>
         </div>
+        <div class="total-row">
+          <span>Shipping</span>
+          <span class="font-mono">$<%= Number((typeof shippingFee !== 'undefined' ? shippingFee : 0)).toFixed(2) %></span>
+        </div>
         <div class="grand-total">
           <span class="grand-total-label">Total</span>
-          <span class="grand-total-value font-mono">$<%= computedTotal.toFixed(2) %></span>
+          <span class="grand-total-value font-mono">$<%= (Number(typeof totalAmount !== 'undefined' ? totalAmount : (computedTotal + (typeof shippingFee !== 'undefined' ? shippingFee : 0)))).toFixed(2) %></span>
         </div>
       </div>
     </div>

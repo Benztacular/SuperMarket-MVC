@@ -313,6 +313,27 @@
         </div>
     </nav>
 
+    <!-- Flash messages (rendered only from this partial) -->
+    <div class="container mt-3">
+        <% if (Array.isArray(success_msg) && success_msg.length) { %>
+            <% success_msg.forEach(function(msg) { %>
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <%= msg %>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <% }) %>
+        <% } %>
+
+        <% if (Array.isArray(error_msg) && error_msg.length) { %>
+            <% error_msg.forEach(function(msg) { %>
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <%= msg %>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <% }) %>
+        <% } %>
+    </div>
+
     <!-- Client-side Logic for Interactions -->
     <script>
         // Initialize Lucide Icons

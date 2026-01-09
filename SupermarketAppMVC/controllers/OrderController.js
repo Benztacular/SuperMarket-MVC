@@ -198,7 +198,6 @@ function adminUpdateOrderStatus(req, res) {
 const checkout = function (req, res, next) {
   const userId = req.session?.user?.id || req.session?.userId;
   if (!userId) return res.redirect('/login');
-
   const conn = db; // single shared connection
   const release = () => {
     if (typeof conn.release === 'function') conn.release();
@@ -215,6 +214,14 @@ const checkout = function (req, res, next) {
         req.flash?.('error', 'Not enough stock for one or more items.');
         return res.redirect('/cart');
       }
+      if (code === 'NO_ADDRESS') {
+        req.flash?.('error', 'Please add a delivery address.');
+        return res.redirect('/cart/checkout');
+      }
+      if (code === 'NO_SHIP_METHOD') {
+        req.flash?.('error', 'No shipping method available.');
+        return res.redirect('/cart/checkout');
+      }
       return next(err || new Error(code));
     });
   };
@@ -222,78 +229,113 @@ const checkout = function (req, res, next) {
   conn.beginTransaction((txErr) => {
     if (txErr) return rollback('BEGIN_FAIL', txErr);
 
-    const cartSql = `
-      SELECT
-        ci.id         AS cart_id,
-        ci.product_id AS product_id,
-        ci.quantity   AS cart_qty,
-        p.quantity    AS stock_qty,
-        p.price       AS price
-      FROM cart_items ci
-      JOIN products p ON p.id = ci.product_id
-      WHERE ci.user_id = ?
-      FOR UPDATE
-    `;
+    const selectedAddressId = req.session?.selectedAddressId || null;
+    const addressSql = 'SELECT id FROM delivery_addresses WHERE user_id = ? ORDER BY (id = ?) DESC, is_default DESC, id ASC LIMIT 1';
+    conn.query(addressSql, [userId, selectedAddressId || 0], (addrErr, addrRows = []) => {
+      if (addrErr) return rollback('NO_ADDRESS', addrErr);
+      if (!addrRows.length) return rollback('NO_ADDRESS');
+      const deliveryAddressId = addrRows[0].id;
 
-    conn.query(cartSql, [userId], (cartErr, cartRows = []) => {
-      if (cartErr) return rollback('LOAD_CART_FAIL', cartErr);
-      if (!cartRows.length) return rollback('EMPTY_CART');
+      const selectedShippingMethodId = req.session?.selectedShippingMethodId || null;
+      const pickShipping = () => new Promise((resolve, reject) => {
+        if (!selectedShippingMethodId) {
+          return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
+            if (sErr) return reject(sErr);
+            if (!sRows.length) return reject(new Error('NO_SHIP_METHOD'));
+            return resolve(sRows[0]);
+          });
+        }
 
-      const insufficient = cartRows.find(row => Number(row.cart_qty) > Number(row.stock_qty));
-      if (insufficient) return rollback('OUT_OF_STOCK');
+        conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
+          if (sErr) return reject(sErr);
+          if (sRows.length) return resolve(sRows[0]);
+          conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
+            if (fErr) return reject(fErr);
+            if (!fRows.length) return reject(new Error('NO_SHIP_METHOD'));
+            return resolve(fRows[0]);
+          });
+        });
+      });
 
-      const totalAmount = cartRows.reduce(
-        (sum, row) => sum + Number(row.price || 0) * Number(row.cart_qty || 0),
-        0
-      );
+      pickShipping().then((shipRow) => {
+        const shippingMethodId = shipRow.id;
+        const shippingFee = Number(shipRow.price || 0);
 
-      conn.query(
-        'INSERT INTO orders (user_id, orderDate, totalAmount, status, createdAt) VALUES (?, NOW(), ?, "Pending", NOW())',
-        [userId, totalAmount],
-        (orderErr, orderRes) => {
-          if (orderErr) return rollback('INSERT_ORDER_FAIL', orderErr);
+        const cartSql = `
+          SELECT
+            ci.id         AS cart_id,
+            ci.product_id AS product_id,
+            ci.quantity   AS cart_qty,
+            p.quantity    AS stock_qty,
+            p.price       AS price
+          FROM cart_items ci
+          JOIN products p ON p.id = ci.product_id
+          WHERE ci.user_id = ?
+          FOR UPDATE
+        `;
 
-          const orderId = orderRes.insertId;
-          const valuesSql = cartRows.map(() => '(?, ?, ?, ?, NOW())').join(',');
-          const valuesParams = cartRows.flatMap(row => [
-            orderId,
-            row.product_id,
-            Number(row.cart_qty),
-            Number(row.price || 0)
-          ]);
+        conn.query(cartSql, [userId], (cartErr, cartRows = []) => {
+          if (cartErr) return rollback('LOAD_CART_FAIL', cartErr);
+          if (!cartRows.length) return rollback('EMPTY_CART');
+
+          const insufficient = cartRows.find(row => Number(row.cart_qty) > Number(row.stock_qty));
+          if (insufficient) return rollback('OUT_OF_STOCK');
+
+          const itemsTotal = cartRows.reduce(
+            (sum, row) => sum + Number(row.price || 0) * Number(row.cart_qty || 0),
+            0
+          );
+          const totalAmount = itemsTotal + shippingFee;
 
           conn.query(
-            `INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ${valuesSql}`,
-            valuesParams,
-            (itemsErr) => {
-              if (itemsErr) return rollback('INSERT_ITEMS_FAIL', itemsErr);
+            'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, "Pending", NOW())',
+            [userId, deliveryAddressId, shippingMethodId, shippingFee, totalAmount],
+            (orderErr, orderRes) => {
+              if (orderErr) return rollback('INSERT_ORDER_FAIL', orderErr);
 
-              const stockUpdates = cartRows.map(row => new Promise((resolve, reject) => {
-                conn.query(
-                  'UPDATE products SET quantity = quantity - ? WHERE id = ?',
-                  [Number(row.cart_qty), row.product_id],
-                  (updErr, updRes) => (updErr ? reject(updErr) : resolve(updRes))
-                );
-              }));
+              const orderId = orderRes.insertId;
+              const valuesSql = cartRows.map(() => '(?, ?, ?, ?, NOW())').join(',');
+              const valuesParams = cartRows.flatMap(row => [
+                orderId,
+                row.product_id,
+                Number(row.cart_qty),
+                Number(row.price || 0)
+              ]);
 
-              Promise.all(stockUpdates)
-                .then(() => {
-                  conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (clearErr) => {
-                    if (clearErr) return rollback('CLEAR_CART_FAIL', clearErr);
+              conn.query(
+                `INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ${valuesSql}`,
+                valuesParams,
+                (itemsErr) => {
+                  if (itemsErr) return rollback('INSERT_ITEMS_FAIL', itemsErr);
 
-                    conn.commit((commitErr) => {
-                      if (commitErr) return rollback('COMMIT_FAIL', commitErr);
-                      release();
-                      const encodedAmount = encodeURIComponent(totalAmount || '');
-                      return res.redirect(`/payment/success?orderId=${orderId}&method=card&amount=${encodedAmount}`);
-                    });
-                  });
-                })
-                .catch((decErr) => rollback('DECREMENT_FAIL', decErr));
+                  const stockUpdates = cartRows.map(row => new Promise((resolve, reject) => {
+                    conn.query(
+                      'UPDATE products SET quantity = quantity - ? WHERE id = ?',
+                      [Number(row.cart_qty), row.product_id],
+                      (updErr, updRes) => (updErr ? reject(updErr) : resolve(updRes))
+                    );
+                  }));
+
+                  Promise.all(stockUpdates)
+                    .then(() => {
+                      conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (clearErr) => {
+                        if (clearErr) return rollback('CLEAR_CART_FAIL', clearErr);
+
+                        conn.commit((commitErr) => {
+                          if (commitErr) return rollback('COMMIT_FAIL', commitErr);
+                          release();
+                          const encodedAmount = encodeURIComponent(totalAmount || '');
+                          return res.redirect(`/payment/success?orderId=${orderId}&method=card&amount=${encodedAmount}`);
+                        });
+                      });
+                    })
+                    .catch((decErr) => rollback('DECREMENT_FAIL', decErr));
+                }
+              );
             }
           );
-        }
-      );
+        });
+      }).catch((shipErr) => rollback(shipErr.message === 'NO_SHIP_METHOD' ? 'NO_SHIP_METHOD' : 'NO_SHIP_METHOD', shipErr));
     });
   });
 };
@@ -325,39 +367,68 @@ function showReceipt(req, res) {
     db.query(itemsSql, [orderId], (iErr, itemRows) => {
       if (iErr) { console.error(iErr); return res.status(500).send('Failed to load order items'); }
       const items = itemRows || [];
-      const data = {
-        orderId: order.id,
-        createdAt: order.createdAt,
-        items,
-        totalAmount: order.totalAmount
-      };
 
-      // support download as PDF when ?download=pdf or ?pdf=1 is present
-      const wantsPdf = (req.query && (String(req.query.download || '').toLowerCase() === 'pdf' || String(req.query.pdf || '') === '1' || String(req.query.pdf || '').toLowerCase() === 'true'));
-      if (wantsPdf) {
-        return res.render('receipt', data, async (err, html) => {
-          if (err) { console.error('render receipt for pdf error', err); return res.status(500).send('Failed to render receipt'); }
-          try {
-            // try to use puppeteer if available
-            const puppeteer = require('puppeteer');
-            const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-            const page = await browser.newPage();
-            await page.setContent(html, { waitUntil: 'networkidle0' });
-            const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
-            await browser.close();
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.pdf`);
-            return res.send(pdfBuffer);
-          } catch (pdfErr) {
-            console.error('PDF generation failed, falling back to HTML attachment', pdfErr);
-            res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.html`);
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            return res.send(html);
-          }
+      const addressPromise = new Promise((resolve) => {
+        if (!order.delivery_address_id) return resolve(null);
+        db.query('SELECT * FROM delivery_addresses WHERE id = ? LIMIT 1', [order.delivery_address_id], (aErr, aRows = []) => {
+          if (aErr) { console.error('load delivery address error', aErr); return resolve(null); }
+          resolve(aRows[0] || null);
         });
-      }
+      });
 
-      return res.render('receipt', data);
+      const shippingPromise = new Promise((resolve) => {
+        if (!order.shipping_method_id) return resolve(null);
+        db.query('SELECT * FROM shipping_methods WHERE id = ? LIMIT 1', [order.shipping_method_id], (sErr, sRows = []) => {
+          if (sErr) { console.error('load shipping method error', sErr); return resolve(null); }
+          resolve(sRows[0] || null);
+        });
+      });
+
+      Promise.all([addressPromise, shippingPromise]).then(([deliveryAddress, shippingMethod]) => {
+        const itemsSubtotal = items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0);
+        const shippingFee = Number(order.shipping_fee || 0);
+        const data = {
+          orderId: order.id,
+          createdAt: order.createdAt || order.orderDate,
+          items,
+          itemsSubtotal,
+          shippingFee,
+          totalAmount: Number(order.totalAmount != null ? order.totalAmount : (itemsSubtotal + shippingFee)),
+          deliveryAddress,
+          shippingMethod,
+          paymentMethod: order.payment_method || req.query?.method || 'Card',
+          userName: sessionUser?.username || sessionUser?.name || sessionUser?.email,
+          userAddress: sessionUser?.address || '',
+          userPhone: sessionUser?.contact || sessionUser?.phone || ''
+        };
+
+        // support download as PDF when ?download=pdf or ?pdf=1 is present
+        const wantsPdf = (req.query && (String(req.query.download || '').toLowerCase() === 'pdf' || String(req.query.pdf || '') === '1' || String(req.query.pdf || '').toLowerCase() === 'true'));
+        if (wantsPdf) {
+          return res.render('receipt', data, async (err, html) => {
+            if (err) { console.error('render receipt for pdf error', err); return res.status(500).send('Failed to render receipt'); }
+            try {
+              // try to use puppeteer if available
+              const puppeteer = require('puppeteer');
+              const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+              const page = await browser.newPage();
+              await page.setContent(html, { waitUntil: 'networkidle0' });
+              const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+              await browser.close();
+              res.setHeader('Content-Type', 'application/pdf');
+              res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.pdf`);
+              return res.send(pdfBuffer);
+            } catch (pdfErr) {
+              console.error('PDF generation failed, falling back to HTML attachment', pdfErr);
+              res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.html`);
+              res.setHeader('Content-Type', 'text/html; charset=utf-8');
+              return res.send(html);
+            }
+          });
+        }
+
+        return res.render('receipt', data);
+      });
     });
   });
 }
@@ -612,87 +683,7 @@ function paymentSuccess(req, res) {
   });
 }
 
-// showReceipt: load order and its items (joined to products) and render receipt.ejs
-function showReceipt(req, res) {
-  const sessionUser = req.session && (req.session.user || null);
-  const userId = (req.session && req.session.userId) || (sessionUser && sessionUser.id) || null;
-  if (!userId) return res.redirect('/login');
-
-  const orderId = req.params.id;
-  db.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId], (err, rows) => {
-    if (err) { console.error(err); return res.status(500).send('Failed to load order'); }
-    const order = Array.isArray(rows) ? rows[0] : rows;
-    if (!order) return res.status(404).send('Order not found');
-
-    // ensure ownership
-    if (Number(order.user_id) !== Number(userId) && !(req.session.user && req.session.user.role === 'admin')) {
-      return res.status(403).send('Forbidden');
-    }
-
-    const itemsSql = `
-      SELECT oi.id, oi.product_id, oi.quantity, oi.price, p.productName, p.image
-      FROM order_items oi
-      LEFT JOIN products p ON p.id = oi.product_id
-      WHERE oi.order_id = ?`;
-    db.query(itemsSql, [orderId], (iErr, itemRows) => {
-      if (iErr) { console.error(iErr); return res.status(500).send('Failed to load order items'); }
-      const items = itemRows || [];
-
-      // fetch user details and paypal transaction (if any)
-      const userSql = 'SELECT id, username, email, contact, address FROM users WHERE id = ? LIMIT 1';
-      db.query(userSql, [order.user_id], (uErr, uRows) => {
-        if (uErr) { console.error('Failed to load user for receipt', uErr); }
-        const user = (uRows && uRows[0]) || null;
-
-        const paypalSql = 'SELECT * FROM paypal_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1';
-        db.query(paypalSql, [orderId], (pErr, pRows) => {
-          if (pErr) { console.error('Failed to load paypal transaction', pErr); }
-          const paypalTxn = (pRows && pRows[0]) || null;
-
-          const paymentMethod = paypalTxn ? 'PayPal' : (order.paymentMethod || order.payment_method || (order.status && String(order.status).toLowerCase().includes('paid') ? 'Card' : 'Card'));
-
-          const data = {
-            orderId: order.id,
-            createdAt: order.createdAt || order.orderDate || new Date(),
-            items,
-            totalAmount: order.totalAmount,
-            userName: user ? (user.username || user.email || 'Valued Customer') : 'Valued Customer',
-            userAddress: user ? (user.address || '') : '',
-            userPhone: user ? (user.contact || '') : '',
-            paymentMethod,
-            paypalTxn
-          };
-
-          // support download as PDF when ?download=pdf or ?pdf=1 is present
-          const wantsPdf = (req.query && (String(req.query.download || '').toLowerCase() === 'pdf' || String(req.query.pdf || '') === '1' || String(req.query.pdf || '').toLowerCase() === 'true'));
-          if (wantsPdf) {
-            return res.render('receipt', data, async (err, html) => {
-              if (err) { console.error('render receipt for pdf error', err); return res.status(500).send('Failed to render receipt'); }
-              try {
-                const puppeteer = require('puppeteer');
-                const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-                const page = await browser.newPage();
-                await page.setContent(html, { waitUntil: 'networkidle0' });
-                const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
-                await browser.close();
-                res.setHeader('Content-Type', 'application/pdf');
-                res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.pdf`);
-                return res.send(pdfBuffer);
-              } catch (pdfErr) {
-                console.error('PDF generation failed, falling back to HTML attachment', pdfErr);
-                res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.html`);
-                res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                return res.send(html);
-              }
-            });
-          }
-
-          return res.render('receipt', data);
-        });
-      });
-    });
-  });
-}
+// (Removed duplicate/older showReceipt implementation. The updated `showReceipt` above loads delivery address and shipping method from `orders` and passes them into the `receipt` view.)
 
 module.exports = {
   placeOrder,

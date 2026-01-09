@@ -83,9 +83,16 @@ exports.shopping = function (req, res, next) {
 
   // fetch products and categories (server-rendered filtering/sorting)
   const sqlProducts = `
-    SELECT p.*, c.categoryName
+    SELECT p.*, c.categoryName,
+           COALESCE(pr.avgRating, 0) AS averageRating,
+           COALESCE(pr.cnt, 0) AS reviewCount
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN (
+      SELECT product_id, AVG(rating) AS avgRating, COUNT(*) AS cnt
+      FROM product_reviews
+      GROUP BY product_id
+    ) pr ON pr.product_id = p.id
     ${whereSql}
     ${orderSql}
     LIMIT 200
@@ -236,11 +243,36 @@ exports.show = function (req, res, next) {
       if (!rows || rows.length === 0) {
         return res.status(404).render('product', { product: null, error: ['Product not found'] });
       }
-      return res.render('product', {
-        product: rows[0],
-        success: req.flash ? req.flash('success') : [],
-        error: req.flash ? req.flash('error') : []
-      });
+      const productRow = rows[0];
+      // fetch reviews using the Review model
+      try {
+        const Review = require('../models/Review');
+        Review.listByProduct(productRow.id, (rErr, rRows) => {
+          if (rErr) {
+            console.error('Failed to load reviews', rErr);
+            productRow.reviews = [];
+          } else {
+            productRow.reviews = (rRows || []).map(rr => ({
+              id: rr.id,
+              userId: rr.user_id,
+              username: rr.username || 'User',
+              rating: Number(rr.rating || 0),
+              text: rr.text || '',
+              createdAt: rr.createdAt
+            }));
+          }
+
+          return res.render('product', {
+            product: productRow,
+            success: req.flash ? req.flash('success') : [],
+            error: req.flash ? req.flash('error') : []
+          });
+        });
+      } catch (e) {
+        console.error('Review model load failed', e);
+        productRow.reviews = [];
+        return res.render('product', { product: productRow, success: req.flash ? req.flash('success') : [], error: req.flash ? req.flash('error') : [] });
+      }
     });
   } catch (err) { next(err); }
 };

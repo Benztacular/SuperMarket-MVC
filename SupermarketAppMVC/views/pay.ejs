@@ -5,64 +5,65 @@
   <title>Confirm Payment - FreshMart</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   
-  <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700&display=swap" rel="stylesheet">
 
-  <!-- Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
-    /* --- PREMIUM THEME VARIABLES --- */
     :root {
-      --bg-body: #f8fafc;
+      --brand-primary: #10b981;
+      --brand-primary-dark: #059669;
+      --brand-primary-light: #d1fae5;
+      --brand-dark: #0f172a;
+      --bg-body: #f1f5f9;
       --card-bg: #ffffff;
-      --brand-green: #0f9d58;
-      --brand-dark: #1e293b;
-      --text-main: #334155;
-      --text-muted: #94a3b8;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
       --border-color: #e2e8f0;
-      --radius: 16px;
-      --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+      --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);
+      --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    html, body { height: 100%; }
-    
-    body { 
-      background-color: var(--bg-body); 
-      font-family: 'Inter', sans-serif; 
-      color: var(--text-main); 
+    body {
+      background-color: var(--bg-body);
+      font-family: 'Inter', sans-serif;
+      color: var(--text-main);
       -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
     }
 
     h1, h2, h3, h4, h5, h6 {
-      font-family: 'Poppins', sans-serif;
+      font-family: 'Plus Jakarta Sans', sans-serif;
       color: var(--brand-dark);
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: -0.025em;
     }
 
-    /* --- LAYOUT --- */
-    .confirm-wrap {
+    a { text-decoration: none; color: inherit; transition: var(--transition); }
+
+    .cart-page {
+      padding-top: 1.25rem;
+      padding-bottom: 5rem;
       max-width: 1200px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem 5rem;
+      /* ensure page fills available space between header and footer */
+      min-height: calc(100vh - var(--nav-height, 92px) - var(--footer-height, 80px) - 32px);
     }
 
-    .confirm-header {
-      margin-bottom: 2rem;
-      text-align: center;
-    }
-    .confirm-header h1 { font-size: 1.75rem; letter-spacing: -0.5px; margin-bottom: 0.5rem; }
-    .confirm-header .sub { color: var(--text-muted); font-size: 0.95rem; }
-
-    /* --- PROGRESS STEPPER --- */
     .checkout-stepper {
       display: flex;
       justify-content: center;
-      margin-bottom: 3rem;
+      margin-top: 0;
+      margin-bottom: 2rem;
       position: relative;
     }
     .step-item {
@@ -80,7 +81,7 @@
       font-weight: 700;
     }
     .step-item.completed {
-      color: var(--brand-green);
+      color: var(--brand-primary);
     }
     .step-circle {
       width: 28px;
@@ -100,7 +101,7 @@
       box-shadow: 0 0 0 4px rgba(30, 41, 59, 0.1);
     }
     .step-item.completed .step-circle {
-      background: var(--brand-green);
+      background: var(--brand-primary);
       color: white;
     }
     .step-divider {
@@ -108,114 +109,134 @@
       height: 2px;
       background: #e2e8f0;
       margin: 0 1rem;
+      align-self: center;
     }
     .step-item.completed + .step-divider {
-      background: var(--brand-green);
+      background: var(--brand-primary);
     }
 
-    /* --- MAIN BODY --- */
-    .confirm-body {
-      display: flex;
-      gap: 2rem;
-      align-items: flex-start;
+    .checkout-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 28px;
+      align-items: start;
     }
 
-    /* Left: Item List Card */
-    .confirm-items {
-      flex: 1;
+    .section-card {
       background: var(--card-bg);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-soft);
-      padding: 0; /* Removing padding from container to use table styling */
       border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
       overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header-custom {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      background: #fafafa;
     }
 
     .order-table { width: 100%; border-collapse: separate; border-spacing: 0; }
     .order-table thead th {
-      text-align: left; 
-      padding: 1.25rem 1.5rem;
-      font-weight: 600; 
+      text-align: left;
+      padding: 1rem 1.5rem;
+      font-weight: 600;
       color: var(--text-muted);
-      font-size: 0.75rem;
+      font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border-bottom: 1px solid var(--border-color);
       background: #f8fafc;
     }
-    .order-table tbody tr td { 
-      padding: 1.25rem 1.5rem; 
-      border-bottom: 1px solid #f1f5f9; 
+    .order-table tbody tr td {
+      padding: 1.1rem 1.5rem;
+      border-bottom: 1px solid #f1f5f9;
       vertical-align: middle;
     }
     .order-table tbody tr:last-child td { border-bottom: none; }
 
-    /* Product Cell */
     .product-cell { display: flex; align-items: center; gap: 1rem; }
     .product-cell img {
-      width: 56px; 
-      height: 56px; 
-      object-fit: cover; 
-      border-radius: 10px; 
-      background: #f8fafc; 
+      width: 56px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 10px;
+      background: #f8fafc;
       border: 1px solid #f1f5f9;
     }
-    .product-cell .name { 
-      font-weight: 600; 
-      color: var(--brand-dark); 
+    .product-cell .name {
+      font-weight: 600;
+      color: var(--brand-dark);
       font-size: 0.95rem;
     }
 
-    /* Columns */
-    .qty-cell { font-weight: 500; color: var(--text-main); font-size: 0.95rem; }
+    .qty-cell { font-weight: 600; color: var(--text-main); font-size: 0.95rem; }
     .price-cell { font-weight: 500; color: var(--text-muted); font-size: 0.95rem; }
     .subtotal-cell { font-weight: 700; color: var(--brand-dark); font-size: 1rem; }
 
-    /* Right: Summary Card */
-    .confirm-summary { 
-      flex: 0 0 380px; 
-      width: 380px;
-    }
+    .confirm-summary { position: sticky; top: 110px; }
+
     .summary-card {
-      background: var(--card-bg); 
-      border-radius: var(--radius); 
-      padding: 2rem; 
-      box-shadow: var(--shadow-lg);
+      background: var(--card-bg);
       border: 1px solid var(--border-color);
-      position: sticky; 
-      top: 110px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      padding: 1.75rem !important;
     }
-    
-    .summary-card h5 { 
-      font-size: 1.1rem; 
-      margin-bottom: 1.5rem; 
-      padding-bottom: 1rem; 
+
+    .summary-card h5 {
+      font-size: 1.1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
       border-bottom: 1px dashed var(--border-color);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    .summary-row { 
-      display: flex; 
-      justify-content: space-between; 
-      margin-bottom: 1rem; 
-      color: var(--text-muted); 
+    .summary-items { margin-bottom: 0.75rem; }
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
       font-size: 0.95rem;
+      padding: 8px 0;
     }
-    .summary-row.total { 
-      font-weight: 700; 
-      color: var(--brand-dark); 
-      font-size: 1.25rem; 
-      margin-top: 1.5rem; 
-      padding-top: 1rem; 
+    .summary-item-left { display: flex; align-items: center; gap: 12px; }
+    .summary-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      object-fit: cover;
+      background: #f1f5f9;
+      border: 1px solid var(--border-color);
+    }
+    .summary-meta .name { font-weight: 600; color: var(--text-main); font-size: 0.9rem; line-height: 1.2; }
+    .summary-meta .qty { font-size: 0.8rem; color: var(--text-muted); }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+    .summary-row.total {
+      font-weight: 700;
+      color: var(--brand-dark);
+      font-size: 1.25rem;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
       border-top: 1px solid var(--border-color);
       align-items: center;
     }
-    .summary-note { 
-      font-size: 0.8rem; 
-      color: var(--text-muted); 
-      margin-top: 1.5rem; 
+
+    .summary-note {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 1.5rem;
       text-align: center;
       line-height: 1.5;
       background: #f8fafc;
@@ -224,42 +245,19 @@
       border: 1px solid #f1f5f9;
     }
 
-    /* Buttons */
     .btn-actions { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 12px; }
-    
-    .btn-confirm { 
-      background: var(--brand-dark); 
-      border: none; 
-      color: #fff; 
-      padding: 16px; 
-      border-radius: 12px; 
-      font-weight: 600; 
-      width: 100%;
-      font-size: 1rem;
-      transition: all 0.2s;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .btn-confirm:hover {
-      background: black;
-      transform: translateY(-2px);
-      box-shadow: 0 8px 15px rgba(0,0,0,0.15);
-    }
 
-    .btn-back { 
-      background: transparent; 
-      border: 1px solid var(--border-color); 
-      color: var(--text-muted); 
-      padding: 12px; 
-      border-radius: 12px; 
+    .btn-back {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 12px;
+      border-radius: 12px;
       width: 100%;
       font-weight: 500;
       text-align: center;
       text-decoration: none;
-      transition: all 0.2s;
+      transition: var(--transition);
     }
     .btn-back:hover {
       background: #f1f5f9;
@@ -267,12 +265,9 @@
       border-color: #cbd5e1;
     }
 
-    /* Responsive */
-    @media (max-width: 991px) {
-      .confirm-body { flex-direction: column; }
-      .confirm-summary { width: 100%; flex: auto; }
-      .summary-card { position: static; }
-      .product-cell img { width: 48px; height: 48px; }
+    @media (max-width: 992px) {
+      .checkout-grid { grid-template-columns: 1fr; }
+      .confirm-summary { position: static; margin-top: 1rem; width: 100%; }
       .step-divider { width: 30px; margin: 0 0.5rem; }
     }
   </style>
@@ -280,9 +275,8 @@
 <body>
   <%- include('partials/header') %>
 
-  <div class="confirm-wrap">
+  <div class="container cart-page">
     
-    <!-- Progress Stepper -->
     <div class="checkout-stepper">
       <div class="step-item completed">
         <div class="step-circle"><i data-lucide="check" style="width: 14px;"></i></div>
@@ -300,82 +294,89 @@
       </div>
     </div>
 
-    <div class="confirm-header">
-      <h1>Confirm Payment</h1>
-      <div class="sub">Please review your order details before finalizing</div>
-    </div>
-
-    <div class="confirm-body">
+    <div class="checkout-grid">
       
-      <!-- LEFT: ITEMS LIST -->
-      <div class="confirm-items">
-        <table class="order-table">
-          <thead>
-            <tr>
-              <th style="width: 50%;">Product</th>
-              <th style="width: 15%; text-align: center;">Qty</th>
-              <th style="width: 15%; text-align: right;">Price</th>
-              <th style="width: 20%; text-align: right;">Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% 
-              const rows = (cartItems || items || []);
-              function price(n){ const v = Number(n||0); return isFinite(v) ? v.toFixed(2) : '0.00'; }
-              const sum = rows.reduce((s, it)=> s + Number(it.price||0)*Number(it.quantity||0), 0);
-            %>
+      <div class="main-col">
+        <% const rows = (cartItems || items || []);
+           function price(n){ const v = Number(n||0); return isFinite(v) ? v.toFixed(2) : '0.00'; }
+           const sum = rows.reduce((s, it)=> s + Number(it.price||0)*Number(it.quantity||0), 0);
+           const addrList = (typeof addresses !== 'undefined' && addresses) ? addresses : [];
+           const shipTo = ((typeof selectedAddress !== 'undefined' && selectedAddress) || (typeof address !== 'undefined' && address) || (addrList.find(a => Number(a.id) === Number(selectedAddressId))) || (addrList.find(a => a.is_default)) || (addrList[0]) || {});
+        %>
 
-            <% if (!rows.length) { %>
-              <tr><td colspan="4" class="text-center text-muted py-5">Your cart is empty.</td></tr>
-            <% } else { rows.forEach(it => { %>
-              <tr>
-                <td>
-                  <div class="product-cell">
-                    <% if (it.image) { %>
-                      <img src="/images/<%= it.image %>" alt="<%= it.productName %>">
-                    <% } else { %>
-                      <div style="width:56px; height:56px; border-radius:10px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:0.7rem;">No Img</div>
-                    <% } %>
-                    <span class="name"><%= it.productName %></span>
-                  </div>
-                </td>
-                <td class="qty-cell" style="text-align: center;">
-                  x<%= (typeof it.quantity !== 'undefined' ? it.quantity : (it.qty || product && product.quantity || 0)) %>
-                </td>
-                <td class="price-cell" style="text-align: right;">
-                  $<%= Number(it.price || it.unit_price || 0).toFixed(2) %>
-                </td>
-                <td class="subtotal-cell" style="text-align: right;">
-                  $<%= Number(( (typeof it.quantity !== 'undefined' ? it.quantity : (it.qty || 0)) ) * (it.price || it.unit_price || 0)).toFixed(2) %>
-                </td>
-              </tr>
-            <% }) } %>
-          </tbody>
-        </table>
+        <div class="d-flex align-items-baseline justify-content-between mb-4">
+          <h2 class="mb-0">Shipping Details</h2>
+          <span class="badge bg-secondary-subtle text-secondary rounded-pill px-3"><%= rows.length %> items</span>
+        </div>
+
+        <div class="section-card">
+          <div class="card-header-custom">
+            <h5 class="mb-0">Ship To</h5>
+          </div>
+          <div class="p-4">
+            <div id="ship_recipient" class="fw-bold text-dark"><%= shipTo.recipient_name || 'Recipient not provided' %></div>
+            <div id="ship_line1" class="text-muted small mt-1"><%= [shipTo.block_number, shipTo.street_name].filter(Boolean).join(' ') || '-' %></div>
+            <div id="ship_unit" class="text-muted small mt-1"><%= shipTo.unit_number || '-' %></div>
+            <div id="ship_postal" class="text-muted small mt-1"><%= shipTo.postal_code || '-' %></div>
+          </div>
+        </div>
+
+          <!-- Items Card (show images, name, qty, unit price) -->
+          <div class="section-card">
+            <div class="card-header-custom">
+              <h5 class="mb-0">Items</h5>
+            </div>
+            <div class="p-4">
+              <% if ((rows || []).length) { %>
+                <div class="d-flex flex-column gap-3">
+                  <% rows.forEach(function(it){ const qtyVal = (typeof it.quantity !== 'undefined' ? it.quantity : (it.qty || 0)); const unit = Number(it.price || it.unit_price || 0); %>
+                    <div class="d-flex align-items-center justify-content-between">
+                      <div class="d-flex align-items-center gap-3">
+                        <% if (it.image) { %>
+                          <img src="/images/<%= it.image %>" alt="<%= it.productName %>" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border-color);background:#f8fafc;">
+                        <% } else { %>
+                          <div style="width:56px;height:56px;border-radius:10px;background:#f8fafc;border:1px solid var(--border-color);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:0.8rem;">Img</div>
+                        <% } %>
+                        <div>
+                          <div class="fw-semibold"><%= it.productName %></div>
+                          <div class="text-muted small">Qty: <%= qtyVal %></div>
+                        </div>
+                      </div>
+                      <div class="text-muted">$<%= (Number(unit) || 0).toFixed(2) %></div>
+                    </div>
+                  <% }) %>
+                </div>
+              <% } else { %>
+                <div class="text-muted small">No items</div>
+              <% } %>
+            </div>
+          </div>
+
       </div>
-
-      <!-- RIGHT: SUMMARY CARD -->
+      
       <div class="confirm-summary">
-        <div class="summary-card">
+        <div class="summary-card" data-subtotal="<%= price(sum) %>">
           <h5>Order Details <i data-lucide="receipt" style="width: 18px; color: #94a3b8;"></i></h5>
-          
+
+          <div class="summary-items">
+            <!-- Item list moved to left column 'Items' card to match checkout layout -->
+          </div>
+
           <div class="summary-row">
             <span>Subtotal</span>
             <span>$<%= price(sum) %></span>
           </div>
           <div class="summary-row">
             <span>Shipping</span>
-            <span class="text-success fw-bold">Free</span>
+            <span class="text-success fw-bold">$<%= Number(shippingFee || 0).toFixed(2) %></span>
           </div>
 
           <div class="summary-row total">
             <span>Total</span>
-            <span style="font-size: 1.5rem;">$<%= price(sum) %></span>
+            <span style="font-size: 1.5rem;">$<span id="totalCost"><%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %></span></span>
           </div>
 
-          <div class="btn-actions">
-            <a href="/cart" class="btn-back">Modify Cart</a>
-          </div>
+          <div class="btn-actions"></div>
 
           <div style="margin-top:12px;">
             <div id="paypal-button-container"></div>
@@ -431,6 +432,41 @@
         }).render('#paypal-button-container');
       };
       document.body.appendChild(s);
+    })();
+  </script>
+  <script>
+    (function(){
+      function tryPopulateFromCheckout(html){
+        try{
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          let sel = doc.querySelector('label.address-card.active');
+          if (!sel) sel = doc.querySelector('input[name="address_id"]:checked') && doc.querySelector('input[name="address_id"]:checked').closest('label.address-card');
+          if (!sel) return false;
+          const nameEl = sel.querySelector('.fw-bold') || sel.querySelector('span');
+          const lines = Array.from(sel.querySelectorAll('.text-muted.small')).map(n=>n.textContent.trim()).filter(Boolean);
+          if (nameEl) document.getElementById('ship_recipient').textContent = nameEl.textContent.trim();
+          if (lines[0]) document.getElementById('ship_line1').textContent = lines[0];
+          if (lines[1]) document.getElementById('ship_unit').textContent = lines[1];
+          if (lines[2]) document.getElementById('ship_postal').textContent = lines[2];
+          return true;
+        }catch(e){ return false; }
+      }
+
+      fetch('/cart/checkout', { credentials: 'same-origin' }).then(r => r.text()).then(html => {
+        if (!tryPopulateFromCheckout(html)) {
+          fetch('/api/delivery-addresses', { credentials: 'same-origin' }).then(r => r.json()).then(json => {
+            const addrs = (json && json.addresses) || [];
+            if (!addrs.length) return;
+            const chosen = addrs.find(a => a.is_default) || addrs[0];
+            if (!chosen) return;
+            document.getElementById('ship_recipient').textContent = chosen.recipient_name || 'Recipient not provided';
+            document.getElementById('ship_line1').textContent = [chosen.block_number, chosen.street_name].filter(Boolean).join(' ') || '-';
+            document.getElementById('ship_unit').textContent = chosen.unit_number || '-';
+            document.getElementById('ship_postal').textContent = chosen.postal_code || '-';
+          }).catch(()=>{});
+        }
+      }).catch(()=>{});
     })();
   </script>
   

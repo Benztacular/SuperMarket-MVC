@@ -426,56 +426,15 @@
                                                             View Invoice
                                                         </a>
                                                         <% if (order.status === 'Delivered') { %>
-                                                            <button 
-                                                                onclick="toggleReview('<%= order.id %>')"
-                                                                id="review-btn-<%= order.id %>"
-                                                                class="btn btn-success text-white rounded-pill fw-bold btn-sm py-2 d-flex align-items-center justify-content-center gap-2"
-                                                            >
+                                                            <a href="/orders/<%= orderIdStr %>/review" class="btn btn-success text-white rounded-pill fw-bold btn-sm py-2 d-flex align-items-center justify-content-center gap-2">
                                                                 <i data-lucide="star" style="width: 14px;"></i> Write Review
-                                                            </button>
+                                                            </a>
                                                         <% } %>
                                                     </div>
                                                 </div>
     
                                                 <!-- Review Form Container -->
-                                                <% if (order.status === 'Delivered') { %>
-                                                    <div id="review-form-<%= order.id %>" class="details-section bg-white rounded-4 p-4 border border-light shadow-sm slide-down">
-                                                        <h6 class="fw-bold mb-3 d-flex align-items-center gap-2">
-                                                            <i data-lucide="star" class="text-warning fill-warning" style="width: 18px;"></i> 
-                                                            Write a Review
-                                                        </h6>
-                                                        <form onsubmit="submitReview(event, '<%= order.id %>')">
-                                                            <div class="mb-3 text-center">
-                                                                <p class="small text-muted mb-2">How was your experience?</p>
-                                                                <div class="d-flex justify-content-center gap-2">
-                                                                    <% for(let i=1; i<=5; i++) { %>
-                                                                        <button type="button" class="star-rating-btn" data-order-id="<%= order.id %>" data-rating="<%= i %>" onclick="setRating(this.dataset.orderId, Number(this.dataset.rating))">
-                                                                            <i data-lucide="star" id="star-<%= order.id %>-<%= i %>" class="text-secondary" style="width: 28px; height: 28px;"></i>
-                                                                        </button>
-                                                                    <% } %>
-                                                                    <input type="hidden" id="rating-input-<%= order.id %>" value="0">
-                                                                </div>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <textarea class="form-control bg-light border-0" rows="3" placeholder="Tell us about your order..." style="resize: none;"></textarea>
-                                                            </div>
-                                                            <div class="d-flex justify-content-end gap-2">
-                                                                <button type="submit" class="btn btn-dark rounded-pill px-4 btn-sm fw-bold d-flex align-items-center gap-2">
-                                                                    Submit Review <i data-lucide="send" style="width: 14px;"></i>
-                                                                </button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                    
-                                                    <!-- Success Message (Hidden by default) -->
-                                                    <div id="review-success-<%= order.id %>" class="details-section bg-success bg-opacity-10 rounded-4 p-4 text-center slide-down border border-success border-opacity-25">
-                                                        <div class="bg-white rounded-circle d-inline-flex p-3 text-success mb-3 shadow-sm">
-                                                            <i data-lucide="check-circle" style="width: 24px;"></i>
-                                                        </div>
-                                                        <h6 class="fw-bold text-success mb-1">Thanks for your feedback!</h6>
-                                                        <p class="text-muted small mb-0">Your review helps us improve.</p>
-                                                    </div>
-                                                <% } %>
+                                                <% /* Reviews are handled on the separate order review page */ %>
                                                 
                                             </div>
                                         </div>

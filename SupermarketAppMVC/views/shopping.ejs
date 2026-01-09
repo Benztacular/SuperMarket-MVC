@@ -147,7 +147,7 @@
     .product-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 1.5rem;
+      gap: 2rem; /* increased spacing between cards */
     }
 
     .product-card {
@@ -161,6 +161,7 @@
       position: relative;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       box-shadow: var(--shadow-sm);
+      margin-bottom: 0.75rem; /* small bottom spacing to avoid cards touching */
     }
 
     .product-card:hover {
@@ -232,6 +233,22 @@
       font-weight: 400;
       color: var(--text-muted);
     }
+
+    /* Rating display (compact, won't shift layout) */
+    .rating-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: #374151;
+      margin-top: 6px;
+    }
+    .rating-row .avg { font-weight: 700; }
+    .rating-row .count { color: var(--text-muted); font-size: 0.85rem; }
+    .stars { display:flex; gap:4px; align-items:center; }
+    .star { font-size: 0.95rem; color: #f59e0b; line-height:1; }
+    .star.filled { opacity: 1; }
+    .star { opacity: 0.45; }
 
     /* Status Badge */
     .status-row {
@@ -410,6 +427,19 @@
                   <h6 class="mt-1 mb-1">
                     <a href="/product/<%= p.id %>"><%= p.productName %></a>
                   </h6>
+                  <div class="rating-row" aria-hidden="true" title="<%= p.averageRating ? Number(p.averageRating).toFixed(1) : '0.0' %> average">
+                    <div class="stars" aria-hidden="true">
+                      <% const avg = Number(p.averageRating || 0); const rounded = Math.round(avg || 0); %>
+                      <% for (let s = 1; s <= 5; s++) { %>
+                        <% if (s <= rounded) { %>
+                          <span class="star filled">★</span>
+                        <% } else { %>
+                          <span class="star">☆</span>
+                        <% } %>
+                      <% } %>
+                    </div>
+                    <div class="count">(<%= p.reviewCount || 0 %>)</div>
+                  </div>
                   <div class="price">
                     $<%= Number(p.price || 0).toFixed(2) %> 
                     <small>/<%= p.unit || p.uom || 'pc' %></small>

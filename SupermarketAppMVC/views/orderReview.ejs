@@ -1,0 +1,237 @@
+<%
+  const itemsList = (typeof items !== 'undefined' && items) ? items : [];
+%>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Review Order #<%= orderId %></title>
+  
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome for Star Icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary-color: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg-color: #f3f4f6;
+      --text-main: #111827;
+      --star-inactive: #e5e7eb;
+      --star-active: #fbbf24;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+    }
+
+    /* Card Styling */
+    .review-card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,0.05);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      margin-bottom: 24px;
+    }
+
+    .review-card:hover {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Product Image */
+    .product-thumb-container {
+      width: 100px;
+      height: 100px;
+      flex-shrink: 0;
+      background: #f9fafb;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .product-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Interactive Star Rating */
+    .star-rating {
+      display: inline-flex;
+      flex-direction: row-reverse;
+      gap: 4px;
+    }
+
+    .star-rating input { display: none; }
+
+    .star-rating label {
+      cursor: pointer;
+      width: 24px;
+      height: 24px;
+      color: var(--star-inactive);
+      font-size: 24px;
+      transition: color 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Highlight stars on hover/check */
+    .star-rating input:checked ~ label,
+    .star-rating label:hover,
+    .star-rating label:hover ~ label {
+      color: var(--star-active);
+    }
+
+    .review-textarea {
+      background-color: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      resize: none;
+      padding: 12px;
+      font-size: 0.95rem;
+    }
+
+    .review-textarea:focus {
+      background-color: #fff;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+      outline: none;
+    }
+
+    .btn-save {
+      background-color: var(--primary-color);
+      border: none;
+      padding: 8px 24px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-save:hover {
+      background-color: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 576px) {
+      .review-card-body { flex-direction: column; }
+      .product-info-col { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+      .product-thumb-container { width: 80px; height: 80px; }
+    }
+  </style>
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <div class="container py-5">
+    
+    <!-- Header Section -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 mx-auto" style="max-width: 800px;">
+      <div>
+        <h3 class="fw-bold mb-1">Write Reviews</h3>
+        <p class="text-muted mb-0">Order #<%= orderId %></p>
+      </div>
+      <div class="mt-3 mt-md-0">
+        <a href="/orders/<%= orderId %>" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-arrow-left me-2"></i>Back to Order
+        </a>
+      </div>
+    </div>
+
+    <div class="mx-auto" style="max-width: 800px;">
+      
+      <% if (!itemsList.length) { %>
+        <div class="text-center text-muted py-5 card shadow-sm border-0">
+          <div class="card-body">No items found for this order.</div>
+        </div>
+      <% } %>
+
+      <% itemsList.forEach(function(it) { %>
+        <!-- Card Start -->
+        <div class="review-card">
+          <div class="card-body p-4">
+            <div class="d-flex review-card-body gap-4">
+              
+              <!-- Left: Image & Info -->
+              <div class="product-info-col">
+                <div class="d-flex flex-sm-column gap-2">
+                  <a href="/product/<%= it.product_id %>" class="product-thumb-container d-block">
+                    <img src="<%= it.image ? ('/images/' + it.image) : '/images/placeholder.png' %>" 
+                         class="product-thumb" 
+                         alt="<%= it.productName %>"
+                         onerror="this.onerror=null;this.src='/images/placeholder.png'">
+                  </a>
+                  <div class="d-none d-sm-block text-center mt-2">
+                    <div class="small fw-bold">$<%= (Number(it.price||0)).toFixed(2) %></div>
+                    <div class="small text-muted">Qty: <%= it.quantity || it.qty || 1 %></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right: Form -->
+              <div class="flex-grow-1">
+                <div class="mb-3">
+                  <a href="/product/<%= it.product_id %>" class="text-decoration-none text-dark">
+                    <h5 class="fw-bold mb-1"><%= it.productName %></h5>
+                  </a>
+                  <!-- Mobile Price Fallback -->
+                  <div class="d-block d-sm-none text-muted small">
+                    Qty: <%= it.quantity || it.qty || 1 %> • $<%= (Number(it.price||0)).toFixed(2) %>
+                  </div>
+                </div>
+
+                <!-- FORM -->
+                <form action="/orders/<%= orderId %>/review/<%= it.product_id %>" method="post">
+                  
+                  <!-- Star Rating -->
+                  <div class="mb-3">
+                    <label class="form-label small text-uppercase text-muted fw-bold" style="font-size:0.75rem;">Rating</label>
+                    <div class="star-rating">
+                      <% const curRating = Number(it.rating || 0); %>
+                      <% for (let r=5; r>=1; r--) { %>
+                        <input type="radio" 
+                               id="star<%= r %>-<%= it.product_id %>" 
+                               name="rating" 
+                               value="<%= r %>" 
+                               <%= (r === curRating ? 'checked' : '') %> />
+                        <label for="star<%= r %>-<%= it.product_id %>" title="<%= r %> stars">
+                          <i class="fas fa-star"></i>
+                        </label>
+                      <% } %>
+                    </div>
+                  </div>
+
+                  <!-- Text Area -->
+                  <div class="mb-3">
+                    <label class="form-label small text-uppercase text-muted fw-bold" style="font-size:0.75rem;">Review</label>
+                    <textarea name="review" 
+                              class="form-control review-textarea" 
+                              rows="3" 
+                              placeholder="What did you like or dislike?"><%= it.text || '' %></textarea>
+                  </div>
+
+                  <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary btn-save text-white btn-sm">
+                      Save Review
+                    </button>
+                  </div>
+                </form>
+                <!-- End FORM -->
+
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Card End -->
+      <% }); %>
+
+    </div>
+  </div>
+
+  <%- include('partials/footer') %>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

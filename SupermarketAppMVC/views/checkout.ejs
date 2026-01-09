@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Confirm Payment - FreshMart</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* --- MODERN FRESH THEME VARIABLES --- */
+    :root {
+      /* Brand Colors */
+      --brand-primary: #10b981; /* Fresh Mint Green */
+      --brand-primary-dark: #059669;
+      --brand-primary-light: #d1fae5;
+      --brand-dark: #0f172a;    /* Deep Slate */
+      
+      /* UI Colors */
+      --bg-body: #f1f5f9;       /* Light Gray Blue */
+      --card-bg: #ffffff;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      
+      /* Spacing & Shapes */
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      
+      /* Effects */
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+      --shadow-lg: 0 20px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01);
+      --shadow-button: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+      --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body { 
+      background-color: var(--bg-body); 
+      font-family: 'Inter', sans-serif; 
+      color: var(--text-main); 
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: var(--brand-dark);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    a { text-decoration: none; color: inherit; transition: var(--transition); }
+
+    /* --- LAYOUT UTILS --- */
+    .cart-page {
+      padding-top: 1.25rem;
+      padding-bottom: 5rem;
+      max-width: 1200px;
+    }
+
+    /* --- REVERTED STEPPER DESIGN --- */
+    .checkout-stepper {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 2rem;
+      position: relative;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.9rem;
+      position: relative;
+      z-index: 2;
+    }
+    .step-item.active {
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+    .step-item.completed {
+      color: var(--brand-primary);
+    }
+    .step-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      transition: all 0.3s;
+    }
+    .step-item.active .step-circle {
+      background: var(--brand-dark);
+      color: white;
+      box-shadow: 0 0 0 4px rgba(30, 41, 59, 0.1);
+    }
+    .step-item.completed .step-circle {
+      background: var(--brand-primary);
+      color: white;
+    }
+    .step-divider {
+      width: 60px;
+      height: 2px;
+      background: #e2e8f0;
+      margin: 0 1rem;
+      align-self: center;
+    }
+    .step-item.completed + .step-divider {
+      background: var(--brand-primary);
+    }
+
+    /* --- GRID SYSTEM --- */
+    .checkout-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    /* --- CARDS & FORMS --- */
+    .section-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header-custom {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      background: #fafafa;
+    }
+
+    /* Address Selection Cards */
+    .address-card {
+      position: relative;
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+      cursor: pointer;
+      transition: var(--transition);
+      background: #fff;
+    }
+
+    .address-card:hover {
+      border-color: #cbd5e1;
+      transform: translateY(-1px);
+    }
+
+    /* When selected */
+    .address-card.active {
+      border-color: var(--brand-primary);
+      background-color: #f0fdf4;
+    }
+    
+    .address-card.active .form-check-input {
+      background-color: var(--brand-primary);
+      border-color: var(--brand-primary);
+    }
+
+    /* Custom Form Inputs */
+    .form-control, .form-select {
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      transition: var(--transition);
+      background-color: #fcfcfc;
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: var(--brand-primary);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
+      background-color: #fff;
+    }
+
+    .form-label {
+      font-weight: 500;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      margin-bottom: 0.4rem;
+    }
+
+    /* --- REVERTED SUMMARY CARD DESIGN --- */
+    .confirm-summary {
+      position: sticky;
+      top: 110px;
+    }
+
+    .summary-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      padding: 1.75rem !important;
+    }
+
+    .summary-card h5 { 
+      font-size: 1.1rem; 
+      margin-bottom: 1.5rem; 
+      padding-bottom: 1rem; 
+      border-bottom: 1px dashed var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .summary-items { margin-bottom: 0.75rem; }
+    
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+      padding: 8px 0;
+    }
+
+    .summary-item-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .summary-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      object-fit: cover;
+      background: #f1f5f9;
+      border: 1px solid var(--border-color);
+    }
+
+    .summary-meta .name { font-weight: 600; color: var(--text-main); font-size: 0.9rem; line-height: 1.2; }
+    .summary-meta .qty { font-size: 0.8rem; color: var(--text-muted); }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .summary-row.total { 
+      font-weight: 700; 
+      color: var(--brand-dark); 
+      font-size: 1.25rem; 
+      margin-top: 1.5rem; 
+      padding-top: 1rem; 
+      border-top: 1px solid var(--border-color);
+      align-items: center;
+    }
+
+    .summary-note { 
+      font-size: 0.8rem; 
+      color: var(--text-muted); 
+      margin-top: 1.5rem; 
+      text-align: center;
+      line-height: 1.5;
+      background: #f8fafc;
+      padding: 1rem;
+      border-radius: 12px;
+      border: 1px solid #f1f5f9;
+    }
+
+    /* --- BUTTONS --- */
+    .btn-custom-black {
+      background: var(--brand-dark);
+      color: white;
+      border-radius: var(--radius-md);
+      padding: 0.8rem 1.5rem;
+      font-weight: 600;
+      border: none;
+      transition: var(--transition);
+    }
+    .btn-custom-black:hover {
+      background: #000;
+      transform: translateY(-1px);
+    }
+
+    .btn-custom-outline {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      border-radius: var(--radius-md);
+      padding: 0.8rem 1.5rem;
+      font-weight: 600;
+      transition: var(--transition);
+    }
+    .btn-custom-outline:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    /* Actions area similar to original layout */
+    .btn-actions { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 12px; }
+
+    .btn-confirm-pay {
+      background: var(--brand-dark);
+      border: none;
+      color: #fff;
+      padding: 16px;
+      border-radius: 12px;
+      font-weight: 600;
+      width: 100%;
+      font-size: 1rem;
+      transition: all 0.2s;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-confirm-pay:hover {
+      background: black;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+      color: #fff;
+    }
+
+    .btn-back {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 12px;
+      border-radius: 12px;
+      width: 100%;
+      font-weight: 500;
+      text-align: center;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-back:hover {
+      background: #f1f5f9;
+      color: var(--text-main);
+      border-color: #cbd5e1;
+    }
+
+    /* --- RESPONSIVE --- */
+    @media (max-width: 992px) {
+      .checkout-grid { grid-template-columns: 1fr; }
+      .confirm-summary { position: static; margin-top: 1rem; width: 100%; }
+      .step-divider { width: 30px; margin: 0 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <div class="container cart-page">
+    
+    <!-- REVERTED Progress Stepper -->
+    <div class="checkout-stepper">
+      <div class="step-item completed">
+        <div class="step-circle"><i data-lucide="check" style="width: 14px;"></i></div>
+        <span>Shopping Cart</span>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-item active">
+        <div class="step-circle">2</div>
+        <span>Checkout</span>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-item">
+        <div class="step-circle">3</div>
+        <span>Payment</span>
+      </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="checkout-grid">
+      
+      <!-- LEFT COLUMN -->
+      <div class="main-col">
+        <% const rows = (cartItems || items || []);
+           function price(n){ const v = Number(n||0); return isFinite(v) ? v.toFixed(2) : '0.00'; }
+           const sum = rows.reduce((s, it)=> s + Number(it.price||0)*Number(it.quantity||0), 0);
+        %>
+
+        <div class="d-flex align-items-baseline justify-content-between mb-4">
+          <h2 class="mb-0">Shipping Details</h2>
+          <span class="badge bg-secondary-subtle text-secondary rounded-pill px-3"><%= rows.length %> items</span>
+        </div>
+
+        <% if ((addresses || []).length) { %>
+          <form id="addressSelectForm" action="/delivery-addresses/select" method="POST" class="section-card">
+            <div class="card-header-custom d-flex align-items-center justify-content-between">
+              <div>
+                <h5 class="mb-0">Saved Addresses</h5>
+                <small class="text-muted fw-medium">Pick one for delivery</small>
+              </div>
+              <div>
+                <button type="button" id="openAddAddress" class="btn-custom-outline">Add address</button>
+              </div>
+            </div>
+            
+            <div class="p-4">
+              <div class="d-flex flex-column gap-3">
+                <% addresses.forEach(addr => { const isSelected = Number(selectedAddressId) === Number(addr.id); %>
+                  <label class="address-card d-flex align-items-start gap-3 <%= isSelected ? 'active' : '' %>"> 
+                    <input type="radio" name="address_id" value="<%= addr.id %>" class="form-check-input mt-1" <%= isSelected ? 'checked' : '' %>>
+                    <div class="flex-grow-1">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <span class="fw-bold text-dark"><%= addr.recipient_name %></span>
+                        <% if (addr.is_default) { %><span class="badge bg-success-subtle text-success border border-success-subtle">Default</span><% } %>
+                      </div>
+                      <div class="text-muted small mt-1">+<%= addr.contact_number %></div>
+                      <div class="text-muted small mt-1"><%= addr.block_number %> <%= addr.street_name %> <%= addr.unit_number %>, <%= addr.postal_code %>, <%= addr.country %></div>
+                    </div>
+                  </label>
+                <% }) %>
+              </div>
+            </div>
+          </form>
+
+          <!-- Shipping method selector (driven by DB) -->
+          <div class="section-card mt-3">
+            <div class="card-header-custom d-flex align-items-center justify-content-between">
+              <div>
+                <h5 class="mb-0">Shipping Method</h5>
+                <small class="text-muted">Choose delivery speed</small>
+              </div>
+            </div>
+            <div class="p-4">
+              <% if ((shippingMethods || []).length) { %>
+                <div class="d-flex flex-column gap-3">
+                  <% shippingMethods.forEach(sm => { const isShipSelected = Number(selectedShippingMethodId) === Number(sm.id); %>
+                    <label class="address-card d-flex align-items-center justify-content-between <%= isShipSelected ? 'active' : '' %>"> 
+                      <div>
+                        <strong><%= sm.method_name || 'Shipping' %></strong>
+                        <% if (sm.estimated_days) { %>
+                          <div class="text-muted small">Est. <%= sm.estimated_days %> days</div>
+                        <% } %>
+                      </div>
+                      <div class="text-end">
+                        <div class="fw-bold">$<%= Number(sm.price || 0).toFixed(2) %></div>
+                        <input type="radio" name="shipping_method" value="<%= sm.id %>" data-price="<%= Number(sm.price || 0).toFixed(2) %>" <%= isShipSelected ? 'checked' : '' %> />
+                      </div>
+                    </label>
+                  <% }) %>
+                </div>
+              <% } else { %>
+                <div class="text-muted">No shipping methods available.</div>
+              <% } %>
+            </div>
+          </div>
+
+        <% } else { %>
+          <div class="section-card">
+            <div class="card-header-custom">
+              <h5 class="mb-1">New Delivery Address</h5>
+              <p class="text-muted small mb-0">Enter details below to ship to a new location.</p>
+            </div>
+
+            <div class="p-4">
+              <form id="inlineAddressForm" action="/delivery-addresses" method="POST" class="row g-3" onsubmit="return validateAddress(this)">
+                <div class="col-md-6">
+                  <label class="form-label">Recipient name</label>
+                  <input type="text" name="recipient_name" class="form-control" placeholder="e.g. John Doe" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Contact number</label>
+                  <input type="text" name="contact_number" class="form-control" placeholder="e.g. 98765432" inputmode="numeric" pattern="^\d{8}$" maxlength="8" title="Enter exactly 8 digits" required>
+                  
+                </div>
+                
+                <div class="col-12"><hr class="text-muted opacity-25 my-1"></div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Block / House No.</label>
+                  <input type="text" name="block_number" class="form-control" placeholder="e.g. 123 or 123A" pattern="^(?:\d{3}[A-Za-z]?|[A-Za-z]{3})$" maxlength="4" title="Enter 3 digits optionally followed by 1 letter, or 3 letters" required>
+                  
+                </div>
+                <div class="col-md-8">
+                  <label class="form-label">Street name</label>
+                  <input type="text" name="street_name" class="form-control" placeholder="e.g. Orchard Road" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Unit number</label>
+                  <input type="text" name="unit_number" class="form-control" placeholder="#12-34" pattern="^#?\d{2}-\d{2}$" maxlength="6" title="Format: 12-34 or #12-34" required>
+                  
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Postal code</label>
+                  <input type="text" name="postal_code" class="form-control" placeholder="e.g. 520123" inputmode="numeric" pattern="^\d{6}$" maxlength="6" title="Enter exactly 6 digits" required>
+                  
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Country</label>
+                  <select name="country" class="form-select">
+                    <option value="Singapore" selected>Singapore</option>
+                  </select>
+                  
+                </div>
+                <div class="col-12 mt-4">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="is_default" value="1" id="setDefault">
+                    <label class="form-check-label small text-muted pt-1" for="setDefault">
+                      Save this address as default for future orders
+                    </label>
+                  </div>
+                </div>
+                <div class="col-12 mt-3">
+                  <button type="submit" class="btn-custom-black w-100">Save Address & Continue</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        <% } %>
+      </div>
+
+        <!-- RIGHT COLUMN: REVERTED SUMMARY -->
+      <div class="confirm-summary">
+        <div class="summary-card" data-subtotal="<%= price(sum) %>" data-shipping="<%= Number(shippingFee || 0).toFixed(2) %>">
+          <h5>Order Details <i data-lucide="receipt" style="width: 18px; color: #94a3b8;"></i></h5>
+          
+          <div class="summary-items">
+            <% if ((cartItems || rows || items || []).length) {
+                 const summaryRows = (cartItems || rows || items || []);
+                 summaryRows.forEach(it => { %>
+              <div class="summary-item">
+                <div class="summary-item-left">
+                  <% if (it.image) { %>
+                    <img src="/images/<%= it.image %>" alt="<%= it.productName %>" class="summary-thumb">
+                  <% } else { %>
+                    <div class="summary-thumb d-flex align-items-center justify-content-center text-muted small">Img</div>
+                  <% } %>
+                  <div class="summary-meta">
+                    <div class="name"><%= it.productName %></div>
+                    <div class="qty">Qty: <%= it.quantity %></div>
+                  </div>
+                </div>
+                <div class="fw-medium text-secondary">$<%= price(Number(it.price||0)*Number(it.quantity||0)) %></div>
+              </div>
+            <% }) } %>
+          </div>
+          
+          <div class="summary-row">
+            <span>Subtotal</span>
+            <span>$<%= price(sum) %></span>
+          </div>
+          <div class="summary-row">
+            <span>Shipping</span>
+            <span class="text-success fw-bold">$<span id="shippingCost"><%= Number(shippingFee || 0).toFixed(2) %></span></span>
+          </div>
+
+          <div class="summary-row total">
+            <span>Total</span>
+            <span style="font-size: 1.5rem;">$<span id="totalCost"><%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %></span></span>
+          </div>
+
+          <div class="btn-actions">
+            <a href="/cart" class="btn-back">Modify Cart</a>
+            <div class="d-flex justify-content-end mt-2">
+              <a href="/cart/pay" class="btn-confirm-pay" style="width: 100%;">Proceed To Payment</a>
+            </div>
+          </div>
+
+          <div class="summary-note">
+            <div style="display:flex; justify-content:center; gap:8px; margin-bottom:8px; opacity:0.6;">
+               <i data-lucide="lock" style="width:14px"></i> <strong>Secure Checkout</strong>
+            </div>
+            By completing payment, you accept our Terms & Conditions.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Add Address Modal (hidden) -->
+  <div class="modal fade" id="addrModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Delivery Address</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="modalAddressForm" class="row g-3" onsubmit="return validateAddress(this)">
+            <div class="col-md-6">
+              <label class="form-label">Recipient name</label>
+              <input type="text" name="recipient_name" class="form-control" placeholder="e.g. John Doe" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Contact number</label>
+              <input type="text" name="contact_number" class="form-control" placeholder="e.g. 98765432" inputmode="numeric" pattern="^\d{8}$" maxlength="8" title="Enter exactly 8 digits" required>
+              
+            </div>
+            <div class="col-12"><hr class="text-muted opacity-25 my-1"></div>
+            <div class="col-md-4">
+              <label class="form-label">Block / House No.</label>
+              <input type="text" name="block_number" class="form-control" placeholder="e.g. 123 or 123A" pattern="^(?:\d{3}[A-Za-z]?|[A-Za-z]{3})$" maxlength="4" title="Enter 3 digits optionally followed by 1 letter, or 3 letters" required>
+              
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Street name</label>
+              <input type="text" name="street_name" class="form-control" placeholder="e.g. Orchard Road" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Unit number</label>
+              <input type="text" name="unit_number" class="form-control" placeholder="#12-34" pattern="^#?\d{2}-\d{2}$" maxlength="6" title="Format: 12-34 or #12-34" required>
+              
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Postal code</label>
+              <input type="text" name="postal_code" class="form-control" placeholder="e.g. 520123" inputmode="numeric" pattern="^\d{6}$" maxlength="6" title="Enter exactly 6 digits" required>
+              
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Country</label>
+              <select name="country" class="form-select">
+                <option value="Singapore" selected>Singapore</option>
+                <option value="Malaysia">Malaysia</option>
+                <option value="Other">Other</option>
+              </select>
+              
+            </div>
+            <div class="col-12 mt-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="is_default" value="1" id="modalDefault">
+                <label class="form-check-label small text-muted" for="modalDefault">Save this address as default</label>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-custom-outline" data-bs-dismiss="modal">Cancel</button>
+          <button id="modalSaveBtn" type="button" class="btn-custom-black">Save Address & Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%- include('partials/footer') %>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    lucide.createIcons();
+    // Global validation helper used by inline and modal address forms
+    function validateAddress(form) {
+      if (!form) return false;
+      const clear = (el) => { if (el && typeof el.setCustomValidity === 'function') el.setCustomValidity(''); };
+      ['contact_number','block_number','unit_number','postal_code','country'].forEach(name => clear(form.elements[name]));
+
+      const contact = (form.contact_number && form.contact_number.value || '').trim();
+      const block = (form.block_number && form.block_number.value || '').trim();
+      const unit = (form.unit_number && form.unit_number.value || '').trim();
+      const postal = (form.postal_code && form.postal_code.value || '').trim();
+      const country = (form.country && form.country.value || '').trim();
+
+      let valid = true;
+      if (!/^\d{8}$/.test(contact)) {
+        if (form.contact_number && typeof form.contact_number.setCustomValidity === 'function') form.contact_number.setCustomValidity('Contact number must be exactly 8 digits');
+        valid = false;
+      }
+      if (!/^(?:\d{3}[A-Za-z]?|[A-Za-z]{3})$/.test(block)) {
+        if (form.block_number && typeof form.block_number.setCustomValidity === 'function') form.block_number.setCustomValidity('Block must be 3 digits optionally followed by 1 letter, or 3 letters');
+        valid = false;
+      }
+      if (!/^#?\d{2}-\d{2}$/.test(unit)) {
+        if (form.unit_number && typeof form.unit_number.setCustomValidity === 'function') form.unit_number.setCustomValidity('Unit must follow format 12-34 or #12-34');
+        valid = false;
+      }
+      if (!/^\d{6}$/.test(postal)) {
+        if (form.postal_code && typeof form.postal_code.setCustomValidity === 'function') form.postal_code.setCustomValidity('Postal code must be exactly 6 digits');
+        valid = false;
+      }
+      if (country && country.toLowerCase() !== 'singapore') {
+        if (form.country && typeof form.country.setCustomValidity === 'function') form.country.setCustomValidity('Country must be Singapore');
+        valid = false;
+      }
+
+      // Use browser reporting when available so messages appear inline
+      if (typeof form.reportValidity === 'function') {
+        return form.reportValidity();
+      }
+
+      if (!valid) {
+        const msgs = [];
+        if (!/^\d{8}$/.test(contact)) msgs.push('Contact number must be exactly 8 digits');
+        if (!/^(?:\d{3}[A-Za-z]?|[A-Za-z]{3})$/.test(block)) msgs.push('Block must be 3 digits optionally followed by 1 letter, or 3 letters');
+        if (!/^#?\d{2}-\d{2}$/.test(unit)) msgs.push('Unit must follow format 12-34 or #12-34');
+        if (!/^\d{6}$/.test(postal)) msgs.push('Postal code must be exactly 6 digits');
+        if (country && country.toLowerCase() !== 'singapore') msgs.push('Country must be Singapore');
+        alert(msgs.join('\n'));
+        return false;
+      }
+      // ensure country is normalized
+      if (form.country) form.country.value = 'Singapore';
+      return true;
+    }
+    (function(){
+      // address selection via AJAX to avoid flash messages
+      const addressForm = document.getElementById('addressSelectForm');
+      if (addressForm){
+        addressForm.querySelectorAll('input[name="address_id"]').forEach(function(radio){
+          radio.addEventListener('change', function(e){
+            const id = e.target.value;
+            fetch(addressForm.action, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+              body: new URLSearchParams({ address_id: id }).toString()
+            }).then(function(resp){
+              if (resp.ok) {
+                addressForm.querySelectorAll('label.address-card').forEach(function(lbl){ lbl.classList.remove('active'); });
+                const input = addressForm.querySelector('input[value="'+id+'"]');
+                if (input){ input.checked = true; input.closest('label.address-card').classList.add('active'); }
+              }
+            }).catch(function(){ /* ignore errors */ });
+          });
+        });
+      }
+
+      // shipping selection and totals update
+      const shippingRadios = Array.from(document.querySelectorAll('input[name="shipping_method"]'));
+      const shippingCostEl = document.getElementById('shippingCost');
+      const totalCostEl = document.getElementById('totalCost');
+      const summaryCard = document.querySelector('.summary-card');
+      const subtotal = summaryCard ? parseFloat(summaryCard.dataset.subtotal || '0') : 0;
+
+      function updateShipping(evt){
+        const checked = document.querySelector('input[name="shipping_method"]:checked');
+        const ship = checked ? parseFloat(checked.dataset.price || '0') : 0;
+        if (shippingCostEl) shippingCostEl.textContent = ship.toFixed(2);
+        if (totalCostEl) totalCostEl.textContent = (subtotal + ship).toFixed(2);
+
+        // toggle active card styling
+        const allLabels = document.querySelectorAll('label.address-card input[name="shipping_method"]');
+        allLabels.forEach((inp) => {
+          const lbl = inp.closest('label.address-card');
+          if (!lbl) return;
+          if (inp === checked) lbl.classList.add('active');
+          else lbl.classList.remove('active');
+        });
+
+        if (evt && checked) {
+          const body = new URLSearchParams({ shipping_method_id: checked.value }).toString();
+          fetch('/shipping/select', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body
+          }).catch(() => {});
+        }
+      }
+
+      if (shippingRadios.length){
+        shippingRadios.forEach(r=> {
+          r.addEventListener('change', updateShipping);
+          const lbl = r.closest('label.address-card');
+          if (lbl) {
+            lbl.addEventListener('click', () => { r.checked = true; updateShipping(); });
+          }
+        });
+        updateShipping();
+      } else {
+        if (shippingCostEl) shippingCostEl.textContent = '0.00';
+        if (totalCostEl) totalCostEl.textContent = subtotal.toFixed(2);
+      }
+
+      // modal handling: show modal and submit via AJAX, append new address on success
+      const openBtn = document.getElementById('openAddAddress');
+      const addrModalEl = document.getElementById('addrModal');
+      let bsModal = null;
+      if (addrModalEl) bsModal = new bootstrap.Modal(addrModalEl);
+      if (openBtn && bsModal){
+        openBtn.addEventListener('click', function(){ bsModal.show(); });
+      }
+
+      const saveBtn = document.getElementById('modalSaveBtn');
+      if (saveBtn){
+        saveBtn.addEventListener('click', function(){
+          const form = document.getElementById('modalAddressForm');
+            // validate modal form before submitting
+            if (!validateAddress(form)) { return; }
+            const fd = new FormData(form);
+          // prefer JSON response from server; fall back to appending locally
+          fetch('/delivery-addresses', { method:'POST', credentials:'same-origin', body: new URLSearchParams(fd) })
+            .then(resp => {
+              const ct = resp.headers.get('content-type') || '';
+              if (ct.indexOf('application/json') !== -1) return resp.json();
+              if (resp.ok) return { ok: true, fallback: true };
+              throw new Error('save-failed');
+            }).then(data => {
+              const container = addressForm && addressForm.querySelector('.d-flex.flex-column');
+              if (container){
+                // if server returned JSON with id and fields, use them
+                let id = String(Date.now());
+                let recipient = form.recipient_name.value || 'New';
+                let contact = form.contact_number.value || '';
+                let block = form.block_number.value || '';
+                let street = form.street_name.value || '';
+                let unit = form.unit_number.value || '';
+                let postal = form.postal_code.value || '';
+                let country = form.country.value || '';
+                if (data && data.id){ id = data.id; recipient = data.recipient_name || recipient; contact = data.contact_number || contact; block = data.block_number || block; street = data.street_name || street; unit = data.unit_number || unit; postal = data.postal_code || postal; country = data.country || country; }
+                const label = document.createElement('label');
+                label.className = 'address-card d-flex align-items-start gap-3 active';
+                label.innerHTML = `<input type="radio" name="address_id" value="${id}" class="form-check-input mt-1" checked>
+                  <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start"><span class="fw-bold text-dark">${recipient}</span></div>
+                    <div class="text-muted small mt-1">+${contact}</div>
+                    <div class="text-muted small mt-1">${block} ${street} ${unit}, ${postal}, ${country}</div>
+                  </div>`;
+                // unselect others
+                container.querySelectorAll('label.address-card').forEach(function(l){ l.classList.remove('active'); const inp = l.querySelector('input[name="address_id"]'); if (inp) inp.checked = false; });
+                container.appendChild(label);
+                // attach change handler to new radio
+                const newRadio = label.querySelector('input[name="address_id"]');
+                if (newRadio){
+                  newRadio.addEventListener('change', function(e){
+                    fetch(addressForm.action, { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest' }, body: new URLSearchParams({ address_id: e.target.value }).toString() });
+                  });
+                }
+
+                  // validateAddress helper used by inline and modal forms
+                  function validateAddress(form) {
+                    if (!form) return false;
+                    // use browser's constraint validation where possible
+                    if (typeof form.reportValidity === 'function') {
+                      return form.reportValidity();
+                    }
+                    // fallback simple checks
+                    const contact = (form.contact_number && form.contact_number.value || '').trim();
+                    const block = (form.block_number && form.block_number.value || '').trim();
+                    const unit = (form.unit_number && form.unit_number.value || '').trim();
+                    const postal = (form.postal_code && form.postal_code.value || '').trim();
+                    const contactOk = /^\d{8}$/.test(contact);
+                    const blockOk = /^(?:\d{3}[A-Za-z]?|[A-Za-z]{3})$/.test(block);
+                    const unitOk = /^#?\d{2}-\d{2}$/.test(unit);
+                    const postalOk = /^\d{6}$/.test(postal);
+                    if (!contactOk) { alert('Contact number must be exactly 8 digits'); return false; }
+                    if (!blockOk) { alert('Block must be 3 digits optionally followed by 1 letter, or 3 letters'); return false; }
+                    if (!unitOk) { alert('Unit number must follow format 12-34 (dash required)'); return false; }
+                    if (!postalOk) { alert('Postal code must be exactly 6 digits'); return false; }
+                    // force country to Singapore if present
+                    if (form.country) form.country.value = 'Singapore';
+                    return true;
+                  }
+              }
+              if (bsModal) bsModal.hide();
+            }).catch(()=>{ if (bsModal) bsModal.hide(); });
+        });
+      }
+
+      // ensure shipping selection is saved before navigating to pay page
+      const proceedBtn = document.querySelector('.btn-confirm-pay');
+      if (proceedBtn) {
+        proceedBtn.addEventListener('click', function(ev){
+          ev.preventDefault();
+          const checked = document.querySelector('input[name="shipping_method"]:checked');
+          if (!checked) return window.location = '/cart/pay';
+          const body = new URLSearchParams({ shipping_method_id: checked.value }).toString();
+          fetch('/shipping/select', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body
+          }).then(() => {
+            window.location = '/cart/pay';
+          }).catch(() => {
+            // still navigate even if save fails
+            window.location = '/cart/pay';
+          });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

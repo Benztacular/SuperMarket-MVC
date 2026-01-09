@@ -9,6 +9,10 @@
   const u = (typeof user !== 'undefined' && user) ? user : (locals.user || null);
   const isAdmin = (typeof locals.isAdmin !== 'undefined') ? locals.isAdmin : !!(u && u.role === 'admin');
   const backHref = isAdmin ? '/inventory' : '/shopping';
+
+  // --- NEW LOGIC FOR REVIEWS & DESCRIPTION ---
+  const description = p.description || "No description available for this product.";
+  const reviewsList = p.reviews || []; 
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -17,128 +21,209 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><%= productName %></title>
 
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
 
   <style>
-    /* Page background */
+    :root {
+      --primary-color: #2563eb;
+      --primary-dark: #1e40af;
+      --text-main: #111827;
+      --text-sec: #6b7280;
+      --bg-body: #f3f4f6;
+      --card-bg: #ffffff;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout Wrapper */
     .product-wrapper { 
       padding: 40px 0; 
-      background: #f5f7fa;
+      min-height: 100vh;
     }
 
-    /* Main product card */
-    .product-card { 
-      background:#fff; 
-      border:1px solid #e3e6eb; 
-      border-radius:16px; 
-      padding:32px; 
-      box-shadow: 0 8px 24px rgba(0,0,0,0.05); 
+    .stack-layout {
+      max-width: 960px; /* Wider layout for side-by-side hero */
+      margin: 0 auto;
     }
 
-    /* Layout spacing */
-    .product-card .d-flex { 
-      gap: 40px; 
-      align-items: flex-start; 
+    /* --- THE STACKING CARDS --- */
+    .stack-card { 
+      background: var(--card-bg); 
+      border-radius: 24px; 
+      box-shadow: 0 10px 30px -5px rgba(0,0,0,0.06); 
+      margin-bottom: 24px; /* Vertical Stacking Spacing */
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.04);
+      transition: transform 0.2s;
     }
 
-    /* Image container */
-    .product-card .flex-shrink-0 { 
-      min-width: 380px; 
-      max-width: 420px; 
+    /* CARD 1: HERO (Image + Main Info) */
+    .hero-image-area {
+      background: #f9fafb;
+      padding: 40px;
+      text-align: center;
+      border-bottom: 1px solid #f3f4f6;
     }
-
-    /* Product image box */
+    
     .product-img { 
-      width:100%; 
-      height:420px; 
-      object-fit:contain; 
-      display:block; 
-      background:#fff; 
-      border-radius:18px; 
-      padding:40px; 
-      border:1px solid #eef1f4;
+      width: 100%;
+      height: 440px;
+      object-fit: contain; 
+      filter: drop-shadow(0 15px 25px rgba(0,0,0,0.08));
+      transition: transform 0.3s ease;
+    }
+    .hero-image-area:hover .product-img {
+      transform: scale(1.03) translateY(-5px);
     }
 
-    /* Title */
-    .product-card h2 { 
-      font-size: 34px; 
-      font-weight: 800; 
-      color: #0a1a2b; 
-      margin-bottom: 12px;
+    .hero-content {
+      padding: 32px;
     }
 
-    /* Info rows */
-    .meta-row dt { 
-      width: 45%; 
-      font-weight: 600; 
-      color:#5d6b7a; 
+    .hero-header-row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; }
+    .back-small { color: var(--text-sec); text-decoration:none; font-weight:600; font-size:0.95rem; }
+    .back-small:hover { color: var(--text-main); }
+    .hero-footer { border-top:1px solid #f3f4f6; padding:16px 0 0; margin-top:18px; display:flex; justify-content:flex-start; }
+
+    /* side-by-side layout on wider screens */
+    .hero-row { display:block; }
+
+    .product-title {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 8px;
+      line-height: 1.2;
     }
-    .meta-row dd { 
-      color:#0f1720; 
+
+    .avg-stars { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+    .avg-stars .star { color: #f59e0b; font-size:1rem; }
+    .avg-stars .count { color: var(--text-sec); font-size:0.95rem; }
+
+    .product-price {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--primary-color);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stock-badge {
+      font-size: 0.85rem;
+      padding: 6px 12px;
+      border-radius: 100px;
       font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .stock-in { background: #dcfce7; color: #166534; }
+    .stock-out { background: #fee2e2; color: #991b1b; }
+
+    /* Action Bar (Quantity + Button) */
+    .action-bar {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 8px;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
     }
 
-    /* Pricing styling if needed later */
-    .price-current { 
-      font-size: 32px; 
-      color: #12b76a; 
-      font-weight:800; 
+    .qty-input {
+      width: 70px;
+      border: 1px solid #e6eef6;
+      background: white;
+      font-weight: 700;
+      text-align: center;
+      font-size: 1rem;
+      padding: 8px 10px;
+      border-radius: 8px;
     }
-    .price-old { 
-      font-size:16px; 
-      color:#9aa0a6; 
-      text-decoration: line-through; 
-      margin-left:8px;
+    .qty-input:focus { outline: none; box-shadow: 0 2px 8px rgba(37,99,235,0.06); }
+
+    .btn-buy {
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      padding: 10px 16px;
+      transition: background 0.15s, transform 0.08s;
+      box-shadow: 0 6px 16px rgba(37,99,235,0.12);
     }
-    .price-sub { 
-      color:#6b7280; 
-      font-size:14px; 
-      margin-left:6px; 
+    .btn-buy:hover { background: var(--primary-dark); transform: translateY(-1px); }
+
+    /* CARD 2 & 3: CONTENT STYLES */
+    .card-header-text {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #f3f4f6;
     }
 
-    /* Add-to-cart UI */
-    .add-cart-box .input-group { 
-      border-radius:50px; 
-      overflow:hidden; 
-      border:1px solid #dfe5ea; 
-      box-shadow: 0 6px 20px rgba(0,0,0,0.05); 
+    .description-text {
+      color: #4b5563;
+      line-height: 1.7;
+      font-size: 1rem;
     }
 
-    .add-cart-box .form-control[type="number"] { 
-      max-width:120px; 
-      padding:14px 18px; 
-      border:0; 
-      font-weight:700; 
-      font-size:16px; 
+    /* Reviews Styling */
+    .review-item {
+      padding: 16px 0;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .review-item:last-child { border-bottom: none; }
+    
+    .review-top {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .r-avatar {
+      width: 32px; height: 32px;
+      background: #e0e7ff;
+      color: var(--primary-color);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.8rem;
+      margin-right: 10px;
+    }
+    .r-name { font-weight: 600; font-size: 0.95rem; }
+    .r-stars { margin-left: auto; color: #fbbf24; font-size: 0.85rem; }
+    .r-body { font-size: 0.95rem; color: #4b5563; background: #f9fafb; padding: 10px; border-radius: 8px; margin-top: 5px; }
+
+    .back-btn-wrapper { margin-top: 20px; text-align: center; }
+    .btn-simple-back { color: var(--text-sec); text-decoration: none; font-weight: 600; }
+    .btn-simple-back:hover { color: var(--text-main); }
+
+    /* Responsive adjustments */
+    @media (max-width: 576px) {
+      .product-wrapper { padding: 20px 10px; }
+      .hero-image-area { padding: 20px; }
+      .product-img { height: 250px; }
+      .product-title { font-size: 1.6rem; }
     }
 
-    .add-cart-box .btn.btn-primary {
-      background: #00b96b; 
-      border:0;
-      color:#fff;
-      padding:16px 26px;
-      font-weight:800;
-      border-radius:0 50px 50px 0;
-      font-size:16px;
-      box-shadow: 0 10px 25px rgba(0,185,107,0.22);
-    }
-
-    .btn.btn-link { 
-      color:#6b7280; 
-      font-weight:600; 
-    }
-
-    /* Responsive */
-    @media (max-width:991px) {
-      .product-card .flex-shrink-0 { min-width: 200px; }
-      .product-img { height:260px; padding:20px; }
-    }
-
-    @media (max-width:767px) {
-      .product-card { padding:20px; }
-      .product-card h2 { font-size:24px; }
-      .price-current { font-size:22px; }
-      .add-cart-box .btn.btn-primary { padding:12px 16px; }
+    @media (min-width: 768px) {
+      .hero-row { display:flex; gap:24px; align-items:flex-start; }
+      .hero-image-area { flex: 0 0 52%; padding: 40px; border-bottom: 0; }
+      .hero-content { flex: 1 1 48%; padding: 40px 32px; }
+      .stack-card { margin-bottom: 32px; }
+      .product-img { height: 480px; }
+      .stack-layout { padding: 0 12px; }
     }
   </style>
 </head>
@@ -146,70 +231,121 @@
 
   <%- include('partials/header') %>
 
-  <div class="container product-wrapper">
-    <div class="row justify-content-center">
-      <div class="col-12 col-md-10 col-lg-8 product-card">
+  <div class="product-wrapper">
+    <div class="container">
+      
+      <!-- STACKED LAYOUT CONTAINER -->
 
-        <div class="d-flex flex-column flex-md-row align-items-center gap-4">
-
-          <!-- IMAGE -->
-          <div class="flex-shrink-0 text-center">
-            <img src="<%= imageSrc %>" 
-                 alt="<%= productName %>" 
-                 class="img-fluid product-img"
-                 onerror="this.onerror=null;this.src='/images/placeholder.png'">
-          </div>
-
-          <!-- DETAILS -->
-          <div class="flex-grow-1 w-100">
-
-            <h2 class="mb-2"><%= productName %></h2>
-
-            <dl class="row meta-row mb-3">
-              <dt class="col-5">Product Quantity:</dt>
-              <dd class="col-7"><%= qty %></dd>
-
-              <dt class="col-5">Price:</dt>
-              <dd class="col-7">$<%= price %></dd>
-            </dl>
-
-            <!-- ADD TO CART -->
-            <div class="add-cart-box mb-3" style="max-width:360px;">
-              <form action="/cart/add" method="post" class="d-flex align-items-center mb-0 w-100">
-                <input type="hidden" name="product_id" value="<%= p.id %>">
-
-                <div class="input-group">
-                  <input type="number" 
-                         name="quantity" 
-                         class="form-control" 
-                         min="1" 
-                         value="1" 
-                         aria-label="Quantity">
-                  <button class="btn btn-primary" type="submit">
-                    Add to cart
-                  </button>
-                </div>
-
-                <a class="btn btn-link ms-3" href="/shopping">Back</a>
-              </form>
+        <!-- CARD 1: PRODUCT HERO -->
+        <div class="stack-card">
+          <div class="hero-row">
+            <!-- Image Section -->
+            <div class="hero-image-area">
+              <img src="<%= imageSrc %>" 
+                   alt="<%= productName %>" 
+                   class="product-img"
+                   onerror="this.onerror=null;this.src='/images/placeholder.png'">
             </div>
 
-            <% if ((success||[]).length) { %>
-              <div class="alert alert-success"><%= success.join('<br>') %></div>
-            <% } %>
+            <!-- Info Section -->
+            <div class="hero-content">
+              <div class="hero-header-row">
+                <a href="<%= backHref %>" class="back-small">← Back to Shopping</a>
+                <% if (qty > 0) { %>
+                  <span class="stock-badge stock-in">In Stock (<%= qty %>)</span>
+                <% } else { %>
+                  <span class="stock-badge stock-out">Out of Stock</span>
+                <% } %>
+              </div>
 
-            <% if ((error||[]).length) { %>
-              <div class="alert alert-danger"><%= error.join('<br>') %></div>
-            <% } %>
+              <h1 class="product-title"><%= productName %></h1>
+              <% const avg = (reviewsList && reviewsList.length) ? (reviewsList.reduce((s,r)=>s+Number(r.rating||0),0)/reviewsList.length) : 0; %>
+              <div class="avg-stars">
+                <div class="stars" aria-hidden="true">
+                  <% for (let s = 1; s <= 5; s++) { %>
+                    <span class="star"><%= (s <= Math.round(avg)) ? '★' : '☆' %></span>
+                  <% } %>
+                </div>
+                <div class="count"><%= (reviewsList.length ? (avg.toFixed(1) + ' • ') : '') + reviewsList.length + ' review' + (reviewsList.length!==1 ? 's' : '') %></div>
+              </div>
 
+              <div class="product-price">
+                <span>$<%= price %></span>
+              </div>
+
+              <% if ((success||[]).length) { %>
+                <div class="alert alert-success mt-2 mb-0 py-2 small border-0"><%= success.join(' ') %></div>
+              <% } %>
+              <% if ((error||[]).length) { %>
+                <div class="alert alert-danger mt-2 mb-0 py-2 small border-0"><%= error.join(' ') %></div>
+              <% } %>
+
+              <div class="hero-footer">
+                <form action="/cart/add" method="post">
+                  <input type="hidden" name="product_id" value="<%= p.id %>">
+                  <div class="action-bar">
+                    <input type="number" 
+                           name="quantity" 
+                           class="qty-input" 
+                           min="1" 
+                           value="1" 
+                           aria-label="Quantity">
+                    <button type="submit" class="btn-buy">Add to Cart</button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+
+        <!-- CARD 2: DESCRIPTION (keeps full width matching hero) -->
+        <div class="stack-card">
+          <div class="p-4">
+            <div class="card-header-text">Description</div>
+            <div class="description-text">
+              <%= description %>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 3: REVIEWS -->
+        <div class="stack-card">
+          <div class="p-4">
+            <div class="card-header-text d-flex justify-content-between">
+              <span>Reviews</span>
+              <span class="badge bg-light text-dark border"><%= reviewsList.length %></span>
+            </div>
+
+            <div class="reviews-list">
+              <% if (reviewsList.length > 0) { %>
+                <% reviewsList.forEach(function(review) { %>
+                  <div class="review-item">
+                    <div class="review-top">
+                      <div class="r-avatar"><%= review.username ? review.username.charAt(0).toUpperCase() : 'U' %></div>
+                      <span class="r-name"><%= review.username || 'Anonymous' %></span>
+                      <div class="r-stars">
+                        <% for(let i=1; i<=5; i++) { %>
+                          <%= i <= review.rating ? '★' : '☆' %>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="r-body">
+                      "<%= review.text || review.comment || 'No comment provided.' %>"
+                    </div>
+                  </div>
+                <% }); %>
+              <% } else { %>
+                <div class="text-center text-muted py-3">No reviews yet.</div>
+              <% } %>
+            </div>
+          </div>
+        </div>
+
+      </div> <!-- End Stack Layout -->
     </div>
   </div>
 
   <%- include('partials/footer') %>
-
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
