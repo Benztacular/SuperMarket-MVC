@@ -445,6 +445,12 @@ exports.pay = function (req, res) {
 
     const total = items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
 
-    return res.render('pay', { items, cartItems: items, total });
+    return res.render('pay', {
+      items,
+      cartItems: items,
+      total,
+      paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+      paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+    });
   });
 };

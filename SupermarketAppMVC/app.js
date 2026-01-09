@@ -12,6 +12,7 @@ const CartController = require('./controllers/CartController');
 const OrderController = require('./controllers/OrderController');
 const UserController = require('./controllers/UserController');
 const CategoryController = require('./controllers/CategoryController');
+const PaypalController = require('./controllers/PaypalController');
 
 const db = require('./db');
 const AdminModel = require('./models/Admin'); // kept for compatibility
@@ -152,6 +153,8 @@ app.post('/addToCart', requireUser, CartController.add);
 app.post('/cart/update', requireUser, CartController.update);
 app.post('/cart/remove', requireUser, CartController.remove);
 app.get('/cart/pay', CartController.pay);
+app.post('/paypal/create-order', requireUser, ensure(PaypalController.createOrder, 'PaypalController.createOrder'));
+app.post('/paypal/capture-order', requireUser, ensure(PaypalController.captureOrder, 'PaypalController.captureOrder'));
 app.post('/cart/pay', requireUser, (req, res, next) => OrderController.checkout(req, res, next));
 app.post('/cart/checkout', requireUser, ensure(OrderController.checkout, 'OrderController.checkout'));
 app.post('/cart/clear', requireUser, CartController.clear);

@@ -374,21 +374,18 @@
           </div>
 
           <div class="btn-actions">
-            <!-- Hidden inputs preserved for backend logic -->
-            <form action="/cart/pay" method="POST">
-              <button type="submit" class="btn-confirm">
-                Confirm &amp; Pay
-                <i data-lucide="arrow-right" style="width: 18px;"></i>
-              </button>
-            </form>
             <a href="/cart" class="btn-back">Modify Cart</a>
+          </div>
+
+          <div style="margin-top:12px;">
+            <div id="paypal-button-container"></div>
           </div>
 
           <div class="summary-note">
             <div style="display:flex; justify-content:center; gap:8px; margin-bottom:8px; opacity:0.6;">
                <i data-lucide="lock" style="width:14px"></i> <strong>Secure Checkout</strong>
             </div>
-            By clicking "Confirm & Pay", you accept our Terms & Conditions.
+            By completing payment, you accept our Terms & Conditions.
           </div>
         </div>
       </div>
@@ -397,6 +394,45 @@
   </div>
 
   <%- include('partials/footer') %>
+  <script>
+    (function(){
+      const clientId = '<%= paypalClientId || '' %>';
+      const currency = '<%= paypalCurrency || 'SGD' %>';
+      if (!clientId) return console.warn('PayPal Client ID not configured');
+
+      const sdkUrl = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=${encodeURIComponent(currency)}`;
+      const s = document.createElement('script');
+      s.src = sdkUrl;
+      s.onload = () => {
+        if (!window.paypal) return console.error('PayPal SDK failed to load');
+
+        paypal.Buttons({
+          createOrder() {
+            return fetch('/paypal/create-order', { method: 'POST', credentials: 'same-origin' })
+              .then(r => r.json())
+              .then(data => {
+                if (!data || !data.orderID) throw new Error('No orderID returned');
+                return data.orderID;
+              });
+          },
+          onApprove(data) {
+            return fetch('/paypal/capture-order', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderID: data.orderID })
+            }).then(r => r.json()).then(resp => {
+              if (resp && resp.redirect) return window.location = resp.redirect;
+              if (resp && resp.success) return window.location = '/orders';
+              console.error('Capture failed', resp);
+            });
+          },
+          onError(err) { console.error('PayPal Buttons error', err); }
+        }).render('#paypal-button-container');
+      };
+      document.body.appendChild(s);
+    })();
+  </script>
   
   <script>
     lucide.createIcons();
