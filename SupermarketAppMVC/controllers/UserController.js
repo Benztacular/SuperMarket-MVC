@@ -186,7 +186,9 @@ function login(req, res) {
 
     req.session.userId = user.id;
 
-    const redirectTo = req.session.redirectTo || '/shopping';
+    // If admin, default landing should be the admin dashboard
+    const defaultRedirect = (user && user.role === 'admin') ? '/admin' : '/shopping';
+    const redirectTo = req.session.redirectTo || defaultRedirect;
     delete req.session.redirectTo;
 
     return res.redirect(redirectTo);
@@ -254,7 +256,9 @@ function verifyLogin2fa(req, res, next) {
     delete req.session._pendingLogin;
     delete req.session.tempUser;
 
-    const redirectTo = req.session.redirectTo || '/';
+    // If admin, send to admin dashboard by default after 2FA
+    const defaultAfter2fa = (req.session.user && req.session.user.role === 'admin') ? '/admin' : '/';
+    const redirectTo = req.session.redirectTo || defaultAfter2fa;
     delete req.session.redirectTo;
 
     res.redirect(redirectTo);

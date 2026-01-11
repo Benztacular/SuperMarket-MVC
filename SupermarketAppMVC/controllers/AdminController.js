@@ -187,4 +187,30 @@ module.exports = {
   adminEditUserPage,
   adminUpdateUser,
   adminDeleteUser,
+  // landing/dashboard
+  dashboard: function (req, res, next) {
+    // gather some quick stats for the admin landing page
+    const stats = {};
+    const queries = [
+      { key: 'users', sql: 'SELECT COUNT(*) AS cnt FROM users' },
+      { key: 'products', sql: 'SELECT COUNT(*) AS cnt FROM products' },
+      { key: 'orders', sql: 'SELECT COUNT(*) AS cnt FROM orders' }
+    ];
+
+    let i = 0;
+    function nextQuery(err) {
+      if (err) return next(err);
+      if (i >= queries.length) {
+        // render dashboard with sidebar and header
+        return res.render('adminDashboard', { stats, user: req.session.user || null });
+      }
+      const q = queries[i++];
+      db.query(q.sql, (qErr, rows) => {
+        if (qErr) return nextQuery(qErr);
+        stats[q.key] = (rows && rows[0] && (rows[0].cnt || rows[0].COUNT || Object.values(rows[0])[0])) ? Number(rows[0].cnt || Object.values(rows[0])[0]) : 0;
+        nextQuery();
+      });
+    }
+    nextQuery();
+  }
 };

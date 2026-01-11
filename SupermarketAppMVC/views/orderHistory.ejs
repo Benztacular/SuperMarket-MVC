@@ -425,6 +425,10 @@
                                                         <a href="/orders/<%= orderIdStr %>/receipt" target="" rel="noopener noreferrer" class="btn btn-outline-secondary rounded-pill fw-bold btn-sm py-2">
                                                             View Invoice
                                                         </a>
+                                                            <!-- Dummy refund button (non-functional in demo) -->
+                                                            <div class="d-grid">
+                                                                <button type="button" class="btn btn-outline-danger rounded-pill fw-bold btn-sm py-2 w-100" onclick="alert('Refund requests are disabled in this demo.'); return false;">Request Refund</button>
+                                                            </div>
                                                         <% if (order.status === 'Delivered') { %>
                                                             <a href="/orders/<%= orderIdStr %>/review" class="btn btn-success text-white rounded-pill fw-bold btn-sm py-2 d-flex align-items-center justify-content-center gap-2">
                                                                 <i data-lucide="star" style="width: 14px;"></i> Write Review

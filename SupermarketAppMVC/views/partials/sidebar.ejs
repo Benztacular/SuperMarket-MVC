@@ -1,0 +1,101 @@
+<!-- Admin sidebar partial: include this inside your layout (no DOCTYPE or body tags) -->
+<style>
+  :root{--sidebar-width:280px;--sidebar-width-collapsed:80px;--sidebar-bg:linear-gradient(180deg,#0f172a 0%,#020617 100%);--glass-border:1px solid rgba(255,255,255,.08);--transition-speed:300ms;--transition-ease:cubic-bezier(.2,.8,.2,1)}
+  /* Sidebar fixed below the header */
+  #admin-sidebar{position:fixed;left:0;top:var(--nav-height);height:calc(100vh - var(--nav-height));width:var(--sidebar-width);background:var(--sidebar-bg);border-right:var(--glass-border);transition:width var(--transition-speed) var(--transition-ease),left var(--transition-speed) var(--transition-ease),top var(--transition-speed) var(--transition-ease);z-index:60;display:flex;flex-direction:column;overflow:auto;box-shadow:4px 0 24px -4px rgba(0,0,0,.3)}
+  /* Body/Content offset to accommodate fixed sidebar */
+  body{transition:margin-left var(--transition-speed) var(--transition-ease);margin-left:var(--sidebar-width)}
+  body.sidebar-collapsed{margin-left:var(--sidebar-width-collapsed)}
+  body.sidebar-collapsed #admin-sidebar{width:var(--sidebar-width-collapsed)}
+  body.sidebar-collapsed .menu-label,body.sidebar-collapsed .menu-group-title,body.sidebar-collapsed .brand-text,body.sidebar-collapsed .brand-subtext,body.sidebar-collapsed .profile-chevron{opacity:0;pointer-events:none;display:none}
+  body.sidebar-collapsed .nav-link{justify-content:center;padding-left:0;padding-right:0}
+  body.sidebar-collapsed .profile-card{justify-content:center;padding:12px 0}
+  .nav-link{position:relative;color:#94a3b8;transition:all .2s ease;white-space:nowrap}
+  .nav-link:hover{background:rgba(255,255,255,.05);color:#f8fafc}
+  .nav-link.active{background:linear-gradient(90deg,rgba(99,102,241,.15) 0%,rgba(168,85,247,.15) 100%);color:#fff;border:1px solid rgba(139,92,246,.2)}
+  .nav-link.active::before{content:'';position:absolute;left:0;top:10%;bottom:10%;width:3px;background:#8b5cf6;border-radius:0 4px 4px 0}
+  .icon-box{min-width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:8px}
+  .nav-link.active .icon-box{background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;box-shadow:0 4px 12px rgba(124,58,237,.3)}
+  body.sidebar-collapsed .nav-link[data-tooltip]:hover::after{content:attr(data-tooltip);position:absolute;left:100%;top:50%;transform:translateY(-50%) translateX(10px);background:#1e293b;color:#fff;padding:6px 12px;border-radius:6px;font-size:.75rem;font-weight:500;white-space:nowrap;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1)}
+  .rainbow-text{background:linear-gradient(90deg,#f472b6,#a78bfa,#60a5fa,#34d399,#f472b6);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 4s linear infinite}
+  @keyframes shimmer{to{background-position:200% center}}
+  .profile-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);transition:all .2s}
+  .avatar-ring{background:linear-gradient(135deg,#6366f1,#a855f7);padding:2px;border-radius:12px}
+  .avatar-img{border-radius:10px;background-color:#1e293b}
+</style>
+
+<aside id="admin-sidebar" class="h-screen py-5 px-3" aria-label="Admin sidebar">
+  <div class="mb-6 px-2 flex items-center gap-3">
+    <div class="w-10 h-10 min-w-[2.5rem] rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shrink-0">
+      <span class="font-bold text-white tracking-tighter text-sm">FM</span>
+    </div>
+    <div class="brand-text flex flex-col justify-center">
+      <h1 class="font-bold text-lg text-slate-100 tracking-wide leading-tight">FreshMart</h1>
+      <span class="brand-subtext text-[10px] font-semibold tracking-widest uppercase rainbow-text">Admin Console</span>
+    </div>
+  </div>
+
+  <nav class="flex-1 space-y-6 overflow-y-auto px-1">
+    <div class="menu-group">
+      <p class="menu-group-title text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 pl-2">Main Menu</p>
+      <div class="space-y-1">
+        <% const _menu = (typeof menuGroups !== 'undefined' && Array.isArray(menuGroups)) ? menuGroups : (typeof menuItems !== 'undefined' && Array.isArray(menuItems) ? menuItems : [
+             { label: 'Dashboard', icon: 'home', href: '/admin', active: true },
+             { label: 'Users', icon: 'users', href: '/admin/users', active: false },
+             { label: 'Products', icon: 'package', href: '/admin/products', active: false },
+             { label: 'Orders', icon: 'shopping-cart', href: '/admin/orders', active: false },
+             { label: 'Settings', icon: 'settings', href: '/admin/settings', active: false }
+        ]);
+        _menu.forEach(function(item){ %>
+          <a href="<%= item.href %>" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg group <%= item.active ? 'active' : '' %>" data-tooltip="<%= item.label %>">
+            <span class="icon-box">
+              <i data-lucide="<%= item.icon %>" class="w-5 h-5"></i>
+            </span>
+            <span class="menu-label font-medium text-sm transition-opacity duration-200"><%= item.label %></span>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+  </nav>
+
+  <div class="mt-auto pt-4 border-t border-slate-700/30">
+    <div class="profile-card rounded-xl p-2.5 flex items-center gap-3 cursor-pointer group">
+      <div class="avatar-ring shrink-0 w-10 h-10">
+        <img src="<%= (user && user.avatar) ? user.avatar : 'https://api.dicebear.com/7.x/initials/svg?seed=Admin&backgroundColor=1e293b' %>" alt="User" class="avatar-img w-full h-full object-cover">
+      </div>
+      <div class="profile-info flex-1 min-w-0">
+        <h4 class="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors"><%= (user && user.name) ? user.name : 'Admin User' %></h4>
+        <p class="text-xs text-slate-400 truncate rainbow-text"><%= (user && user.role) ? user.role : 'Super Admin' %></p>
+      </div>
+      <i data-lucide="chevron-right" class="w-4 h-4 text-slate-500 profile-chevron group-hover:text-slate-300"></i>
+    </div>
+  </div>
+</aside>
+
+<!-- Collapse Toggle Tab -->
+<div id="sidebar-collapse-tab" role="button" aria-label="Toggle sidebar" title="Toggle Sidebar" style="position:fixed;left:var(--sidebar-width);top:calc(var(--nav-height) + 12px);width:24px;height:48px;background:#0f172a;border:var(--glass-border);border-left:none;border-radius:0 8px 8px 0;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:40;color:#94a3b8;transition:left var(--transition-speed) var(--transition-ease),top var(--transition-speed) var(--transition-ease);">
+  <i data-lucide="chevron-left" class="w-5 h-5"></i>
+</div>
+
+<script>
+  if (typeof lucide !== 'undefined' && lucide && typeof lucide.createIcons === 'function') {
+    lucide.createIcons();
+  }
+  (function(){
+    var body = document.body;
+    var toggleBtn = document.getElementById('sidebar-collapse-tab');
+    var storageKey = 'adminSidebarCollapsed_v2';
+    function setCollapsed(isCollapsed){
+      if(isCollapsed) body.classList.add('sidebar-collapsed'); else body.classList.remove('sidebar-collapsed');
+      try{ localStorage.setItem(storageKey, isCollapsed ? '1' : '0'); }catch(e){}
+    }
+    try{ var saved = localStorage.getItem(storageKey) === '1'; setCollapsed(saved); }catch(e){}
+    if(toggleBtn){ toggleBtn.addEventListener('click', function(){ setCollapsed(!body.classList.contains('sidebar-collapsed')); }); }
+    var obs = new MutationObserver(function(){
+      var el = document.getElementById('sidebar-collapse-tab');
+      if(!el) return;
+      if(document.body.classList.contains('sidebar-collapsed')) el.style.left = 'var(--sidebar-width-collapsed)'; else el.style.left = 'var(--sidebar-width)';
+    });
+    obs.observe(document.documentElement || document.body, { attributes:true, attributeFilter:['class'] });
+  })();
+</script>

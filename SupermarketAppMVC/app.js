@@ -15,6 +15,8 @@ const CategoryController = require('./controllers/CategoryController');
 const PaypalController = require('./controllers/PaypalController');
 const ReviewController = require('./controllers/ReviewController');
 const DeliveryAddressController = require('./controllers/DeliveryAddressController');
+const WalletController = require('./controllers/WalletController');
+const AdminController = require('./controllers/AdminController');
 
 const db = require('./db');
 const AdminModel = require('./models/Admin'); // kept for compatibility
@@ -234,6 +236,10 @@ app.post('/profile/password', requireUser, ensure(UserController.changePassword,
 app.post('/profile/2fa/enable', requireUser, ensure(UserController.enable2fa, 'UserController.enable2fa'));
 app.post('/profile/2fa/disable', requireUser, ensure(UserController.disableTwoFactor, 'UserController.disableTwoFactor'));
 
+// Wallet
+app.get('/wallet', requireUser, ensure(WalletController.page, 'WalletController.page'));
+app.post('/wallet/topup', requireUser, ensure(WalletController.topUp, 'WalletController.topUp'));
+
 // Products (admin)
 app.get('/admin/products', requireAdmin, (req, res, next) => {
   const handler = ProductController.adminInventoryPage || ProductController.adminProductsPage || ProductController.list || ProductController.index;
@@ -298,6 +304,9 @@ app.put('/admin/api/categories/:id', requireAdmin, express.json(), CategoryContr
 app.delete('/admin/api/categories/:id', requireAdmin, CategoryController.remove);
 
 // Admin users
+// Admin landing/dashboard
+app.get('/admin', requireAdmin, ensure(AdminController.dashboard, 'AdminController.dashboard'));
+
 app.get('/admin/users', requireAdmin, ensure(UserController.adminUsersPage, 'UserController.adminUsersPage'));
 app.get('/admin/users/:id/edit', requireAdmin, ensure(UserController.adminEditUserPage, 'UserController.adminEditUserPage'));
 app.post('/admin/users/:id/edit', requireAdmin, ensure(UserController.adminUpdateUser, 'UserController.adminUpdateUser'));

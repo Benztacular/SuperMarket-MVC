@@ -51,7 +51,8 @@
         }
 
         /* Ensure content is pushed below the fixed navbar immediately (no JS required) */
-        body { padding-top: var(--nav-height); }
+        html, body { overflow-x: hidden; }
+        body { padding-top: var(--nav-height); overflow-x: hidden; }
 
         .app-navbar {
             position: fixed;
@@ -152,7 +153,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 font-sans" style="padding-top: var(--nav-height);">
+<body class="bg-slate-50 font-sans" style="padding-top: var(--nav-height); overflow-x: hidden;">
 
     <!-- MAIN NAVBAR CONTAINER -->
     <nav class="app-navbar fixed-top w-full">
@@ -183,7 +184,8 @@
                         const navItems = [
                             { icon: 'home', label: 'Home', link: '/' },
                             { icon: 'shopping-basket', label: 'Shopping', link: '/shopping' },
-                            { icon: 'inbox', label: 'Orders', link: '/orderHistory' }
+                            { icon: 'inbox', label: 'Orders', link: '/orderHistory' },
+                            { icon: 'wallet', label: 'Wallet', link: '/wallet' }
                         ];
                         // show admin shortcut for admin users
                         if (typeof user !== 'undefined' && user && String(user.role || '').toLowerCase() === 'admin') {

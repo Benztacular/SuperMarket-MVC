@@ -194,6 +194,7 @@ CREATE TABLE product_reviews (
   rating INT NOT NULL,
   review TEXT,
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_review_per_order (user_id, product_id, order_id),
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (product_id) REFERENCES products(id),
