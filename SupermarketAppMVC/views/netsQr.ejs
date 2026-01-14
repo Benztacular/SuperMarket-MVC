@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+        <%= title %>
+    </title>
+    <script src="https://unpkg.com/event-source-polyfill"></script> <!-- Include EventSource Polyfill -->
+</head>
+<body>
+    <h1>Scan the QR Code</h1>
+    <p id="status">Scan with your bank simulator app to complete payment</p>
+    <img src="<%= qrCodeUrl %>" alt="QR Code" />
+    <p id="timer">Time remaining: 5:00</p> <!-- Countdown Timer -->
+    
+    <img height="auto" width="40%" src="./images/netsQrInfo.png" /><br />
+    <a href="/">Cancel</a>
+
+    <script>
+        let s2sNetsTxnStatus; // Declare a variable to hold the EventSource instance
+
+        if (s2sNetsTxnStatus) {
+            s2sNetsTxnStatus.close();
+        }
+
+        const txnRetrievalRef = "<%= txnRetrievalRef %>"; // Transaction reference
+        const courseInitId = "<%= courseInitId %>"; // Course Init ID
+        const url = `/sse/payment-status/${txnRetrievalRef}`; 
+   
+        const headers = {
+            "api-key": "<%= apiKey %>",
+            "project-id": "<%= projectId %>",
+        };
+
+        console.log("NETS REQUEST response:", <%- JSON.stringify(fullNetsResponse) %>);
+
+
+        // Initialize EventSourcePolyfill with headers
+        s2sNetsTxnStatus = new EventSourcePolyfill(url, {
+            headers: headers,
+            heartbeatTimeout: 150000,
+        });
+
+        s2sNetsTxnStatus.addEventListener("message", (event) => {
+            const data = JSON.parse(event.data);
+            console.log("NETS Query Response:", data);
+
+            // Check for payment success
+            if (data.success) {
+                if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
+                window.location.href = `/nets-qr/success?txn_retrieval_ref=${txnRetrievalRef}`;
+            } else if (data.fail) {
+                if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
+                window.location.href = `/nets-qr/fail?txn_retrieval_ref=${txnRetrievalRef}`;
+            }
+        });
+
+        console.log("Initialized EventSourcePolyfill");
+
+        // Countdown Timer Logic
+        const timerElement = document.getElementById("timer");
+        const countdownDuration = 300; // 3 minutes in seconds
+        let remainingTime = countdownDuration;
+
+        const updateTimer = () => {
+            const minutes = Math.floor(remainingTime / 60);
+            const seconds = remainingTime % 60;
+            timerElement.textContent = `Time remaining: ${minutes}:${seconds.toString().padStart(2, "0")}`;
+            remainingTime--;
+
+            if (remainingTime < 0) {
+                clearInterval(timerInterval);
+                timerElement.textContent = "Transaction timed out.";
+
+                if (s2sNetsTxnStatus) {
+                    s2sNetsTxnStatus.close();
+                }
+                window.location.href = `/nets-qr/fail?txn_retrieval_ref=${txnRetrievalRef}`; // Redirect to fail page
+            }
+        };
+
+        // Start the timer
+        const timerInterval = setInterval(updateTimer, 1000);
+        updateTimer(); // Initial call to set the timer immediately
+
+
+    </script>
+</body>
+
+</html>

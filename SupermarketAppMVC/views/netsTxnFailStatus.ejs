@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Failed</title>
+</head>
+
+<body>
+        <div class="container">
+            <h1>
+                <%= message %>
+            </h1>
+            <p>Please try again later.</p>
+
+            <div className="netsQrPaymentGatewayWebpage">
+                <div className="netsQrTxnFailStatus">
+                    <img src=".././images/redCross.png" height="auto" width="30%" alt="Transaction Fail" />
+                    <h2 className="text">TRANSACTION FAILED</h2>
+                    <div className="button" id="btnFail">
+                    </div>
+                </div>
+            </div>
+        </div>
+</body>
+
+</html>

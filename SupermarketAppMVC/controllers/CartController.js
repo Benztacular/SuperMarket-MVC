@@ -477,7 +477,9 @@ exports.pay = function (req, res) {
         let selectedShippingMethodId = req.session.selectedShippingMethodId || null;
         const validSelectedShipping = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
         if (!validSelectedShipping) {
-          selectedShippingMethodId = shippingMethods[0]?.id || null;
+          // Default to Standard Shipping (price = 4.50) if available, otherwise first method
+          const standardShipping = shippingMethods.find(m => Number(m.price) === 4.50) || shippingMethods[0];
+          selectedShippingMethodId = standardShipping?.id || null;
         }
         if (!req.session.selectedShippingMethodId && selectedShippingMethodId) {
           req.session.selectedShippingMethodId = selectedShippingMethodId;
@@ -567,7 +569,9 @@ exports.checkoutPage = function (req, res) {
         let selectedShippingMethodId = req.session.selectedShippingMethodId || null;
         const validSelected = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
         if (!validSelected) {
-          selectedShippingMethodId = shippingMethods[0]?.id || null;
+          // Default to Standard Shipping (price = 4.50) if available, otherwise first method
+          const standardShipping = shippingMethods.find(m => Number(m.price) === 4.50) || shippingMethods[0];
+          selectedShippingMethodId = standardShipping?.id || null;
         }
         if (!req.session.selectedShippingMethodId && selectedShippingMethodId) {
           req.session.selectedShippingMethodId = selectedShippingMethodId;

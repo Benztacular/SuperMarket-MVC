@@ -384,7 +384,22 @@ function showReceipt(req, res) {
         });
       });
 
-      Promise.all([addressPromise, shippingPromise]).then(([deliveryAddress, shippingMethod]) => {
+      const paymentPromise = new Promise((resolve) => {
+        // Prefer explicit order.payment_method if present
+        if (order.payment_method) return resolve(order.payment_method);
+        // Next, check paypal_transactions
+        db.query('SELECT paypal_order_id FROM paypal_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [orderId], (pErr, pRows = []) => {
+          if (!pErr && pRows && pRows[0]) return resolve('PayPal');
+          // Next, check nets_transactions
+          db.query('SELECT nets_txn_id FROM nets_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [orderId], (nErr, nRows = []) => {
+            if (!nErr && nRows && nRows[0]) return resolve('NETS QR');
+            // Fallback to request query param or Card
+            return resolve(req.query?.method || 'Card');
+          });
+        });
+      });
+
+      Promise.all([addressPromise, shippingPromise, paymentPromise]).then(([deliveryAddress, shippingMethod, detectedPaymentMethod]) => {
         const itemsSubtotal = items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0);
         const shippingFee = Number(order.shipping_fee || 0);
         const data = {
@@ -396,7 +411,7 @@ function showReceipt(req, res) {
           totalAmount: Number(order.totalAmount != null ? order.totalAmount : (itemsSubtotal + shippingFee)),
           deliveryAddress,
           shippingMethod,
-          paymentMethod: order.payment_method || req.query?.method || 'Card',
+          paymentMethod: order.payment_method || req.query?.method || detectedPaymentMethod || 'Card',
           userName: sessionUser?.username || sessionUser?.name || sessionUser?.email,
           userAddress: sessionUser?.address || '',
           userPhone: sessionUser?.contact || sessionUser?.phone || ''

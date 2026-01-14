@@ -182,6 +182,46 @@ CREATE TABLE paypal_transactions (
   FOREIGN KEY (order_id) REFERENCES orders(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+
+-- ============================================================
+-- NETS QR TRANSACTIONS
+-- ============================================================
+DROP TABLE IF EXISTS nets_transactions;
+CREATE TABLE nets_transactions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+
+  user_id INT NOT NULL,
+  order_id INT NOT NULL,
+
+  -- your internal reference (generate this before calling NETS)
+  merchant_txn_ref VARCHAR(100) NOT NULL,
+
+  -- NETS / gateway reference IDs you receive back
+  nets_txn_id VARCHAR(100),
+  qr_payload TEXT,
+  
+  amount DECIMAL(10,2) NOT NULL,
+  currency VARCHAR(10) DEFAULT 'SGD',
+
+  payment_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+  -- examples: PENDING, SUCCESS, FAILED, CANCELLED, EXPIRED, REFUNDED
+
+  payment_time DATETIME NULL,
+
+  raw_response JSON NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
+
+  UNIQUE KEY uniq_merchant_txn_ref (merchant_txn_ref),
+
+  INDEX idx_user_id (user_id),
+  INDEX idx_order_id (order_id),
+  INDEX idx_status (payment_status),
+
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ============================================================
 -- PRODUCT REVIEWS
 -- ============================================================

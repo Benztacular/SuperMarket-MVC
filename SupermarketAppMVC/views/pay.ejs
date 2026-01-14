@@ -379,6 +379,12 @@
           <div class="btn-actions"></div>
 
           <div style="margin-top:12px;">
+            <form id="nets-qr-form" action="/nets-qr" method="POST" style="margin-bottom:12px;">
+              <input type="hidden" name="cartTotal" value="<%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %>">
+              <button type="submit" class="nets-qr-btn" style="width:100%; height:44px; padding:8px 12px; border-radius:10px; background:#f6c200; border:1px solid rgba(0,0,0,0.06); font-weight:700; display:flex; align-items:center; justify-content:center;">
+                <img src="/images/netsLogo.png" alt="Nets QR" style="height:24px; width:auto; display:block;">
+              </button>
+            </form>
             <div id="paypal-button-container"></div>
           </div>
 

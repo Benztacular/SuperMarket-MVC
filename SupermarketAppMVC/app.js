@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const flash = require('connect-flash');
 const multer = require('multer');
+const axios = require('axios');
 
 const ProductController = require('./controllers/ProductController');
 const CartController = require('./controllers/CartController');
@@ -17,6 +18,7 @@ const ReviewController = require('./controllers/ReviewController');
 const DeliveryAddressController = require('./controllers/DeliveryAddressController');
 const WalletController = require('./controllers/WalletController');
 const AdminController = require('./controllers/AdminController');
+const NetsController = require('./controllers/NetsController');
 
 const db = require('./db');
 const AdminModel = require('./models/Admin'); // kept for compatibility
@@ -195,6 +197,19 @@ app.get('/cart/checkout', requireUser, CartController.checkoutPage);
 app.post('/shipping/select', requireUser, ensure(CartController.selectShippingMethod, 'CartController.selectShippingMethod'));
 app.post('/paypal/create-order', requireUser, ensure(PaypalController.createOrder, 'PaypalController.createOrder'));
 app.post('/paypal/capture-order', requireUser, ensure(PaypalController.captureOrder, 'PaypalController.captureOrder'));
+// NETS QR integration
+app.post('/generateNETSQR', requireUser, ensure(NetsController.createQr, 'NetsController.createQr'));
+app.post('/nets-qr', requireUser, ensure(NetsController.createQr, 'NetsController.createQr'));
+app.get('/nets-qr/success', ensure(NetsController.successPage, 'NetsController.successPage'));
+app.get('/nets-qr/fail', ensure(NetsController.failPage, 'NetsController.failPage'));
+// NETS webhook (NETS may call GET or POST with txn params)
+app.post('/nets/webhook', express.json(), NetsController.webhook);
+app.get('/nets/webhook', NetsController.webhook);
+// Development helper to trigger webhook-like events (simulate NETS callback)
+app.get('/nets/debug-trigger', NetsController.debugTrigger);
+// SSE endpoint used by netsQr.ejs to receive payment status updates
+app.get('/sse/payment-status/:txnRetrievalRef', ensure(NetsController.ssePollingStatus, 'NetsController.ssePollingStatus'));
+app.get('/nets/query-status/:txn', NetsController.queryStatus);
 app.post('/cart/pay', requireUser, (req, res, next) => OrderController.checkout(req, res, next));
 app.post('/cart/checkout', requireUser, ensure(OrderController.checkout, 'OrderController.checkout'));
 app.post('/cart/clear', requireUser, CartController.clear);
@@ -324,6 +339,11 @@ app.post('/product/:id/review', ensure(ReviewController.post, 'ReviewController.
 // Order-level review page (review items in a specific order)
 app.get('/orders/:id/review', requireUser, ensure(ReviewController.orderReviewPage, 'ReviewController.orderReviewPage'));
 app.post('/orders/:id/review/:productId', requireUser, ensure(ReviewController.saveForOrder, 'ReviewController.saveForOrder'));
+
+// Error pages
+app.get('/401', (req, res) => {
+  res.render('401', { errors: req.flash('error') });
+});
 
 /* ---------- errors & server ---------- */
 app.use((req, res) => res.status(404).send('Not found'));
