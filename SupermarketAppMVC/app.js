@@ -19,6 +19,7 @@ const DeliveryAddressController = require('./controllers/DeliveryAddressControll
 const WalletController = require('./controllers/WalletController');
 const AdminController = require('./controllers/AdminController');
 const NetsController = require('./controllers/NetsController');
+const RefundController = require('./controllers/RefundController');
 
 const db = require('./db');
 const AdminModel = require('./models/Admin'); // kept for compatibility
@@ -254,6 +255,17 @@ app.post('/profile/2fa/disable', requireUser, ensure(UserController.disableTwoFa
 // Wallet
 app.get('/wallet', requireUser, ensure(WalletController.page, 'WalletController.page'));
 app.post('/wallet/topup', requireUser, ensure(WalletController.topUp, 'WalletController.topUp'));
+
+// Refunds (User)
+app.get('/orders/:orderId/refund', requireUser, ensure(RefundController.requestPage, 'RefundController.requestPage'));
+app.post('/orders/:orderId/refund', requireUser, ensure(RefundController.submitRequest, 'RefundController.submitRequest'));
+app.get('/user/refunds', requireUser, ensure(RefundController.userRefundHistory, 'RefundController.userRefundHistory'));
+
+// Refunds (Admin)
+app.get('/admin/refunds', requireAdmin, ensure(RefundController.adminListRefunds, 'RefundController.adminListRefunds'));
+app.get('/admin/refunds/:id', requireAdmin, ensure(RefundController.adminViewRefund, 'RefundController.adminViewRefund'));
+app.post('/admin/refunds/:id/approve', requireAdmin, ensure(RefundController.adminApproveRefund, 'RefundController.adminApproveRefund'));
+app.post('/admin/refunds/:id/deny', requireAdmin, ensure(RefundController.adminDenyRefund, 'RefundController.adminDenyRefund'));
 
 // Products (admin)
 app.get('/admin/products', requireAdmin, (req, res, next) => {

@@ -172,6 +172,7 @@ CREATE TABLE paypal_transactions (
   user_id INT NOT NULL,
   order_id INT NOT NULL,
   paypal_order_id VARCHAR(100) NOT NULL,
+  paypal_capture_id VARCHAR(100),
   payer_email VARCHAR(255),
   amount DECIMAL(10,2),
   currency VARCHAR(10),
@@ -181,7 +182,6 @@ CREATE TABLE paypal_transactions (
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (order_id) REFERENCES orders(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 
 -- ============================================================
 -- NETS QR TRANSACTIONS
@@ -198,7 +198,7 @@ CREATE TABLE nets_transactions (
 
   -- NETS / gateway reference IDs you receive back
   nets_txn_id VARCHAR(100),
-  qr_payload TEXT,
+  qr_payload TEXT,                 -- optional: store generated QR payload (if any)
   
   amount DECIMAL(10,2) NOT NULL,
   currency VARCHAR(10) DEFAULT 'SGD',
@@ -208,7 +208,7 @@ CREATE TABLE nets_transactions (
 
   payment_time DATETIME NULL,
 
-  raw_response JSON NULL,
+  raw_response JSON NULL,          -- store full callback/webhook response safely
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
 
@@ -274,5 +274,35 @@ CREATE TABLE wallet_transactions (
   FOREIGN KEY (wallet_id) REFERENCES user_wallets(id),
   FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Refund Request - Add Admin Approval Feature
+-- ============================================================
+
+-- Refunds table creation
+DROP TABLE IF EXISTS refunds;
+CREATE TABLE refunds (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_id INT NOT NULL,
+  user_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  currency VARCHAR(10) DEFAULT 'SGD',
+  method VARCHAR(50),
+  gateway_ref VARCHAR(100),
+  status ENUM('PENDING', 'APPROVED', 'DENIED', 'PROCESSING', 'SUCCESS', 'FAILED') DEFAULT 'PENDING',
+  reason TEXT,
+  admin_note TEXT,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Add Indexes to Track Refund Requests for Admin Approvals
+-- ============================================================
+CREATE INDEX idx_refunds_status ON refunds(status);
+CREATE INDEX idx_refunds_user_id ON refunds(user_id);
+CREATE INDEX idx_refunds_order_id ON refunds(order_id);
 
 SET FOREIGN_KEY_CHECKS = 1;

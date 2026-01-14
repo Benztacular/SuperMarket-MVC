@@ -532,14 +532,33 @@ function orderHistoryPage(req, res) {
         return acc;
       }, {});
 
-      orders.forEach(o => { o.items = itemsByOrder[o.id] || []; });
+      // Load refund status for each order
+      const refundSql = `
+        SELECT order_id, id, status, amount, createdAt, admin_note
+        FROM refunds
+        WHERE order_id IN (?)
+        ORDER BY createdAt DESC
+      `;
+      db.query(refundSql, [orderIds], (rErr, refundRows = []) => {
+        if (rErr) { console.error('Error loading refunds:', rErr); }
+        
+        const refundsByOrder = (refundRows || []).reduce((acc, r) => {
+          acc[r.order_id] = r;
+          return acc;
+        }, {});
 
-      return res.render('orderHistory', {
-        orders,
-        pageTitle: 'Order History',
-        showDelivered: true,
-        user: sessionUser,
-        isAdmin: sessionUser?.role === 'admin'
+        orders.forEach(o => { 
+          o.items = itemsByOrder[o.id] || [];
+          o.refund = refundsByOrder[o.id] || null;
+        });
+
+        return res.render('orderHistory', {
+          orders,
+          pageTitle: 'Order History',
+          showDelivered: true,
+          user: sessionUser,
+          isAdmin: sessionUser?.role === 'admin'
+        });
       });
     });
   });

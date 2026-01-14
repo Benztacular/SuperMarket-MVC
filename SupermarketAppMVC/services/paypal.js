@@ -53,4 +53,27 @@ async function captureOrder(orderId) {
   return data;
 }
 
-module.exports = { createOrder, captureOrder };
+async function refundCapture(captureId, amount, note = '') {
+  const accessToken = await getAccessToken();
+  const body = {
+    amount: {
+      currency_code: 'SGD',
+      value: String(amount)
+    }
+  };
+  if (note) body.note_to_payer = note;
+
+  const response = await fetch(`${PAYPAL_API}/v2/payments/captures/${captureId}/refund`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json();
+  console.log('PayPal refund response:', data);
+  return data;
+}
+
+module.exports = { createOrder, captureOrder, refundCapture };

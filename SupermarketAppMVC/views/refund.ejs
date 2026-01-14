@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Request Refund</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { background-color: #f8f9fa; }
+    .refund-container { max-width: 900px; margin: 40px auto; }
+    .order-summary { background: white; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .refund-form { background: white; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .product-item { border-bottom: 1px solid #e9ecef; padding: 15px 0; }
+    .product-item:last-child { border-bottom: none; }
+    .product-img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; }
+    .status-badge { font-size: 14px; padding: 6px 14px; border-radius: 20px; }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-approved { background: #d1ecf1; color: #0c5460; }
+    .status-denied { background: #f8d7da; color: #721c24; }
+    .status-success { background: #d4edda; color: #155724; }
+  </style>
+</head>
+<body>
+  <%- include('partials/header') %>
+
+  <div class="container refund-container">
+    <div class="d-flex align-items-center mb-4">
+      <a href="/orders" class="btn btn-outline-secondary me-3">
+        <i data-lucide="arrow-left"></i> Back to Orders
+      </a>
+      <h2 class="mb-0">Request Refund</h2>
+    </div>
+
+    <% if (existingRefund) { %>
+      <div class="alert alert-info">
+        <i data-lucide="info"></i>
+        <strong>Refund Request Already Exists</strong>
+        <p class="mb-0 mt-2">
+          Status: 
+          <span class="status-badge status-<%= existingRefund.status.toLowerCase() %>">
+            <%= existingRefund.status %>
+          </span>
+        </p>
+        <% if (existingRefund.admin_note) { %>
+          <p class="mb-0 mt-2"><strong>Admin Note:</strong> <%= existingRefund.admin_note %></p>
+        <% } %>
+      </div>
+    <% } %>
+
+    <!-- Order Summary -->
+    <div class="order-summary">
+      <h4 class="mb-3"><i data-lucide="package"></i> Order #<%= order.id %></h4>
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <p class="mb-1"><strong>Order Date:</strong> <%= new Date(order.orderDate).toLocaleDateString() %></p>
+          <p class="mb-1"><strong>Status:</strong> <%= order.status %></p>
+        </div>
+        <div class="col-md-6 text-md-end">
+          <p class="mb-1"><strong>Total Amount:</strong> $<%= Number(order.totalAmount || 0).toFixed(2) %></p>
+          <p class="mb-1"><strong>Shipping Fee:</strong> $<%= Number(order.shipping_fee || 0).toFixed(2) %></p>
+        </div>
+      </div>
+
+      <h5 class="mt-4 mb-3">Order Items:</h5>
+      <% items.forEach(item => { %>
+        <div class="product-item">
+          <div class="row align-items-center">
+            <div class="col-auto">
+              <img src="/images/<%= item.image %>" alt="<%= item.productName %>" class="product-img">
+            </div>
+            <div class="col">
+              <h6 class="mb-1"><%= item.productName %></h6>
+              <p class="mb-0 text-muted">Quantity: <%= item.quantity %> × $<%= item.price.toFixed(2) %></p>
+            </div>
+            <div class="col-auto">
+              <strong>$<%= (item.quantity * item.price).toFixed(2) %></strong>
+            </div>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+
+    <!-- Refund Form -->
+    <% if (!existingRefund) { %>
+      <div class="refund-form">
+        <h4 class="mb-4"><i data-lucide="dollar-sign"></i> Refund Request</h4>
+        
+        <form action="/orders/<%= order.id %>/refund" method="POST">
+          <input type="hidden" name="orderId" value="<%= order.id %>">
+          <div class="mb-3">
+            <label for="amount" class="form-label">Refund Amount (SGD) *</label>
+            <input 
+              type="number" 
+              class="form-control" 
+              id="amount" 
+              name="amount" 
+              step="0.01" 
+              min="0.01" 
+              max="<%= Number(order.totalAmount || 0) %>"
+              value="<%= Number(order.totalAmount || 0) %>"
+              required
+            >
+            <small class="text-muted">Maximum refund amount: $<%= Number(order.totalAmount || 0).toFixed(2) %></small>
+          </div>
+
+          <div class="mb-4">
+            <label for="reason" class="form-label">Reason for Refund *</label>
+            <textarea 
+              class="form-control" 
+              id="reason" 
+              name="reason" 
+              rows="4" 
+              required
+              placeholder="Please provide a detailed reason for requesting a refund..."
+            ></textarea>
+            <small class="text-muted">Be specific about why you're requesting a refund. This will help us process your request faster.</small>
+          </div>
+
+          <div class="alert alert-warning">
+            <i data-lucide="alert-triangle"></i>
+            <strong>Important:</strong> 
+            Once submitted, your refund request will be reviewed by our admin team. 
+            If approved, the refund amount will be credited to your wallet.
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary btn-lg">
+              <i data-lucide="send"></i> Submit Refund Request
+            </button>
+            <a href="/orders" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    <% } %>
+  </div>
+
+  <%- include('partials/footer') %>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

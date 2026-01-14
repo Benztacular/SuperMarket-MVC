@@ -303,11 +303,18 @@
                                                 if(order.status === 'Delivered') badgeClass = 'bg-success bg-opacity-10 text-success';
                                                 else if(order.status === 'Shipped') badgeClass = 'bg-warning bg-opacity-10 text-warning-emphasis';
                                                 else if(order.status === 'Cancelled') badgeClass = 'bg-danger bg-opacity-10 text-danger';
+                                                else if(order.status === 'Refunded') badgeClass = 'bg-info bg-opacity-10 text-info';
                                                 %>
                                                 
                                                 <span class="badge rounded-pill fw-bold px-3 py-1 <%= badgeClass %>">
                                                     <%= order.status %>
                                                 </span>
+
+                                                <% if (order.refund && order.refund.status === 'PENDING') { %>
+                                                    <span class="badge rounded-pill fw-bold px-3 py-1 bg-warning bg-opacity-10 text-warning">
+                                                        <i data-lucide="clock" style="width: 12px; height: 12px;"></i> Refund Pending
+                                                    </span>
+                                                <% } %>
                                             </div>
                                             <p class="text-muted small mb-0 fw-medium">
                                                 <%= orderDate ? new Date(orderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-' %> • <%= itemsList.length %> Items
@@ -425,10 +432,40 @@
                                                         <a href="/orders/<%= orderIdStr %>/receipt" target="" rel="noopener noreferrer" class="btn btn-outline-secondary rounded-pill fw-bold btn-sm py-2">
                                                             View Invoice
                                                         </a>
-                                                            <!-- Dummy refund button (non-functional in demo) -->
+
+                                                        <!-- Refund Button Logic -->
+                                                        <% 
+                                                        const eligibleForRefund = ['Pending', 'Paid', 'Delivered'].includes(order.status);
+                                                        const hasRefund = order.refund && order.refund.id;
+                                                        %>
+                                                        
+                                                        <% if (hasRefund) { %>
+                                                            <% 
+                                                            let refundBadgeClass = 'bg-warning';
+                                                            let refundText = order.refund.status;
+                                                            if (order.refund.status === 'SUCCESS') {
+                                                                refundBadgeClass = 'bg-success';
+                                                                refundText = 'Refunded';
+                                                            } else if (order.refund.status === 'DENIED') {
+                                                                refundBadgeClass = 'bg-danger';
+                                                            } else if (order.refund.status === 'APPROVED') {
+                                                                refundBadgeClass = 'bg-info';
+                                                            }
+                                                            %>
                                                             <div class="d-grid">
-                                                                <button type="button" class="btn btn-outline-danger rounded-pill fw-bold btn-sm py-2 w-100" onclick="alert('Refund requests are disabled in this demo.'); return false;">Request Refund</button>
+                                                                <button type="button" class="btn <%= refundBadgeClass %> text-white rounded-pill fw-bold btn-sm py-2 w-100" 
+                                                                    onclick="showRefundStatus('<%= order.refund.status %>', '<%= order.refund.amount %>', '<%= order.refund.admin_note || '' %>')">
+                                                                    <i data-lucide="info"></i> Refund: <%= refundText %>
+                                                                </button>
                                                             </div>
+                                                        <% } else if (eligibleForRefund) { %>
+                                                            <div class="d-grid">
+                                                                <a href="/orders/<%= orderIdStr %>/refund" class="btn btn-outline-danger rounded-pill fw-bold btn-sm py-2 w-100">
+                                                                    <i data-lucide="rotate-ccw"></i> Request Refund
+                                                                </a>
+                                                            </div>
+                                                        <% } %>
+
                                                         <% if (order.status === 'Delivered') { %>
                                                             <a href="/orders/<%= orderIdStr %>/review" class="btn btn-success text-white rounded-pill fw-bold btn-sm py-2 d-flex align-items-center justify-content-center gap-2">
                                                                 <i data-lucide="star" style="width: 14px;"></i> Write Review
@@ -612,6 +649,64 @@
             document.getElementById(`review-btn-${id}`).style.display = 'none';
             // Show success
             document.getElementById(`review-success-${id}`).classList.add('open');
+        }
+
+        // Refund Status Modal
+        function showRefundStatus(status, amount, adminNote) {
+            let statusText = status;
+            let statusColor = 'warning';
+            let message = '';
+
+            if (status === 'PENDING') {
+                statusText = 'Pending Review';
+                statusColor = 'warning';
+                message = 'Your refund request is being reviewed by our admin team.';
+            } else if (status === 'APPROVED' || status === 'SUCCESS') {
+                statusText = 'Approved';
+                statusColor = 'success';
+                message = `Your refund of $${amount} has been processed and credited to your wallet.`;
+            } else if (status === 'DENIED') {
+                statusText = 'Denied';
+                statusColor = 'danger';
+                message = 'Your refund request has been denied.';
+            }
+
+            let adminNoteHtml = '';
+            if (adminNote && adminNote.trim()) {
+                adminNoteHtml = `<div class="alert alert-info mt-3"><strong>Admin Note:</strong> ${adminNote}</div>`;
+            }
+
+            const modalHtml = `
+                <div class="modal fade" id="refundStatusModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Refund Status</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="text-center mb-3">
+                                    <span class="badge bg-${statusColor} rounded-pill px-4 py-2 fs-6">${statusText}</span>
+                                </div>
+                                <p>${message}</p>
+                                ${adminNoteHtml}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const existingModal = document.getElementById('refundStatusModal');
+            if (existingModal) existingModal.remove();
+
+            // Append and show
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('refundStatusModal'));
+            modal.show();
         }
     </script>
 </body>

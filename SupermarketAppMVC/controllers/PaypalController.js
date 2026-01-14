@@ -174,9 +174,10 @@ async function captureOrder(req, res, next) {
                         const currency = (payments.amount && payments.amount.currency_code) || (process.env.PAYPAL_CURRENCY || 'SGD');
                         const paymentStatus = payments.status || capture.status || 'COMPLETED';
                         const paymentTime = (payments && payments.update_time) ? new Date(payments.update_time) : new Date();
+                        const captureId = (payments && payments.id) || null;
 
-                        conn.query('INSERT INTO paypal_transactions (user_id, order_id, paypal_order_id, payer_email, amount, currency, payment_status, payment_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                          [userId, orderId, orderID, payerEmail, amount, currency, paymentStatus, paymentTime], (ptErr) => {
+                        conn.query('INSERT INTO paypal_transactions (user_id, order_id, paypal_order_id, paypal_capture_id, payer_email, amount, currency, payment_status, payment_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                          [userId, orderId, orderID, captureId, payerEmail, amount, currency, paymentStatus, paymentTime], (ptErr) => {
                             if (ptErr) return conn.rollback(() => next(ptErr));
 
                             conn.commit((cmErr) => {
