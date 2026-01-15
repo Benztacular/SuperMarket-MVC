@@ -7,138 +7,895 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    body { background-color: #f8f9fa; }
-    .refund-container { max-width: 900px; margin: 40px auto; }
-    .order-summary { background: white; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .refund-form { background: white; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .product-item { border-bottom: 1px solid #e9ecef; padding: 15px 0; }
-    .product-item:last-child { border-bottom: none; }
-    .product-img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; }
-    .status-badge { font-size: 14px; padding: 6px 14px; border-radius: 20px; }
-    .status-pending { background: #fff3cd; color: #856404; }
-    .status-approved { background: #d1ecf1; color: #0c5460; }
-    .status-denied { background: #f8d7da; color: #721c24; }
-    .status-success { background: #d4edda; color: #155724; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    * {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    body { 
+      background: #f8faf9;
+      min-height: 100vh;
+      padding: 40px 0;
+    }
+    
+    .refund-container { 
+      max-width: 850px; 
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    
+    .refund-card {
+      background: white;
+      border-radius: 20px;
+      padding: 50px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      border: 1px solid #e5e7eb;
+    }
+    
+    .header-section {
+      text-align: center;
+      margin-bottom: 40px;
+      padding-bottom: 30px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .refund-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+    }
+    
+    .refund-icon i {
+      width: 40px;
+      height: 40px;
+      color: white;
+    }
+    
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 12px;
+    }
+    
+    .subtitle {
+      color: #6b7280;
+      font-size: 16px;
+    }
+    
+    .order-info {
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+      padding: 25px;
+      border-radius: 16px;
+      margin-bottom: 35px;
+      border-left: 4px solid #10b981;
+    }
+    
+    .order-info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+    
+    .order-detail {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    .order-detail label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #059669;
+      font-weight: 600;
+    }
+    
+    .order-detail .value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .section-title i {
+      color: #10b981;
+      width: 24px;
+      height: 24px;
+    }
+    
+    .form-label {
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 12px;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .required {
+      color: #ef4444;
+    }
+    
+    .form-control, .form-select {
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 15px;
+      transition: all 0.3s ease;
+      background: white;
+    }
+    
+    .form-control:focus, .form-select:focus {
+      border-color: #10b981;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+      background: white;
+    }
+    
+    .reason-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 25px;
+    }
+    
+    .reason-card {
+      position: relative;
+    }
+    
+    .reason-card input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .reason-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 500;
+      color: #4b5563;
+    }
+    
+    .reason-label i {
+      width: 20px;
+      height: 20px;
+      color: #9ca3af;
+      transition: all 0.3s ease;
+    }
+    
+    .reason-card input[type="radio"]:checked + .reason-label {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-color: #10b981;
+      color: white;
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.25);
+    }
+    
+    .reason-card input[type="radio"]:checked + .reason-label i {
+      color: white;
+    }
+    
+    .reason-label:hover {
+      border-color: #10b981;
+      transform: translateY(-2px);
+    }
+    
+    .amount-input-wrapper {
+      position: relative;
+    }
+    
+    .currency-symbol {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 18px;
+      font-weight: 600;
+      color: #10b981;
+    }
+    
+    .amount-input {
+      padding-left: 45px !important;
+      font-size: 24px !important;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    
+    .amount-slider {
+      margin-top: 15px;
+    }
+    
+    .amount-slider input[type="range"] {
+      width: 100%;
+      height: 8px;
+      border-radius: 5px;
+      background: #e5e7eb;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    }
+    
+    .amount-slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.4);
+    }
+    
+    .amount-slider input[type="range"]::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.4);
+    }
+    
+    .amount-limits {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    
+    textarea.form-control {
+      resize: vertical;
+      min-height: 120px;
+    }
+    
+    .char-counter {
+      text-align: right;
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 6px;
+    }
+    
+    /* Image Upload Styling */
+    .upload-area {
+      border: 2px dashed #d1d5db;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: #f9fafb;
+      position: relative;
+    }
+    
+    .upload-area:hover {
+      border-color: #10b981;
+      background: #f0fdf4;
+    }
+    
+    .upload-area.dragover {
+      border-color: #10b981;
+      background: #dcfce7;
+    }
+    
+    .upload-icon {
+      width: 48px;
+      height: 48px;
+      color: #10b981;
+      margin: 0 auto 15px;
+    }
+    
+    .upload-text {
+      font-size: 15px;
+      color: #4b5563;
+      margin-bottom: 8px;
+    }
+    
+    .upload-hint {
+      font-size: 13px;
+      color: #9ca3af;
+    }
+    
+    #reasonImage {
+      display: none;
+    }
+    
+    .preview-container {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      background: #f9fafb;
+      border-radius: 12px;
+      border: 2px solid #e5e7eb;
+    }
+    
+    .preview-container.active {
+      display: block;
+    }
+    
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .preview-title {
+      font-weight: 600;
+      color: #1a1a1a;
+      font-size: 14px;
+    }
+    
+    .remove-btn {
+      background: #fee2e2;
+      color: #dc2626;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .remove-btn:hover {
+      background: #fecaca;
+    }
+    
+    .preview-image {
+      width: 100%;
+      max-height: 300px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .alert {
+      border-radius: 12px;
+      border: none;
+      padding: 20px;
+      display: flex;
+      align-items: start;
+      gap: 12px;
+      margin-bottom: 30px;
+    }
+    
+    .alert i {
+      margin-top: 2px;
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+    }
+    
+    .alert-info {
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+      color: #1e40af;
+    }
+    
+    .alert-warning {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      color: #92400e;
+    }
+    
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border: none;
+      padding: 18px 32px;
+      font-weight: 600;
+      font-size: 18px;
+      border-radius: 12px;
+      color: white;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+    }
+    
+    .btn-cancel {
+      width: 100%;
+      background: white;
+      border: 2px solid #e5e7eb;
+      padding: 16px 32px;
+      font-weight: 600;
+      font-size: 16px;
+      border-radius: 12px;
+      color: #6b7280;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      margin-top: 12px;
+    }
+    
+    .btn-cancel:hover {
+      background: #f3f4f6;
+      border-color: #d1d5db;
+      color: #374151;
+    }
+    
+    .form-section {
+      margin-bottom: 35px;
+    }
+    
+    .help-text {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    
+    .status-badge { 
+      font-size: 13px; 
+      padding: 8px 16px; 
+      border-radius: 20px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    
+    .status-pending { 
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+      color: white;
+    }
+    
+    .status-approved { 
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+      color: white;
+    }
+    
+    .status-denied { 
+      background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+      color: white;
+    }
+    
+    .status-success { 
+      background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+      color: white;
+    }
+    
+    @media (max-width: 768px) {
+      .refund-card {
+        padding: 30px 25px;
+      }
+      
+      h1 {
+        font-size: 26px;
+      }
+      
+      .reason-options {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
   <%- include('partials/header') %>
 
   <div class="container refund-container">
-    <div class="d-flex align-items-center mb-4">
-      <a href="/orders" class="btn btn-outline-secondary me-3">
-        <i data-lucide="arrow-left"></i> Back to Orders
-      </a>
-      <h2 class="mb-0">Request Refund</h2>
-    </div>
-
-    <% if (existingRefund) { %>
-      <div class="alert alert-info">
-        <i data-lucide="info"></i>
-        <strong>Refund Request Already Exists</strong>
-        <p class="mb-0 mt-2">
-          Status: 
-          <span class="status-badge status-<%= existingRefund.status.toLowerCase() %>">
-            <%= existingRefund.status %>
-          </span>
-        </p>
-        <% if (existingRefund.admin_note) { %>
-          <p class="mb-0 mt-2"><strong>Admin Note:</strong> <%= existingRefund.admin_note %></p>
-        <% } %>
-      </div>
-    <% } %>
-
-    <!-- Order Summary -->
-    <div class="order-summary">
-      <h4 class="mb-3"><i data-lucide="package"></i> Order #<%= order.id %></h4>
-      <div class="row mb-3">
-        <div class="col-md-6">
-          <p class="mb-1"><strong>Order Date:</strong> <%= new Date(order.orderDate).toLocaleDateString() %></p>
-          <p class="mb-1"><strong>Status:</strong> <%= order.status %></p>
+    <div class="refund-card">
+      <!-- Header -->
+      <div class="header-section">
+        <div class="refund-icon">
+          <i data-lucide="rotate-ccw"></i>
         </div>
-        <div class="col-md-6 text-md-end">
-          <p class="mb-1"><strong>Total Amount:</strong> $<%= Number(order.totalAmount || 0).toFixed(2) %></p>
-          <p class="mb-1"><strong>Shipping Fee:</strong> $<%= Number(order.shipping_fee || 0).toFixed(2) %></p>
-        </div>
+        <h1>Request a Refund</h1>
+        <p class="subtitle">Tell us why you'd like a refund and we'll process your request</p>
       </div>
 
-      <h5 class="mt-4 mb-3">Order Items:</h5>
-      <% items.forEach(item => { %>
-        <div class="product-item">
-          <div class="row align-items-center">
-            <div class="col-auto">
-              <img src="/images/<%= item.image %>" alt="<%= item.productName %>" class="product-img">
-            </div>
-            <div class="col">
-              <h6 class="mb-1"><%= item.productName %></h6>
-              <p class="mb-0 text-muted">Quantity: <%= item.quantity %> × $<%= item.price.toFixed(2) %></p>
-            </div>
-            <div class="col-auto">
-              <strong>$<%= (item.quantity * item.price).toFixed(2) %></strong>
-            </div>
+      <!-- Existing Refund Alert -->
+      <% if (existingRefund) { %>
+        <div class="alert alert-info">
+          <i data-lucide="info"></i>
+          <div style="flex: 1;">
+            <strong style="font-size: 16px;">You already have a refund request for this order</strong>
+            <p class="mb-2 mt-2" style="margin-bottom: 0;">
+              Current Status: 
+              <span class="status-badge status-<%= existingRefund.status.toLowerCase() %>">
+                <%= existingRefund.status %>
+              </span>
+            </p>
+            <% if (existingRefund.admin_note) { %>
+              <p class="mb-0 mt-2"><strong>Admin Note:</strong> <%= existingRefund.admin_note %></p>
+            <% } %>
           </div>
         </div>
-      <% }); %>
-    </div>
+      <% } %>
 
-    <!-- Refund Form -->
-    <% if (!existingRefund) { %>
-      <div class="refund-form">
-        <h4 class="mb-4"><i data-lucide="dollar-sign"></i> Refund Request</h4>
-        
-        <form action="/orders/<%= order.id %>/refund" method="POST">
+      <!-- Order Information -->
+      <div class="order-info">
+        <div class="order-info-grid">
+          <div class="order-detail">
+            <label>Order Number</label>
+            <div class="value">#<%= order.id %></div>
+          </div>
+          <div class="order-detail">
+            <label>Order Date</label>
+            <div class="value"><%= new Date(order.orderDate).toLocaleDateString() %></div>
+          </div>
+          <div class="order-detail">
+            <label>Order Total</label>
+            <div class="value" style="color: #10b981;">$<%= Number(order.totalAmount || 0).toFixed(2) %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Refund Form -->
+      <% if (!existingRefund) { %>
+        <form action="/orders/<%= order.id %>/refund" method="POST" enctype="multipart/form-data" id="refundForm">
           <input type="hidden" name="orderId" value="<%= order.id %>">
-          <div class="mb-3">
-            <label for="amount" class="form-label">Refund Amount (SGD) *</label>
-            <input 
-              type="number" 
-              class="form-control" 
-              id="amount" 
-              name="amount" 
-              step="0.01" 
-              min="0.01" 
-              max="<%= Number(order.totalAmount || 0) %>"
-              value="<%= Number(order.totalAmount || 0) %>"
-              required
-            >
-            <small class="text-muted">Maximum refund amount: $<%= Number(order.totalAmount || 0).toFixed(2) %></small>
+          
+          <!-- Refund Reason Selection -->
+          <div class="form-section">
+            <h3 class="section-title">
+              <i data-lucide="help-circle"></i>
+              What's the reason for your refund?
+            </h3>
+            
+            <div class="reason-options">
+              <div class="reason-card">
+                <input type="radio" name="reason_category" id="reason1" value="Product Defective" required>
+                <label for="reason1" class="reason-label">
+                  <i data-lucide="alert-circle"></i>
+                  <span>Product Defective</span>
+                </label>
+              </div>
+              
+              <div class="reason-card">
+                <input type="radio" name="reason_category" id="reason2" value="Wrong Item Received">
+                <label for="reason2" class="reason-label">
+                  <i data-lucide="x-circle"></i>
+                  <span>Wrong Item</span>
+                </label>
+              </div>
+              
+              <div class="reason-card">
+                <input type="radio" name="reason_category" id="reason3" value="Not As Described">
+                <label for="reason3" class="reason-label">
+                  <i data-lucide="file-question"></i>
+                  <span>Not As Described</span>
+                </label>
+              </div>
+              
+              <div class="reason-card">
+                <input type="radio" name="reason_category" id="reason4" value="Delivery Issues">
+                <label for="reason4" class="reason-label">
+                  <i data-lucide="truck"></i>
+                  <span>Delivery Issues</span>
+                </label>
+              </div>
+              
+              <div class="reason-card">
+                <input type="radio" name="reason_category" id="reason5" value="Changed Mind">
+                <label for="reason5" class="reason-label">
+                  <i data-lucide="undo-2"></i>
+                  <span>Changed Mind</span>
+                </label>
+              </div>
+              
+              <div class="reason-card">
+                <input type="radio" name="reason_category" id="reason6" value="Other">
+                <label for="reason6" class="reason-label">
+                  <i data-lucide="more-horizontal"></i>
+                  <span>Other Reason</span>
+                </label>
+              </div>
+            </div>
           </div>
 
-          <div class="mb-4">
-            <label for="reason" class="form-label">Reason for Refund *</label>
+          <!-- Refund Amount -->
+          <div class="form-section">
+            <h3 class="section-title">
+              <i data-lucide="dollar-sign"></i>
+              Refund Amount
+            </h3>
+            
+            <label for="amount" class="form-label">
+              How much would you like to refund? <span class="required">*</span>
+            </label>
+            
+            <div class="amount-input-wrapper">
+              <span class="currency-symbol">$</span>
+              <input 
+                type="number" 
+                class="form-control amount-input" 
+                id="amount" 
+                name="amount" 
+                step="0.01" 
+                min="0.01" 
+                max="<%= Number(order.totalAmount || 0) %>"
+                value="<%= Number(order.totalAmount || 0) %>"
+                required
+              >
+            </div>
+            
+            <div class="amount-slider">
+              <input 
+                type="range" 
+                id="amountSlider" 
+                min="0.01" 
+                max="<%= Number(order.totalAmount || 0) %>" 
+                step="0.01" 
+                value="<%= Number(order.totalAmount || 0) %>"
+              >
+              <div class="amount-limits">
+                <span>$0.01</span>
+                <span>Max: $<%= Number(order.totalAmount || 0).toFixed(2) %></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Additional Details -->
+          <div class="form-section">
+            <h3 class="section-title">
+              <i data-lucide="message-square"></i>
+              Additional Details
+            </h3>
+            
+            <label for="additional_details" class="form-label">
+              Please explain your refund request <span class="required">*</span>
+            </label>
+            
             <textarea 
               class="form-control" 
-              id="reason" 
-              name="reason" 
-              rows="4" 
+              id="additional_details" 
+              name="additional_details" 
+              rows="5" 
               required
-              placeholder="Please provide a detailed reason for requesting a refund..."
+              maxlength="500"
+              placeholder="Provide detailed information about your refund request. Include any relevant details about the product condition, delivery issues, or other concerns..."
             ></textarea>
-            <small class="text-muted">Be specific about why you're requesting a refund. This will help us process your request faster.</small>
+            
+            <div class="char-counter">
+              <span id="charCount">0</span> / 500 characters
+            </div>
+            
+            <p class="help-text">
+              <i data-lucide="lightbulb" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
+              Tip: Detailed explanations help us process your request faster. Include specifics about what went wrong.
+            </p>
           </div>
 
+          <!-- Image Upload -->
+          <div class="form-section">
+            <h3 class="section-title">
+              <i data-lucide="image"></i>
+              Supporting Evidence (Optional)
+            </h3>
+            
+            <label class="form-label">
+              Upload photos to support your refund request
+            </label>
+            
+            <div class="upload-area" id="uploadArea">
+              <i data-lucide="upload" class="upload-icon"></i>
+              <p class="upload-text">Click to upload or drag and drop</p>
+              <p class="upload-hint">PNG, JPG, JPEG up to 5MB</p>
+            </div>
+            
+            <input 
+              type="file" 
+              id="reasonImage" 
+              name="reasonImage" 
+              accept="image/png,image/jpeg,image/jpg"
+            >
+            
+            <div class="preview-container" id="previewContainer">
+              <div class="preview-header">
+                <span class="preview-title">
+                  <i data-lucide="check-circle" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle; color: #10b981;"></i>
+                  Image uploaded
+                </span>
+                <button type="button" class="remove-btn" id="removeBtn">
+                  <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+                  Remove
+                </button>
+              </div>
+              <img id="previewImage" class="preview-image" alt="Preview">
+            </div>
+            
+            <p class="help-text" style="margin-top: 12px;">
+              <i data-lucide="info" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
+              Upload clear photos showing product defects, wrong items, or delivery damage to strengthen your request.
+            </p>
+          </div>
+
+          <!-- Important Notice -->
           <div class="alert alert-warning">
             <i data-lucide="alert-triangle"></i>
-            <strong>Important:</strong> 
-            Once submitted, your refund request will be reviewed by our admin team. 
-            If approved, the refund amount will be credited to your wallet.
+            <div>
+              <strong style="font-size: 15px;">Before You Submit</strong>
+              <p style="margin: 8px 0 0 0; font-size: 14px;">
+                Your refund request will be reviewed within 24-48 hours. If approved, the refund will be credited to your wallet within 3-5 business days. You'll receive email notifications about your request status.
+              </p>
+            </div>
           </div>
 
-          <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-primary btn-lg">
-              <i data-lucide="send"></i> Submit Refund Request
-            </button>
-            <a href="/orders" class="btn btn-outline-secondary">Cancel</a>
-          </div>
+          <!-- Submit Buttons -->
+          <button type="submit" class="btn-submit">
+            <i data-lucide="send"></i>
+            Submit Refund Request
+          </button>
+          
+          <a href="/orders" class="btn-cancel">
+            <i data-lucide="x"></i>
+            Cancel
+          </a>
         </form>
-      </div>
-    <% } %>
+      <% } else { %>
+        <a href="/orders" class="btn-cancel" style="margin-top: 0;">
+          <i data-lucide="arrow-left"></i>
+          Back to Orders
+        </a>
+      <% } %>
+    </div>
   </div>
 
   <%- include('partials/footer') %>
 
   <script>
     lucide.createIcons();
+    
+    // Sync amount input with slider
+    const amountInput = document.getElementById('amount');
+    const amountSlider = document.getElementById('amountSlider');
+    
+    if (amountInput && amountSlider) {
+      amountSlider.addEventListener('input', function() {
+        amountInput.value = parseFloat(this.value).toFixed(2);
+      });
+      
+      amountInput.addEventListener('input', function() {
+        amountSlider.value = this.value;
+      });
+    }
+    
+    // Character counter
+    const reasonTextarea = document.getElementById('additional_details');
+    const charCount = document.getElementById('charCount');
+    
+    if (reasonTextarea && charCount) {
+      reasonTextarea.addEventListener('input', function() {
+        charCount.textContent = this.value.length;
+      });
+    }
+    
+    // Image upload handling
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('reasonImage');
+    const previewContainer = document.getElementById('previewContainer');
+    const previewImage = document.getElementById('previewImage');
+    const removeBtn = document.getElementById('removeBtn');
+    
+    if (uploadArea && fileInput) {
+      // Click to upload
+      uploadArea.addEventListener('click', () => {
+        fileInput.click();
+      });
+      
+      // Drag and drop
+      uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+      });
+      
+      uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+      });
+      
+      uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          handleFile(files[0]);
+        }
+      });
+      
+      // File input change
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          handleFile(e.target.files[0]);
+        }
+      });
+      
+      // Remove button
+      if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+          fileInput.value = '';
+          previewContainer.classList.remove('active');
+          previewImage.src = '';
+          lucide.createIcons();
+        });
+      }
+    }
+    
+    function handleFile(file) {
+      // Validate file type
+      const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+      if (!validTypes.includes(file.type)) {
+        alert('Please upload a PNG, JPG, or JPEG image.');
+        return;
+      }
+      
+      // Validate file size (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size must be less than 5MB.');
+        return;
+      }
+      
+      // Create file list and assign to input
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      fileInput.files = dataTransfer.files;
+      
+      // Show preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImage.src = e.target.result;
+        previewContainer.classList.add('active');
+        lucide.createIcons();
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // Combine reason_category and additional_details before form submission
+    const form = document.getElementById('refundForm');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        const reasonCategory = document.querySelector('input[name="reason_category"]:checked');
+        const additionalDetails = document.getElementById('additional_details');
+        
+        if (reasonCategory && additionalDetails) {
+          // Create a hidden input with combined reason
+          const combinedReason = `${reasonCategory.value}\n\n${additionalDetails.value}`;
+          
+          // Create hidden input for the backend
+          const hiddenInput = document.createElement('input');
+          hiddenInput.type = 'hidden';
+          hiddenInput.name = 'reason';
+          hiddenInput.value = combinedReason;
+          form.appendChild(hiddenInput);
+        }
+      });
+    }
   </script>
 </body>
 </html>

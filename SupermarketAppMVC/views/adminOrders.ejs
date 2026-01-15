@@ -21,6 +21,8 @@
       --text-muted: #6b7280;
       --border-color: #e5e7eb;
       --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      /* Do not override sidebar width here — respect the global sidebar.
+         Use fallbacks when referencing --sidebar-width below. */
     }
 
     body {
@@ -28,21 +30,35 @@
       background-color: var(--bg-body);
       color: var(--text-main);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
 
     /* --- Layout --- */
-    .main-content {
-      flex: 1;
-      padding: 2rem 0;
-      width: 100%;
+    .admin-content {
+      margin-left: var(--sidebar-width, 210px);
+      padding: 2rem 1.5rem;
+      width: calc(100% - var(--sidebar-width, 210px));
+      min-height: calc(100vh - var(--nav-height, 92px));
+      transition: all 280ms ease;
+      box-sizing: border-box;
+      overflow-x: auto;
+    }
+    body.sidebar-collapsed .admin-content { 
+      margin-left: var(--sidebar-width-collapsed, 70px);
+      width: calc(100% - var(--sidebar-width-collapsed, 70px));
+    }
+
+    @media (max-width: 991px) {
+      .admin-content {
+        margin-left: 0;
+        padding-top: calc(var(--nav-height, 92px) + 12px);
+      }
     }
 
     .container-custom {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 0 1.5rem;
+      max-width: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
     }
 
     /* --- Cards --- */
@@ -230,9 +246,10 @@
 <body>
 
   <%- include('partials/header') %>
+  <%- include('partials/sidebar', { user: user }) %>
 
   <!-- Main Content -->
-  <main class="main-content">
+  <main class="admin-content">
     <div class="container-custom">
       
       <!-- Top Header -->
@@ -424,8 +441,6 @@
       </div>
     </div>
   </main>
-
-  <%- include('partials/footer') %>
 
   <!-- Data Injection for Charts -->
   <script id="orders-data-json" type="application/json">

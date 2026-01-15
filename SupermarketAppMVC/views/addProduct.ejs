@@ -13,6 +13,20 @@
       flex-direction: column;
       background: #f5f7fb;
     }
+    :root {
+      --sidebar-width: 240px;
+      --sidebar-width-collapsed: 70px;
+    }
+
+    .admin-content {
+      margin-left: var(--sidebar-width);
+      padding-top: calc(var(--nav-height, 92px) + 12px);
+      padding-bottom: 2rem;
+      min-height: calc(100vh - var(--nav-height, 92px));
+      transition: margin-left 280ms ease;
+    }
+    body.sidebar-collapsed .admin-content { margin-left: var(--sidebar-width-collapsed); }
+    @media (max-width: 991px) { .admin-content { margin-left: 0; padding-left: 1rem; padding-right: 1rem; } }
     main.add-product-page {
       flex: 1 0 auto;
       padding: 40px 0;
@@ -36,7 +50,9 @@
 <body>
   <%- include('partials/header') %>
 
-  <main class="add-product-page">
+  <%- include('partials/sidebar', { user: user }) %>
+
+  <main class="add-product-page admin-content">
     <div class="container edit-card">
       <div class="card shadow-sm">
         <div class="card-body">
@@ -96,8 +112,6 @@
       </div>
     </div>
   </main>
-
-  <%- include('partials/footer') %>
 
   <script>
     (function () {

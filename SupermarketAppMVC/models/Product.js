@@ -236,3 +236,61 @@ module.exports = {
   reduceStockBulk,
   reduceStockForOrder
 };
+
+/**
+ * Increase stock for an entire order using order_items aggregation.
+ * Signatures supported:
+ *  - increaseStockForOrder(orderId, cb)
+ *  - increaseStockForOrder(conn, orderId, cb)
+ *
+ * Runs on provided connection if one is passed (transaction-safe).
+ * cb(err, { affectedRows, expected })
+ */
+function increaseStockForOrder(connOrOrderId, maybeOrderId, maybeCb) {
+  let conn = null;
+  let orderId;
+  let cb;
+
+  if (connOrOrderId && typeof connOrOrderId.query === 'function') {
+    conn = connOrOrderId;
+    orderId = maybeOrderId;
+    cb = typeof maybeCb === 'function' ? maybeCb : () => {};
+  } else {
+    conn = null;
+    orderId = connOrOrderId;
+    cb = typeof maybeOrderId === 'function' ? maybeOrderId : (typeof maybeCb === 'function' ? maybeCb : () => {});
+  }
+
+  if (!orderId) return cb(new Error('Missing orderId'));
+
+  const run = (c, sql, params, done) => {
+    if (c && typeof c.query === 'function') return c.query(sql, params, done);
+    return db.query(sql, params, done);
+  };
+
+  const updateSql = `
+    UPDATE products p
+    JOIN (
+      SELECT product_id, SUM(quantity) AS qty
+      FROM order_items
+      WHERE order_id = ?
+      GROUP BY product_id
+    ) oi ON oi.product_id = p.id
+    SET p.quantity = p.quantity + oi.qty
+  `;
+
+  run(conn, updateSql, [orderId], (uErr, uRes) => {
+    if (uErr) return cb(uErr);
+    const affected = (uRes && (uRes.affectedRows || 0)) || 0;
+
+    // count expected distinct products for this order
+    run(conn, 'SELECT COUNT(DISTINCT product_id) AS c FROM order_items WHERE order_id = ?', [orderId], (cErr, cRes) => {
+      if (cErr) return cb(cErr);
+      const expected = (cRes && cRes[0] && Number(cRes[0].c)) || 0;
+      return cb(null, { affectedRows: affected, expected });
+    });
+  });
+}
+
+// attach to exports
+module.exports.increaseStockForOrder = increaseStockForOrder;

@@ -24,6 +24,8 @@
       --text-main: #111827;
       --text-muted: #6b7280;
       --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+      --sidebar-width: 240px;
+      --sidebar-width-collapsed: 70px;
     }
 
     body {
@@ -31,6 +33,17 @@
       font-family: 'Inter', sans-serif;
       color: var(--text-main);
       min-height: 100vh;
+    }
+
+    .admin-content {
+      margin-left: var(--sidebar-width);
+      padding: 2rem 1rem;
+      min-height: calc(100vh - var(--nav-height, 92px));
+      transition: margin-left 280ms ease;
+    }
+    body.sidebar-collapsed .admin-content { margin-left: var(--sidebar-width-collapsed); }
+    @media (max-width: 991px) {
+      .admin-content { margin-left: 0; padding-top: calc(var(--nav-height, 92px) + 12px); }
     }
 
     /* Card Styling */
@@ -228,8 +241,10 @@
 
   <!-- Header Partial -->
   <%- include('partials/header', { user: navUser }) %>
+  <%- include('partials/sidebar', { user: navUser }) %>
 
-  <main class="container pb-5 pt-5">
+  <main class="admin-content">
+    <div class="container pb-5 pt-5">
     
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-end mb-4">
@@ -373,9 +388,6 @@
     </div>
 
   </main>
-
-  <!-- Footer Partial -->
-  <%- include('partials/footer') %>
   
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 

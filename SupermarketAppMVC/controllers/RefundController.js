@@ -1,6 +1,7 @@
 const Refund = require('../models/Refund');
 const db = require('../db');
 const paypalService = require('../services/paypal');
+const Product = require('../models/Product');
 
 function uid(req) {
   const u = req.session?.user;
@@ -73,11 +74,21 @@ exports.submitRequest = (req, res) => {
   if (!userId) return res.redirect('/login');
 
   // Prefer route param for orderId, fall back to form body if provided
-  const orderId = req.body.orderId || req.params.orderId;
-  const amount = req.body.amount;
-  const reason = req.body.reason;
+  const orderId = req.params.orderId || (req.body && req.body.orderId);
+  const amount = req.body && req.body.amount;
+  const reasonCategory = req.body && req.body.reason_category;
+  const additionalDetails = req.body && req.body.additional_details;
+  const combinedReasonFromForm = req.body && req.body.reason;
+  const reason = combinedReasonFromForm || (reasonCategory ? `${reasonCategory}: ${additionalDetails || ''}`.trim() : (additionalDetails || 'No reason provided'));
 
-  console.log('RefundController.submitRequest - userId:', userId, 'orderId:', orderId, 'amount:', amount);
+  console.log('RefundController.submitRequest - userId:', userId, 'orderId:', orderId, 'amount:', amount, 'type:', typeof amount, 'req.body:', req.body);
+
+  // Validate orderId first
+  if (!orderId) {
+    console.error('RefundController.submitRequest - Missing orderId');
+    if (req.flash) req.flash('error', 'Order ID is missing');
+    return res.redirect('/orders');
+  }
 
   // Validate order ownership and status
   db.query('SELECT * FROM orders WHERE id = ? AND user_id = ?', [orderId, userId], (err, orderRows) => {
@@ -108,11 +119,22 @@ exports.submitRequest = (req, res) => {
         return res.redirect(`/orders/${orderId}/refund`);
       }
 
-      // Validate amount
-      const requestedAmount = parseFloat(amount);
-      if (isNaN(requestedAmount) || requestedAmount <= 0 || requestedAmount > Number(order.totalAmount || 0)) {
+      // Validate amount - be more lenient with parsing
+      const requestedAmount = amount ? parseFloat(String(amount).trim()) : NaN;
+      const orderTotal = Number(order.totalAmount || 0);
+      
+      console.log('RefundController.submitRequest - amount validation:', {
+        rawAmount: amount,
+        requestedAmount,
+        orderTotal,
+        isNaN: isNaN(requestedAmount),
+        tooSmall: requestedAmount <= 0,
+        tooLarge: requestedAmount > orderTotal
+      });
+      
+      if (!amount || isNaN(requestedAmount) || requestedAmount <= 0 || requestedAmount > orderTotal) {
         console.log('RefundController.submitRequest - invalid amount', requestedAmount, 'order.totalAmount:', order.totalAmount);
-        if (req.flash) req.flash('error', 'Invalid refund amount');
+        if (req.flash) req.flash('error', 'Invalid refund amount. Please enter an amount between $0.01 and $' + orderTotal.toFixed(2));
         return res.redirect(`/orders/${orderId}/refund`);
       }
 
@@ -304,13 +326,27 @@ exports.adminApproveRefund = async (req, res) => {
                 return res.status(500).send('Failed to update refund status');
               }
 
-              // Update order status
-              db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
-                if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
+              // Restore product quantities for the refunded order
+              try {
+                Product.increaseStockForOrder(refund.order_id, (pErr, pRes) => {
+                  if (pErr) console.error('RefundController.adminApproveRefund - failed to restore product stock', pErr);
 
-                if (req.flash) req.flash('success', `Refund approved. $${refund.amount} refunded to PayPal account.`);
-                res.redirect('/admin/refunds');
-              });
+                  // Update order status regardless of stock restore result
+                  db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                    if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
+
+                    if (req.flash) req.flash('success', `Refund approved. $${refund.amount} refunded to PayPal account.`);
+                    return res.redirect('/admin/refunds');
+                  });
+                });
+              } catch (ex) {
+                console.error('RefundController.adminApproveRefund - exception restoring stock', ex);
+                db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                  if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
+                  if (req.flash) req.flash('success', `Refund approved. $${refund.amount} refunded to PayPal account.`);
+                  return res.redirect('/admin/refunds');
+                });
+              }
             });
           } catch (paypalErr) {
             console.error('RefundController.adminApproveRefund - PayPal refund error', paypalErr);
@@ -372,13 +408,27 @@ function processWalletRefund(refund, refundId, adminNote, req, res) {
             return res.status(500).send('Failed to update refund status');
           }
 
-          // Update order status
-          db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
-            if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
+          // Restore product quantities for the refunded order
+          try {
+            Product.increaseStockForOrder(refund.order_id, (pErr, pRes) => {
+              if (pErr) console.error('RefundController.processWalletRefund - failed to restore product stock', pErr);
 
-            if (req.flash) req.flash('success', `Refund approved. $${refund.amount} credited to user wallet.`);
-            res.redirect('/admin/refunds');
-          });
+              // Update order status regardless of stock restore result
+              db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
+
+                if (req.flash) req.flash('success', `Refund approved. $${refund.amount} credited to user wallet.`);
+                return res.redirect('/admin/refunds');
+              });
+            });
+          } catch (ex) {
+            console.error('RefundController.processWalletRefund - exception restoring stock', ex);
+            db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+              if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
+              if (req.flash) req.flash('success', `Refund approved. $${refund.amount} credited to user wallet.`);
+              return res.redirect('/admin/refunds');
+            });
+          }
         });
       });
     });

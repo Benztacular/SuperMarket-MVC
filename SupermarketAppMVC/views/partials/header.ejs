@@ -146,6 +146,34 @@
             border-color: rgba(0,220,130,0.14);
         }
 
+        /* keep navbar contents on one line and remove underlines */
+        .navbar-container,
+        .navbar-container > .h-full,
+        .app-navbar a,
+        #mobile-menu a {
+          white-space: nowrap;
+          text-decoration: none !important;
+        }
+
+        /* allow horizontal scrolling on small screens for mobile menu */
+        #mobile-menu .menu-row {
+          display: flex;
+          gap: 0.75rem;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          padding: 0.5rem 1rem;
+          white-space: nowrap;
+        }
+
+        /* make mobile anchors inline and prevent wrapping of label */
+        #mobile-menu .menu-row a {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.75rem;
+          flex: 0 0 auto; /* don't shrink, keep content on single row */
+          text-decoration: none;
+        }
+
         /* small-screen tweaks */
         @media(max-width:991px){
             .brand-subtitle { display:none; }
@@ -189,7 +217,7 @@
                         ];
                         // show admin shortcut for admin users
                         if (typeof user !== 'undefined' && user && String(user.role || '').toLowerCase() === 'admin') {
-                            navItems.push({ icon: 'shield', label: 'Admin', link: '/admin/adminDash' });
+                            navItems.push({ icon: 'shield', label: 'Admin', link: '/admin' });
                         }
                         %>
 
@@ -284,12 +312,14 @@
         <!-- MOBILE MENU DROPDOWN -->
         <div id="mobile-menu" class="md:hidden absolute top-[70px] left-0 right-0 bg-[#1a1b2e] border-b border-white/10 shadow-2xl overflow-hidden transition-all duration-300 origin-top opacity-0 scale-95 -translate-y-4 pointer-events-none">
             <div class="p-4 space-y-2">
-                <% navItems.forEach(function(item) { %>
-                    <a href="<%= item.link %>" class="flex items-center gap-4 px-4 py-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white transition-all">
-                        <i data-lucide="<%= item.icon %>" class="w-5 h-5"></i>
-                        <span class="font-medium text-base"><%= item.label %></span>
-                    </a>
-                <% }); %>
+                <div class="menu-row">
+                  <% navItems.forEach(function(item) { %>
+                      <a href="<%= item.link %>" class="inline-flex items-center gap-4 px-4 py-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white transition-all no-underline">
+                          <i data-lucide="<%= item.icon %>" class="w-5 h-5"></i>
+                          <span class="font-medium text-base"><%= item.label %></span>
+                      </a>
+                  <% }); %>
+                </div>
                 
                 <div class="h-px bg-white/10 my-2 mx-4"></div>
                 
@@ -392,21 +422,30 @@
         }
 
         // 3. Active Tab Logic
-        const currentPath = window.location.pathname + window.location.search;
-        const navLinks = document.querySelectorAll('.nav-item');
+                const currentPath = window.location.pathname;
+                const navLinks = document.querySelectorAll('.nav-item');
+                const adminHref = '/admin';
         
         navLinks.forEach(link => {
-                if (link.getAttribute('href') === currentPath || (link.getAttribute('href') !== '/' && currentPath.includes(link.getAttribute('href')))) {
-                link.classList.add('bg-emerald-600', 'text-white', 'shadow-lg', 'shadow-emerald-400/25', 'ring-1', 'ring-white/20');
-                link.classList.remove('text-slate-400', 'hover:text-white', 'hover:bg-white/5');
-                const textSpan = link.querySelector('.nav-text');
-                textSpan.classList.remove('w-0', 'opacity-0', 'group-hover:w-auto', 'group-hover:opacity-100');
-                textSpan.classList.add('w-auto', 'opacity-100', 'ml-2');
-                const indicator = link.querySelector('.active-indicator');
-                if(indicator) indicator.classList.remove('hidden');
-                const icon = link.querySelector('i');
-                icon.classList.remove('group-hover:scale-110');
-            }
+                        const href = link.getAttribute('href') || '';
+                        const isAdminLink = href === adminHref;
+                        const isActive = (isAdminLink && currentPath.startsWith('/admin'))
+                            || (href && href !== '/' && currentPath.startsWith(href))
+                            || (href === currentPath);
+
+                        if (isActive) {
+                            link.classList.add('bg-emerald-600', 'text-white', 'shadow-lg', 'shadow-emerald-400/25', 'ring-1', 'ring-white/20');
+                            link.classList.remove('text-slate-400', 'hover:text-white', 'hover:bg-white/5');
+                            const textSpan = link.querySelector('.nav-text');
+                            if (textSpan) {
+                                textSpan.classList.remove('w-0', 'opacity-0', 'group-hover:w-auto', 'group-hover:opacity-100');
+                                textSpan.classList.add('w-auto', 'opacity-100', 'ml-2');
+                            }
+                            const indicator = link.querySelector('.active-indicator');
+                            if (indicator) indicator.classList.remove('hidden');
+                            const icon = link.querySelector('i');
+                            if (icon) icon.classList.remove('group-hover:scale-110');
+                        }
         });
         // Recalculate body spacing when a nav item is clicked (active label expansion may change header size)
         navLinks.forEach(link => {

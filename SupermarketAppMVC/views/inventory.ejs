@@ -26,12 +26,28 @@
       --border-color: #e2e8f0;
       --radius: 12px;
       --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      --sidebar-width: 240px;
+      --sidebar-width-collapsed: 70px;
     }
 
     body {
       background-color: var(--bg-body);
       font-family: 'Inter', sans-serif;
       color: var(--text-main);
+    }
+
+    .admin-content {
+      margin-left: var(--sidebar-width);
+      padding-top: calc(var(--nav-height, 92px) + 12px);
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+      padding-bottom: 2rem;
+      min-height: calc(100vh - var(--nav-height, 92px));
+      transition: margin-left 280ms ease;
+    }
+    body.sidebar-collapsed .admin-content { margin-left: var(--sidebar-width-collapsed); }
+    @media (max-width: 991px) {
+      .admin-content { margin-left: 0; padding-left: 1rem; padding-right: 1rem; }
     }
 
     h3, h5 {
@@ -190,7 +206,9 @@
 </head>
 <body>
   <%- include('partials/header') %>
+  <%- include('partials/sidebar', { user: user }) %>
 
+  <main class="admin-content">
   <div class="container py-4">
     
     <!-- Top Controls Dashboard -->
@@ -354,8 +372,7 @@
       </div>
     </div>
   </div>
-
-  <%- include('partials/footer') %>
+  </main>
 
   <!-- Bootstrap JS (REQUIRED for Modal) -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

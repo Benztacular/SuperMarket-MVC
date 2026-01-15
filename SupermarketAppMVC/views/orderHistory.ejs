@@ -453,15 +453,18 @@
                                                             }
                                                             %>
                                                             <div class="d-grid">
-                                                                <button type="button" class="btn <%= refundBadgeClass %> text-white rounded-pill fw-bold btn-sm py-2 w-100" 
-                                                                    onclick="showRefundStatus('<%= order.refund.status %>', '<%= order.refund.amount %>', '<%= order.refund.admin_note || '' %>')">
+                                                                <button type="button" class="btn <%= refundBadgeClass %> text-white rounded-pill fw-bold btn-sm py-2 w-100"
+                                                                    data-refund-status="<%= order.refund.status %>"
+                                                                    data-refund-amount="<%= order.refund.amount %>"
+                                                                    data-refund-note="<%= encodeURIComponent(order.refund.admin_note || '') %>"
+                                                                    onclick="(function(btn){ const status = btn.dataset.refundStatus || ''; const amount = btn.dataset.refundAmount || ''; const adminNote = decodeURIComponent(btn.dataset.refundNote || ''); showRefundStatus(status, amount, adminNote); })(this)">
                                                                     <i data-lucide="info"></i> Refund: <%= refundText %>
                                                                 </button>
                                                             </div>
                                                         <% } else if (eligibleForRefund) { %>
                                                             <div class="d-grid">
                                                                 <a href="/orders/<%= orderIdStr %>/refund" class="btn btn-outline-danger rounded-pill fw-bold btn-sm py-2 w-100">
-                                                                    <i data-lucide="rotate-ccw"></i> Request Refund
+                                                                    <i data-lucide=""></i> Request Refund
                                                                 </a>
                                                             </div>
                                                         <% } %>

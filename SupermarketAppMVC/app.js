@@ -258,7 +258,7 @@ app.post('/wallet/topup', requireUser, ensure(WalletController.topUp, 'WalletCon
 
 // Refunds (User)
 app.get('/orders/:orderId/refund', requireUser, ensure(RefundController.requestPage, 'RefundController.requestPage'));
-app.post('/orders/:orderId/refund', requireUser, ensure(RefundController.submitRequest, 'RefundController.submitRequest'));
+app.post('/orders/:orderId/refund', requireUser, upload.single('reasonImage'), ensure(RefundController.submitRequest, 'RefundController.submitRequest'));
 app.get('/user/refunds', requireUser, ensure(RefundController.userRefundHistory, 'RefundController.userRefundHistory'));
 
 // Refunds (Admin)
