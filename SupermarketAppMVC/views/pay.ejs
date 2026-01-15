@@ -385,6 +385,14 @@
                 <img src="/images/netsLogo.png" alt="Nets QR" style="height:24px; width:auto; display:block;">
               </button>
             </form>
+            
+            <button id="stripe-button" class="stripe-btn" style="width:100%; height:44px; padding:8px 16px; border-radius:10px; background:#635bff; border:none; font-weight:600; color:white; display:flex; align-items:center; justify-content:center; margin-bottom:12px; cursor:pointer; transition: all 0.2s;">
+              <svg style="width:18px; height:18px; margin-right:8px;" viewBox="0 0 24 24" fill="white">
+                <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/>
+              </svg>
+              Pay with Stripe
+            </button>
+            
             <div id="paypal-button-container"></div>
           </div>
 
@@ -473,6 +481,156 @@
           }).catch(()=>{});
         }
       }).catch(()=>{});
+    })();
+  </script>
+  
+  <!-- Stripe Integration -->
+  <script src="https://js.stripe.com/v3/"></script>
+  <script>
+    (function(){
+      const stripePublicKey = '<%= process.env.STRIPE_PUBLISHABLE_KEY || "" %>';
+      if (!stripePublicKey) {
+        console.warn('Stripe Publishable Key not configured');
+        document.getElementById('stripe-button').style.display = 'none';
+        return;
+      }
+
+      const stripe = Stripe(stripePublicKey);
+      let elements;
+      let paymentIntentId;
+
+      // Add hover effect
+      const stripeBtn = document.getElementById('stripe-button');
+      stripeBtn.addEventListener('mouseenter', () => {
+        stripeBtn.style.background = '#7c73ff';
+      });
+      stripeBtn.addEventListener('mouseleave', () => {
+        stripeBtn.style.background = '#635bff';
+      });
+
+      stripeBtn.addEventListener('click', async () => {
+        stripeBtn.disabled = true;
+        stripeBtn.innerHTML = '<span style="margin-right:8px;">Processing...</span>';
+
+        try {
+          // Create Payment Intent
+          const response = await fetch('/stripe/create-payment-intent', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }
+          });
+
+          const data = await response.json();
+          if (!data || !data.clientSecret) {
+            throw new Error('Failed to create payment intent');
+          }
+
+          paymentIntentId = data.paymentIntentId;
+          const clientSecret = data.clientSecret;
+
+          // Initialize Stripe Elements
+          const appearance = {
+            theme: 'stripe',
+            variables: {
+              colorPrimary: '#10b981',
+              colorBackground: '#ffffff',
+              colorText: '#1e293b',
+              colorDanger: '#ef4444',
+              fontFamily: 'Inter, system-ui, sans-serif',
+              spacingUnit: '4px',
+              borderRadius: '12px'
+            }
+          };
+
+          elements = stripe.elements({ clientSecret, appearance });
+          const paymentElement = elements.create('payment');
+
+          // Create modal for Stripe payment form
+          const modal = document.createElement('div');
+          modal.id = 'stripe-modal';
+          modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+          
+          const modalContent = document.createElement('div');
+          modalContent.style.cssText = 'background:white;border-radius:16px;padding:32px;max-width:500px;width:90%;max-height:90vh;overflow-y:auto;';
+          
+          modalContent.innerHTML = `
+            <div style="margin-bottom:24px;">
+              <h3 style="margin:0 0 8px 0;color:#1e293b;font-size:24px;">Complete Payment</h3>
+              <p style="margin:0;color:#64748b;font-size:14px;">Enter your payment details below</p>
+            </div>
+            <div id="payment-element" style="margin-bottom:24px;"></div>
+            <div style="display:flex;gap:12px;">
+              <button id="cancel-stripe" style="flex:1;padding:12px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-weight:600;cursor:pointer;">Cancel</button>
+              <button id="submit-stripe" style="flex:1;padding:12px;border-radius:10px;border:none;background:#10b981;color:white;font-weight:600;cursor:pointer;">Pay $${data.amount.toFixed(2)}</button>
+            </div>
+            <div id="payment-message" style="margin-top:16px;font-size:14px;"></div>
+          `;
+          
+          modal.appendChild(modalContent);
+          document.body.appendChild(modal);
+
+          // Mount payment element
+          paymentElement.mount('#payment-element');
+
+          // Handle cancel
+          document.getElementById('cancel-stripe').addEventListener('click', () => {
+            document.body.removeChild(modal);
+            stripeBtn.disabled = false;
+            stripeBtn.innerHTML = '<svg style="width:18px; height:18px; margin-right:8px;" viewBox="0 0 24 24" fill="white"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/></svg>Pay with Stripe';
+          });
+
+          // Handle submit
+          document.getElementById('submit-stripe').addEventListener('click', async () => {
+            const submitBtn = document.getElementById('submit-stripe');
+            const messageEl = document.getElementById('payment-message');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            messageEl.textContent = '';
+
+            const { error } = await stripe.confirmPayment({
+              elements,
+              confirmParams: {
+                return_url: window.location.origin + '/payment-success'
+              },
+              redirect: 'if_required'
+            });
+
+            if (error) {
+              messageEl.textContent = error.message;
+              messageEl.style.color = '#ef4444';
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Pay $' + data.amount.toFixed(2);
+            } else {
+              // Payment succeeded, confirm on backend
+              const confirmResponse = await fetch('/stripe/confirm-payment', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentIntentId: paymentIntentId })
+              });
+
+              const confirmData = await confirmResponse.json();
+              if (confirmData && confirmData.redirect) {
+                window.location = confirmData.redirect;
+              } else if (confirmData && confirmData.success) {
+                window.location = '/orders';
+              } else {
+                messageEl.textContent = 'Payment processing failed. Please contact support.';
+                messageEl.style.color = '#ef4444';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Pay $' + data.amount.toFixed(2);
+              }
+            }
+          });
+
+        } catch (err) {
+          console.error('Stripe error:', err);
+          alert('Failed to initialize Stripe payment: ' + err.message);
+          stripeBtn.disabled = false;
+          stripeBtn.innerHTML = '<svg style="width:18px; height:18px; margin-right:8px;" viewBox="0 0 24 24" fill="white"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/></svg>Pay with Stripe';
+        }
+      });
     })();
   </script>
   

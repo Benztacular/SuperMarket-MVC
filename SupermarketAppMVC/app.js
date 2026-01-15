@@ -14,6 +14,7 @@ const OrderController = require('./controllers/OrderController');
 const UserController = require('./controllers/UserController');
 const CategoryController = require('./controllers/CategoryController');
 const PaypalController = require('./controllers/PaypalController');
+const StripeController = require('./controllers/StripeController');
 const ReviewController = require('./controllers/ReviewController');
 const DeliveryAddressController = require('./controllers/DeliveryAddressController');
 const WalletController = require('./controllers/WalletController');
@@ -198,6 +199,10 @@ app.get('/cart/checkout', requireUser, CartController.checkoutPage);
 app.post('/shipping/select', requireUser, ensure(CartController.selectShippingMethod, 'CartController.selectShippingMethod'));
 app.post('/paypal/create-order', requireUser, ensure(PaypalController.createOrder, 'PaypalController.createOrder'));
 app.post('/paypal/capture-order', requireUser, ensure(PaypalController.captureOrder, 'PaypalController.captureOrder'));
+
+// Stripe routes
+app.post('/stripe/create-payment-intent', requireUser, ensure(StripeController.createPaymentIntent, 'StripeController.createPaymentIntent'));
+app.post('/stripe/confirm-payment', requireUser, ensure(StripeController.confirmPayment, 'StripeController.confirmPayment'));
 // NETS QR integration
 app.post('/generateNETSQR', requireUser, ensure(NetsController.createQr, 'NetsController.createQr'));
 app.post('/nets-qr', requireUser, ensure(NetsController.createQr, 'NetsController.createQr'));
