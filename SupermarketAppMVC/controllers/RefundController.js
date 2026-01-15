@@ -335,7 +335,7 @@ exports.adminApproveRefund = async (req, res) => {
                   db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
                     if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
 
-                    if (req.flash) req.flash('success', `Refund approved. $${refund.amount} refunded to PayPal account.`);
+                    if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to PayPal account.`);
                     return res.redirect('/admin/refunds');
                   });
                 });
@@ -343,7 +343,7 @@ exports.adminApproveRefund = async (req, res) => {
                 console.error('RefundController.adminApproveRefund - exception restoring stock', ex);
                 db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
                   if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
-                  if (req.flash) req.flash('success', `Refund approved. $${refund.amount} refunded to PayPal account.`);
+                  if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to PayPal account.`);
                   return res.redirect('/admin/refunds');
                 });
               }
@@ -384,19 +384,22 @@ function processWalletRefund(refund, refundId, adminNote, req, res) {
       return res.redirect('/admin/refunds');
     }
 
-    // Update wallet balance
+    // Update wallet balance - ensure amount is a number
+    const refundAmount = Number(refund.amount) || 0;
+    console.log('RefundController.processWalletRefund - updating wallet balance, user_id:', refund.user_id, 'amount:', refundAmount);
     db.query('UPDATE user_wallets SET balance = balance + ? WHERE user_id = ?', 
-      [refund.amount, refund.user_id], (updateErr) => {
+      [refundAmount, refund.user_id], (updateErr) => {
       if (updateErr) {
         console.error('RefundController.processWalletRefund - update wallet error', updateErr);
         return res.status(500).send('Failed to update wallet');
       }
+      console.log('RefundController.processWalletRefund - wallet balance updated successfully');
 
       // Create wallet transaction
       db.query(`
         INSERT INTO wallet_transactions (wallet_id, user_id, type, amount, reference_type, reference_id, description)
         VALUES (?, ?, 'REFUND', ?, 'refund', ?, ?)
-      `, [wallet.id, refund.user_id, refund.amount, refundId, `Refund for Order #${refund.order_id}`], 
+      `, [wallet.id, refund.user_id, refundAmount, refundId, `Refund for Order #${refund.order_id}`], 
       (txnErr) => {
         if (txnErr) console.error('RefundController.processWalletRefund - wallet txn error', txnErr);
 
@@ -417,7 +420,7 @@ function processWalletRefund(refund, refundId, adminNote, req, res) {
               db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
                 if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
 
-                if (req.flash) req.flash('success', `Refund approved. $${refund.amount} credited to user wallet.`);
+                if (req.flash) req.flash('success', `Refund approved. $${refundAmount.toFixed(2)} credited to user wallet.`);
                 return res.redirect('/admin/refunds');
               });
             });
@@ -425,7 +428,7 @@ function processWalletRefund(refund, refundId, adminNote, req, res) {
             console.error('RefundController.processWalletRefund - exception restoring stock', ex);
             db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
               if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
-              if (req.flash) req.flash('success', `Refund approved. $${refund.amount} credited to user wallet.`);
+              if (req.flash) req.flash('success', `Refund approved. $${refundAmount.toFixed(2)} credited to user wallet.`);
               return res.redirect('/admin/refunds');
             });
           }

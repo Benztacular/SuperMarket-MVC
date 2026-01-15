@@ -22,11 +22,15 @@
     .main-content {
       margin-left: var(--sidebar-width, 240px);
       padding: 40px 30px;
+      width: calc(100% - var(--sidebar-width, 240px));
       min-height: calc(100vh - 92px);
-      transition: margin-left 0.3s ease;
+      transition: all 0.3s ease;
+      box-sizing: border-box;
+      overflow-x: auto;
     }
     body.sidebar-collapsed .main-content {
       margin-left: var(--sidebar-width-collapsed, 70px);
+      width: calc(100% - var(--sidebar-width-collapsed, 70px));
     }
     
     @media (max-width: 991px) {
@@ -37,8 +41,8 @@
     }
     
     .admin-container { 
-      max-width: 1400px;
-      margin: 0 auto;
+      width: 100%;
+      margin: 0;
     }
     
     .page-header {
