@@ -204,7 +204,8 @@ async function confirmPayment(req, res, next) {
                           if (inserted === cartRows.length) {
                             // Create Stripe transaction record
                             const amount = paymentIntent.amount / 100; // Convert from cents
-                            const stripeChargeId = (paymentIntent.charges && paymentIntent.charges.data && paymentIntent.charges.data[0] && paymentIntent.charges.data[0].id) || null;
+                            // Try to use latest_charge (present on PaymentIntent) first, fallback to charges.data[0].id
+                            const stripeChargeId = paymentIntent.latest_charge || (paymentIntent.charges && paymentIntent.charges.data && paymentIntent.charges.data[0] && paymentIntent.charges.data[0].id) || null;
                             StripeTransaction.create({
                               userId: userId,
                               orderId: orderId,
