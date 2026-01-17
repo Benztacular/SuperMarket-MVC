@@ -346,9 +346,14 @@
     </nav>
 
     <!-- Flash messages (rendered only from this partial) -->
-    <div class="container mt-3">
-        <% if (Array.isArray(success_msg) && success_msg.length) { %>
-            <% success_msg.forEach(function(msg) { %>
+    <div class="container mt-3" style="z-index:1050; position:relative;">
+        <% 
+           const successList = Array.isArray(typeof success_msg !== 'undefined' ? success_msg : undefined) ? success_msg : (Array.isArray(typeof success !== 'undefined' ? success : undefined) ? success : ((typeof messages !== 'undefined' && messages && Array.isArray(messages.success)) ? messages.success : []));
+           const errorList = Array.isArray(typeof error_msg !== 'undefined' ? error_msg : undefined) ? error_msg : (Array.isArray(typeof error !== 'undefined' ? error : undefined) ? error : ((typeof messages !== 'undefined' && messages && Array.isArray(messages.error)) ? messages.error : []));
+        %>
+
+        <% if (Array.isArray(successList) && successList.length) { %>
+            <% successList.forEach(function(msg) { %>
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     <%= msg %>
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -356,8 +361,8 @@
             <% }) %>
         <% } %>
 
-        <% if (Array.isArray(error_msg) && error_msg.length) { %>
-            <% error_msg.forEach(function(msg) { %>
+        <% if (Array.isArray(errorList) && errorList.length) { %>
+            <% errorList.forEach(function(msg) { %>
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     <%= msg %>
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>

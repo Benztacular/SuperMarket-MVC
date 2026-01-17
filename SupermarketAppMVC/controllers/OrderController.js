@@ -1,7 +1,9 @@
 const Order = require('../models/Order');
 const OrderItem = require('../models/Order_Item');
 const Cart = require('../models/Cart');
+const LoyaltyPointsController = require('./LoyaltyPointsController');
 const db = require('../db');
+const Membership = require('../models/Membership');
 
 // helpers
 function unwrap(row) { if (!row) return null; if (Array.isArray(row)) return Array.isArray(row[0]) ? row[0][0] : row[0]; return row; }
@@ -38,27 +40,79 @@ async function placeOrder(req, res) {
         return res.redirect('/cart');
       }
 
-      const total = items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || it.qty || 0)), 0);
       const createdAt = new Date();
 
-      // create order
-      if (!Order.create) {
-        // fallback if model binding not present
-        const insertOrderSql = 'INSERT INTO orders (user_id, totalAmount, createdAt) VALUES (?, ?, ?)';
-        db.query(insertOrderSql, [userId, total, createdAt], (oErr, oRes) => {
-          if (oErr) { console.error(oErr); return res.status(500).send('Failed to create order'); }
-          const orderId = oRes && (oRes.insertId || (Array.isArray(oRes) && oRes[0] && oRes[0].insertId));
-          proceedInsertItems(orderId, items, createdAt);
+      // resolve shipping method (session selection or default)
+      const selectedShippingMethodId = req.session?.selectedShippingMethodId || null;
+      const pickShipping = (cb) => {
+        if (!selectedShippingMethodId) {
+          return db.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
+            if (sErr) return cb(sErr);
+            if (!sRows.length) return cb(new Error('NO_SHIP_METHOD'));
+            return cb(null, sRows[0]);
+          });
+        }
+        db.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
+          if (sErr) return cb(sErr);
+          if (sRows && sRows[0]) return cb(null, sRows[0]);
+          return db.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
+            if (fErr) return cb(fErr);
+            if (!fRows.length) return cb(new Error('NO_SHIP_METHOD'));
+            return cb(null, fRows[0]);
+          });
         });
-        return;
-      }
+      };
 
-      Order.create({ userId, totalAmount: total, createdAt }, (oErr, oRes) => {
-        if (oErr) { console.error(oErr); return res.status(500).send('Failed to create order'); }
-        const orderId = (oRes && (oRes.insertId || oRes.id)) || (Array.isArray(oRes) && oRes[0] && oRes[0].insertId);
-        console.log('orderId =', orderId);
-        if (!orderId) { console.error('No order id returned'); return res.status(500).send('Failed to create order'); }
-        proceedInsertItems(orderId, items, createdAt);
+      const itemsTotal = items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || it.qty || 0)), 0);
+
+      pickShipping((sErr, shipRow) => {
+        if (sErr) {
+          console.error('placeOrder shipping resolution error', sErr);
+          // fallback: create order without shipping info
+          const insertOrderSql = 'INSERT INTO orders (user_id, totalAmount, createdAt) VALUES (?, ?, ?)';
+          return db.query(insertOrderSql, [userId, itemsTotal, createdAt], (oErr, oRes) => {
+            if (oErr) { console.error(oErr); return res.status(500).send('Failed to create order'); }
+            const orderId = oRes && (oRes.insertId || (Array.isArray(oRes) && oRes[0] && oRes[0].insertId));
+            return proceedInsertItems(orderId, items, createdAt);
+          });
+        }
+
+        const originalShippingFee = Number(shipRow.price || 0);
+
+        // apply membership perks
+        Membership.getUserMembership(userId, (mErr, membership) => {
+          if (mErr) console.error('placeOrder - membership fetch error', mErr);
+          if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
+
+          let appliedShippingFee = originalShippingFee;
+          const methodName = String(shipRow?.method_name || '').toLowerCase();
+          const isStandard = methodName.includes('standard');
+          const isPriority = methodName.includes('priority');
+
+          if (isStandard && (membership.free_standard_delivery || (itemsTotal >= Number(membership.free_delivery_threshold || 0)))) {
+            appliedShippingFee = 0;
+          }
+          if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) {
+            appliedShippingFee = Math.max(0, originalShippingFee - Number(membership.priority_delivery_discount || 0));
+          }
+
+          let discountAmount = 0;
+          const discThresh = Number(membership.discount_threshold || 0);
+          const discPercent = Number(membership.discount_percent || 0);
+          if (discPercent > 0 && itemsTotal >= discThresh) {
+            discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
+          }
+
+          const totalWithShipping = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
+
+          // insert order with shipping and total
+          const insertOrderSql = 'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, totalAmount, createdAt) VALUES (?, ?, ?, ?, ?, ?)';
+          db.query(insertOrderSql, [userId, null, shipRow.id, appliedShippingFee, totalWithShipping, createdAt], (oErr, oRes) => {
+            if (oErr) { console.error(oErr); return res.status(500).send('Failed to create order'); }
+            const orderId = oRes && (oRes.insertId || (Array.isArray(oRes) && oRes[0] && oRes[0].insertId));
+            return proceedInsertItems(orderId, items, createdAt);
+          });
+        });
       });
     };
 
@@ -194,148 +248,145 @@ function adminUpdateOrderStatus(req, res) {
 
 // New / updated functions using db.query() as requested
 
-// Checkout: create order from cart_items, insert order_items, clear cart_items, redirect to receipt
+// Checkout: create order from cart_items, apply membership perks, insert order_items, clear cart_items
 const checkout = function (req, res, next) {
   const userId = req.session?.user?.id || req.session?.userId;
   if (!userId) return res.redirect('/login');
-  const conn = db; // single shared connection
-  const release = () => {
-    if (typeof conn.release === 'function') conn.release();
-  };
+
+  const conn = db;
+  const release = () => { if (typeof conn.release === 'function') conn.release(); };
   const rollback = (code, err) => {
+    try { conn.rollback(() => {}); } catch (e) {}
+    release();
     console.error('checkout:', code, err || '');
-    conn.rollback(() => {
-      release();
-      if (code === 'EMPTY_CART') {
-        req.flash?.('error', 'Your cart is empty.');
-        return res.redirect('/cart');
-      }
-      if (code === 'OUT_OF_STOCK') {
-        req.flash?.('error', 'Not enough stock for one or more items.');
-        return res.redirect('/cart');
-      }
-      if (code === 'NO_ADDRESS') {
-        req.flash?.('error', 'Please add a delivery address.');
-        return res.redirect('/cart/checkout');
-      }
-      if (code === 'NO_SHIP_METHOD') {
-        req.flash?.('error', 'No shipping method available.');
-        return res.redirect('/cart/checkout');
-      }
-      return next(err || new Error(code));
-    });
+    if (code === 'EMPTY_CART') { if (req.flash) req.flash('error', 'Your cart is empty.'); return res.redirect('/cart'); }
+    if (code === 'OUT_OF_STOCK') { if (req.flash) req.flash('error', 'Not enough stock for one or more items.'); return res.redirect('/cart'); }
+    if (code === 'NO_ADDRESS') { if (req.flash) req.flash('error', 'Please add a delivery address.'); return res.redirect('/cart/checkout'); }
+    if (code === 'NO_SHIP_METHOD') { if (req.flash) req.flash('error', 'No shipping method available.'); return res.redirect('/cart/checkout'); }
+    return next(err || new Error(code));
   };
 
   conn.beginTransaction((txErr) => {
     if (txErr) return rollback('BEGIN_FAIL', txErr);
 
     const selectedAddressId = req.session?.selectedAddressId || null;
-    const addressSql = 'SELECT id FROM delivery_addresses WHERE user_id = ? ORDER BY (id = ?) DESC, is_default DESC, id ASC LIMIT 1';
-    conn.query(addressSql, [userId, selectedAddressId || 0], (addrErr, addrRows = []) => {
-      if (addrErr) return rollback('NO_ADDRESS', addrErr);
-      if (!addrRows.length) return rollback('NO_ADDRESS');
-      const deliveryAddressId = addrRows[0].id;
+    const selectedShippingMethodId = req.session?.selectedShippingMethodId || null;
 
-      const selectedShippingMethodId = req.session?.selectedShippingMethodId || null;
-      const pickShipping = () => new Promise((resolve, reject) => {
-        if (!selectedShippingMethodId) {
-          return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
-            if (sErr) return reject(sErr);
-            if (!sRows.length) return reject(new Error('NO_SHIP_METHOD'));
-            return resolve(sRows[0]);
+    conn.query('SELECT COUNT(*) AS cnt FROM delivery_addresses WHERE user_id = ?', [userId], (countErr, countRows = []) => {
+      if (countErr) return rollback('NO_ADDRESS', countErr);
+      const addrCount = Number(countRows && countRows[0] && countRows[0].cnt) || 0;
+      if (addrCount > 0 && !selectedAddressId) return rollback('NO_ADDRESS_SELECTED');
+
+      conn.query('SELECT COUNT(*) AS cnt FROM shipping_methods WHERE is_active = 1', [], (scErr, scRows = []) => {
+        if (scErr) return rollback('NO_SHIP_METHOD', scErr);
+        const shipCount = Number(scRows && scRows[0] && scRows[0].cnt) || 0;
+        if (shipCount > 0 && !selectedShippingMethodId) return rollback('NO_SHIP_SELECTED');
+
+        const addressSql = 'SELECT id FROM delivery_addresses WHERE user_id = ? ORDER BY (id = ?) DESC, is_default DESC, id ASC LIMIT 1';
+        conn.query(addressSql, [userId, selectedAddressId || 0], (addrErr, addrRows = []) => {
+          if (addrErr) return rollback('NO_ADDRESS', addrErr);
+          if (!addrRows.length) return rollback('NO_ADDRESS');
+          const deliveryAddressId = addrRows[0].id;
+
+          const pickShipping = () => new Promise((resolve, reject) => {
+            if (!selectedShippingMethodId) {
+              return conn.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
+                if (sErr) return reject(sErr);
+                if (!sRows.length) return reject(new Error('NO_SHIP_METHOD'));
+                return resolve(sRows[0]);
+              });
+            }
+            conn.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
+              if (sErr) return reject(sErr);
+              if (sRows.length) return resolve(sRows[0]);
+              conn.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
+                if (fErr) return reject(fErr);
+                if (!fRows.length) return reject(new Error('NO_SHIP_METHOD'));
+                return resolve(fRows[0]);
+              });
+            });
           });
-        }
 
-        conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
-          if (sErr) return reject(sErr);
-          if (sRows.length) return resolve(sRows[0]);
-          conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
-            if (fErr) return reject(fErr);
-            if (!fRows.length) return reject(new Error('NO_SHIP_METHOD'));
-            return resolve(fRows[0]);
-          });
-        });
-      });
+          pickShipping().then((shipRow) => {
+            const shippingMethodId = shipRow.id;
+            const originalShippingFee = Number(shipRow.price || 0);
 
-      pickShipping().then((shipRow) => {
-        const shippingMethodId = shipRow.id;
-        const shippingFee = Number(shipRow.price || 0);
+            // Respect any selected cart item ids saved in session (from cart page)
+            let cartSql = 'SELECT ci.id AS cart_id, ci.product_id, ci.quantity AS cart_qty, p.quantity AS stock_qty, p.price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ?';
+            const cartParams = [userId];
+            const sel = req.session?.selectedCartItemIds;
+            if (Array.isArray(sel) && sel.length) {
+              cartSql += ' AND ci.id IN (?)';
+              cartParams.push(sel);
+            }
+            cartSql += ' FOR UPDATE';
 
-        const cartSql = `
-          SELECT
-            ci.id         AS cart_id,
-            ci.product_id AS product_id,
-            ci.quantity   AS cart_qty,
-            p.quantity    AS stock_qty,
-            p.price       AS price
-          FROM cart_items ci
-          JOIN products p ON p.id = ci.product_id
-          WHERE ci.user_id = ?
-          FOR UPDATE
-        `;
+            conn.query(cartSql, cartParams, (cartErr, cartRows = []) => {
+              if (cartErr) return rollback('LOAD_CART_FAIL', cartErr);
+              if (!cartRows.length) return rollback('EMPTY_CART');
 
-        conn.query(cartSql, [userId], (cartErr, cartRows = []) => {
-          if (cartErr) return rollback('LOAD_CART_FAIL', cartErr);
-          if (!cartRows.length) return rollback('EMPTY_CART');
+              const insufficient = cartRows.find(r => Number(r.cart_qty) > Number(r.stock_qty));
+              if (insufficient) return rollback('OUT_OF_STOCK');
 
-          const insufficient = cartRows.find(row => Number(row.cart_qty) > Number(row.stock_qty));
-          if (insufficient) return rollback('OUT_OF_STOCK');
+              const itemsTotal = cartRows.reduce((s, r) => s + Number(r.price || 0) * Number(r.cart_qty || 0), 0);
 
-          const itemsTotal = cartRows.reduce(
-            (sum, row) => sum + Number(row.price || 0) * Number(row.cart_qty || 0),
-            0
-          );
-          const totalAmount = itemsTotal + shippingFee;
+              Membership.getUserMembership(userId, (mErr, membership) => {
+                if (mErr) console.error('checkout - membership fetch error', mErr);
+                if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
 
-          conn.query(
-            'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, "Pending", NOW())',
-            [userId, deliveryAddressId, shippingMethodId, shippingFee, totalAmount],
-            (orderErr, orderRes) => {
-              if (orderErr) return rollback('INSERT_ORDER_FAIL', orderErr);
+                let appliedShippingFee = originalShippingFee;
+                const methodName = String(shipRow?.method_name || '').toLowerCase();
+                const isStandard = methodName.includes('standard');
+                const isPriority = methodName.includes('priority');
 
-              const orderId = orderRes.insertId;
-              const valuesSql = cartRows.map(() => '(?, ?, ?, ?, NOW())').join(',');
-              const valuesParams = cartRows.flatMap(row => [
-                orderId,
-                row.product_id,
-                Number(row.cart_qty),
-                Number(row.price || 0)
-              ]);
+                if (isStandard && (membership.free_standard_delivery || (itemsTotal >= Number(membership.free_delivery_threshold || 0)))) {
+                  appliedShippingFee = 0;
+                }
+                if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) {
+                  appliedShippingFee = Math.max(0, originalShippingFee - Number(membership.priority_delivery_discount));
+                }
 
-              conn.query(
-                `INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ${valuesSql}`,
-                valuesParams,
-                (itemsErr) => {
-                  if (itemsErr) return rollback('INSERT_ITEMS_FAIL', itemsErr);
+                let discountAmount = 0;
+                const discThresh = Number(membership.discount_threshold || 0);
+                const discPercent = Number(membership.discount_percent || 0);
+                if (discPercent > 0 && itemsTotal >= discThresh) {
+                  discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
+                }
 
-                  const stockUpdates = cartRows.map(row => new Promise((resolve, reject) => {
-                    conn.query(
-                      'UPDATE products SET quantity = quantity - ? WHERE id = ?',
-                      [Number(row.cart_qty), row.product_id],
-                      (updErr, updRes) => (updErr ? reject(updErr) : resolve(updRes))
-                    );
-                  }));
+                const totalAmount = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
 
-                  Promise.all(stockUpdates)
-                    .then(() => {
+                conn.query('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, "Pending", NOW())', [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, totalAmount], (orderErr, orderRes) => {
+                  if (orderErr) return rollback('INSERT_ORDER_FAIL', orderErr);
+                  const orderId = orderRes.insertId;
+
+                  const valuesSql = cartRows.map(() => '(?, ?, ?, ?, NOW())').join(',');
+                  const valuesParams = cartRows.flatMap(row => [orderId, row.product_id, Number(row.cart_qty), Number(row.price || 0)]);
+
+                  conn.query('INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ' + valuesSql, valuesParams, (itemsErr) => {
+                    if (itemsErr) return rollback('INSERT_ITEMS_FAIL', itemsErr);
+
+                    const stockPromises = cartRows.map(row => new Promise((resolve, reject) => {
+                      conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(row.cart_qty), row.product_id], (uErr) => (uErr ? reject(uErr) : resolve()));
+                    }));
+
+                    Promise.all(stockPromises).then(() => {
                       conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (clearErr) => {
                         if (clearErr) return rollback('CLEAR_CART_FAIL', clearErr);
-
                         conn.commit((commitErr) => {
                           if (commitErr) return rollback('COMMIT_FAIL', commitErr);
                           release();
                           const encodedAmount = encodeURIComponent(totalAmount || '');
-                          return res.redirect(`/payment/success?orderId=${orderId}&method=card&amount=${encodedAmount}`);
+                          return res.redirect('/payment/success?orderId=' + orderId + '&method=card&amount=' + encodedAmount);
                         });
                       });
-                    })
-                    .catch((decErr) => rollback('DECREMENT_FAIL', decErr));
-                }
-              );
-            }
-          );
+                    }).catch((decErr) => rollback('DECREMENT_FAIL', decErr));
+                  });
+                });
+              });
+            });
+          }).catch((shipErr) => rollback('NO_SHIP_METHOD', shipErr));
         });
-      }).catch((shipErr) => rollback(shipErr.message === 'NO_SHIP_METHOD' ? 'NO_SHIP_METHOD' : 'NO_SHIP_METHOD', shipErr));
+      });
     });
   });
 };
@@ -401,48 +452,64 @@ function showReceipt(req, res) {
 
       Promise.all([addressPromise, shippingPromise, paymentPromise]).then(([deliveryAddress, shippingMethod, detectedPaymentMethod]) => {
         const itemsSubtotal = items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0);
-        const shippingFee = Number(order.shipping_fee || 0);
-        const data = {
-          orderId: order.id,
-          createdAt: order.createdAt || order.orderDate,
-          items,
-          itemsSubtotal,
-          shippingFee,
-          totalAmount: Number(order.totalAmount != null ? order.totalAmount : (itemsSubtotal + shippingFee)),
-          deliveryAddress,
-          shippingMethod,
-          paymentMethod: order.payment_method || req.query?.method || detectedPaymentMethod || 'Card',
-          userName: sessionUser?.username || sessionUser?.name || sessionUser?.email,
-          userAddress: sessionUser?.address || '',
-          userPhone: sessionUser?.contact || sessionUser?.phone || ''
-        };
+          const shippingFee = Number(order.shipping_fee || 0);
 
-        // support download as PDF when ?download=pdf or ?pdf=1 is present
-        const wantsPdf = (req.query && (String(req.query.download || '').toLowerCase() === 'pdf' || String(req.query.pdf || '') === '1' || String(req.query.pdf || '').toLowerCase() === 'true'));
-        if (wantsPdf) {
-          return res.render('receipt', data, async (err, html) => {
-            if (err) { console.error('render receipt for pdf error', err); return res.status(500).send('Failed to render receipt'); }
-            try {
-              // try to use puppeteer if available
-              const puppeteer = require('puppeteer');
-              const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-              const page = await browser.newPage();
-              await page.setContent(html, { waitUntil: 'networkidle0' });
-              const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
-              await browser.close();
-              res.setHeader('Content-Type', 'application/pdf');
-              res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.pdf`);
-              return res.send(pdfBuffer);
-            } catch (pdfErr) {
-              console.error('PDF generation failed, falling back to HTML attachment', pdfErr);
-              res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.html`);
-              res.setHeader('Content-Type', 'text/html; charset=utf-8');
-              return res.send(html);
+          // compute membership discount (if any) so invoice shows breakdown
+          Membership.getUserMembership(sessionUser?.id || req.session?.userId, (mErr, membership) => {
+            if (mErr) console.error('membership lookup for receipt failed', mErr);
+            if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
+            const discPercent = Number(membership.discount_percent || 0);
+            const discThresh = Number(membership.discount_threshold || 0);
+            let discountAmount = 0;
+            if (discPercent > 0 && itemsSubtotal >= discThresh) discountAmount = Number((itemsSubtotal * (discPercent / 100)).toFixed(2));
+
+            const originalShippingFee = Number(shippingMethod && (shippingMethod.price || shippingMethod.price) ? Number(shippingMethod.price) : shippingFee);
+            const data = {
+              orderId: order.id,
+              createdAt: order.createdAt || order.orderDate,
+              items,
+              itemsSubtotal,
+              shippingFee,
+              originalShippingFee,
+              discountAmount,
+              membershipName: membership.plan_name || 'Free',
+              totalAmount: Number(order.totalAmount != null ? order.totalAmount : (itemsSubtotal + shippingFee - discountAmount)),
+              deliveryAddress,
+              shippingMethod,
+              paymentMethod: order.payment_method || req.query?.method || detectedPaymentMethod || 'Card',
+              userName: sessionUser?.username || sessionUser?.name || sessionUser?.email,
+              userAddress: sessionUser?.address || '',
+              userPhone: sessionUser?.contact || sessionUser?.phone || ''
+            };
+
+            // support download as PDF when ?download=pdf or ?pdf=1 is present
+            const wantsPdf = (req.query && (String(req.query.download || '').toLowerCase() === 'pdf' || String(req.query.pdf || '') === '1' || String(req.query.pdf || '').toLowerCase() === 'true'));
+            if (wantsPdf) {
+              return res.render('receipt', data, async (err, html) => {
+                if (err) { console.error('render receipt for pdf error', err); return res.status(500).send('Failed to render receipt'); }
+                try {
+                  // try to use puppeteer if available
+                  const puppeteer = require('puppeteer');
+                  const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                  const page = await browser.newPage();
+                  await page.setContent(html, { waitUntil: 'networkidle0' });
+                  const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+                  await browser.close();
+                  res.setHeader('Content-Type', 'application/pdf');
+                  res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.pdf`);
+                  return res.send(pdfBuffer);
+                } catch (pdfErr) {
+                  console.error('PDF generation failed, falling back to HTML attachment', pdfErr);
+                  res.setHeader('Content-Disposition', `attachment; filename=receipt-${order.id}.html`);
+                  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                  return res.send(html);
+                }
+              });
             }
-          });
-        }
 
-        return res.render('receipt', data);
+            return res.render('receipt', data);
+          });
+
       });
     });
   });
@@ -658,9 +725,7 @@ module.exports = {
   showReceipt,
   history,
   details,
-  paymentSuccess,
-  adminList: exports.adminList,
-  adminDetails: exports.adminDetails
+  paymentSuccess
 };
 
 // Render payment success page with masked method and order info
@@ -682,6 +747,25 @@ function paymentSuccess(req, res) {
     });
   };
 
+  // Render page but include any points earned for this order (if present)
+  const renderPageWithPoints = (opts = {}) => {
+    const oid = opts.orderId || orderId || null;
+    if (!oid) return renderPage(opts);
+    db.query('SELECT SUM(points) AS pts FROM loyalty_points_transactions WHERE order_id = ? AND type = "EARN"', [oid], (err, rows = []) => {
+      const pts = (rows && rows[0] && Number(rows[0].pts)) || 0;
+      const merged = Object.assign({}, opts, { pointsEarned: pts });
+      return res.render('paymentSuccess', {
+        transactionId: merged.transactionId || txn || null,
+        date: merged.date || (new Date()).toLocaleString(),
+        paymentMethod: merged.paymentMethod || (method === 'paypal' ? 'PayPal' : (method === 'card' ? 'Card' : method)),
+        maskedCard: merged.maskedCard || (last4 ? ('**** ' + String(last4).slice(-4)) : null),
+        amount: merged.amount || amount || null,
+        orderId: merged.orderId || orderId || null,
+        pointsEarned: merged.pointsEarned || 0
+      });
+    });
+  };
+
   if (!orderId) return renderPage();
 
   // load order to confirm ownership and get createdAt / total
@@ -698,6 +782,23 @@ function paymentSuccess(req, res) {
     opts.amount = opts.amount || order.totalAmount;
     opts.date = new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString();
 
+    // Award loyalty points synchronously (callback) to avoid race with rendering
+    const awardPointsAndThen = (cb) => {
+      const userIdNum = Number(userId);
+      const orderTotal = Number(order.totalAmount || opts.amount || 0);
+      
+      // Use LoyaltyPointsController to award points
+      LoyaltyPointsController.awardPointsForOrder(userIdNum, orderId, orderTotal, (err, result) => {
+        if (err) {
+          console.error('Points awarding error:', err);
+          return cb(0);
+        }
+        const pointsEarned = (result && result.points) || 0;
+        return cb(pointsEarned);
+      });
+    };
+
+
     if (method === 'paypal') {
       // try to fetch stored paypal transaction for nicer txn id/date
       db.query('SELECT paypal_order_id, payment_time FROM paypal_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [orderId], (pErr, pRows) => {
@@ -705,7 +806,10 @@ function paymentSuccess(req, res) {
           opts.transactionId = pRows[0].paypal_order_id || txn || '';
           if (pRows[0].payment_time) opts.date = new Date(pRows[0].payment_time).toLocaleString();
         }
-        return renderPage({ transactionId: opts.transactionId, date: opts.date, paymentMethod: 'PayPal', maskedCard: null, amount: opts.amount });
+        // Award points then render
+        awardPointsAndThen(function(points) {
+          return renderPageWithPoints({ transactionId: opts.transactionId, date: opts.date, paymentMethod: 'PayPal', maskedCard: null, amount: opts.amount, orderId: orderId });
+        });
       });
       return;
     }
@@ -713,7 +817,10 @@ function paymentSuccess(req, res) {
     // card or other (use last4 if provided)
     opts.transactionId = txn || null;
     opts.maskedCard = last4 ? ('**** ' + String(last4).slice(-4)) : null;
-    return renderPage({ transactionId: opts.transactionId, date: opts.date, paymentMethod: method === 'card' ? 'Card' : method, maskedCard: opts.maskedCard, amount: opts.amount });
+    // Award points then render for non-PayPal methods
+    awardPointsAndThen(function(points) {
+      return renderPageWithPoints({ transactionId: opts.transactionId, date: opts.date, paymentMethod: method === 'card' ? 'Card' : method, maskedCard: opts.maskedCard, amount: opts.amount, orderId: orderId });
+    });
   });
 }
 

@@ -444,17 +444,45 @@
             <div class="p-4">
               <% if ((shippingMethods || []).length) { %>
                 <div class="d-flex flex-column gap-3">
-                  <% shippingMethods.forEach(sm => { const isShipSelected = Number(selectedShippingMethodId) === Number(sm.id); %>
+                  <% shippingMethods.forEach(sm => { 
+                    const isShipSelected = Number(selectedShippingMethodId) === Number(sm.id); 
+                    const methodName = String(sm.method_name || '').toLowerCase();
+                    const isStandard = methodName.includes('standard');
+                    const isPriority = methodName.includes('priority');
+                    const originalPrice = Number(sm.price || 0);
+                    let displayPrice = originalPrice;
+                    let showFree = false;
+                    
+                    if (typeof membership !== 'undefined' && membership) {
+                      if (isStandard && (membership.free_standard_delivery || (total >= Number(membership.free_delivery_threshold || 0)))) {
+                        displayPrice = 0;
+                        showFree = true;
+                      }
+                      if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) {
+                        displayPrice = Math.max(0, originalPrice - Number(membership.priority_delivery_discount));
+                      }
+                    }
+                  %>
                     <label class="address-card d-flex align-items-center justify-content-between <%= isShipSelected ? 'active' : '' %>"> 
                       <div>
                         <strong><%= sm.method_name || 'Shipping' %></strong>
                         <% if (sm.estimated_days) { %>
-                          <div class="text-muted small">Est. <%= sm.estimated_days %> days</div>
+                          <div class="text-muted small">Est. <%= sm.estimated_days %></div>
                         <% } %>
                       </div>
-                      <div class="text-end">
-                        <div class="fw-bold">$<%= Number(sm.price || 0).toFixed(2) %></div>
-                        <input type="radio" name="shipping_method" value="<%= sm.id %>" data-price="<%= Number(sm.price || 0).toFixed(2) %>" <%= isShipSelected ? 'checked' : '' %> />
+                      <div class="text-end d-flex align-items-center gap-2">
+                        <div>
+                          <% if (showFree && displayPrice === 0) { %>
+                            <div class="fw-bold text-decoration-line-through text-muted small">$<%= originalPrice.toFixed(2) %></div>
+                            <span class="badge bg-success">Free delivery</span>
+                          <% } else if (displayPrice < originalPrice) { %>
+                            <div class="text-decoration-line-through text-muted small">$<%= originalPrice.toFixed(2) %></div>
+                            <div class="fw-bold text-success">$<%= displayPrice.toFixed(2) %></div>
+                          <% } else { %>
+                            <div class="fw-bold">$<%= displayPrice.toFixed(2) %></div>
+                          <% } %>
+                        </div>
+                        <input type="radio" name="shipping_method" value="<%= sm.id %>" data-price="<%= displayPrice.toFixed(2) %>" data-original="<%= originalPrice.toFixed(2) %>" data-free="<%= showFree ? '1' : '0' %>" <%= isShipSelected ? 'checked' : '' %> />
                       </div>
                     </label>
                   <% }) %>
@@ -561,8 +589,21 @@
           </div>
           <div class="summary-row">
             <span>Shipping</span>
-            <span class="text-success fw-bold">$<span id="shippingCost"><%= Number(shippingFee || 0).toFixed(2) %></span></span>
+            <span>
+              <% if (originalShippingFee && originalShippingFee > shippingFee) { %>
+                <span class="text-muted text-decoration-line-through small">$<%= Number(originalShippingFee).toFixed(2) %></span>
+                <span class="text-success fw-bold ms-2">$<span id="shippingCost"><%= Number(shippingFee || 0).toFixed(2) %></span></span>
+              <% } else { %>
+                <span class="text-success fw-bold">$<span id="shippingCost"><%= Number(shippingFee || 0).toFixed(2) %></span></span>
+              <% } %>
+            </span>
           </div>
+          <% if (discountAmount && discountAmount > 0) { %>
+          <div class="summary-row">
+            <span>Membership Discount</span>
+            <span class="text-success fw-bold">-$<%= Number(discountAmount).toFixed(2) %></span>
+          </div>
+          <% } %>
 
           <div class="summary-row total">
             <span>Total</span>
@@ -738,12 +779,13 @@
       const totalCostEl = document.getElementById('totalCost');
       const summaryCard = document.querySelector('.summary-card');
       const subtotal = summaryCard ? parseFloat(summaryCard.dataset.subtotal || '0') : 0;
+      const discountAmount = <%= Number(discountAmount || 0).toFixed(2) %>;
 
       function updateShipping(evt){
         const checked = document.querySelector('input[name="shipping_method"]:checked');
         const ship = checked ? parseFloat(checked.dataset.price || '0') : 0;
         if (shippingCostEl) shippingCostEl.textContent = ship.toFixed(2);
-        if (totalCostEl) totalCostEl.textContent = (subtotal + ship).toFixed(2);
+        if (totalCostEl) totalCostEl.textContent = (subtotal + ship - discountAmount).toFixed(2);
 
         // toggle active card styling
         const allLabels = document.querySelectorAll('label.address-card input[name="shipping_method"]');
@@ -776,7 +818,7 @@
         updateShipping();
       } else {
         if (shippingCostEl) shippingCostEl.textContent = '0.00';
-        if (totalCostEl) totalCostEl.textContent = subtotal.toFixed(2);
+        if (totalCostEl) totalCostEl.textContent = (subtotal - discountAmount).toFixed(2);
       }
 
       // modal handling: show modal and submit via AJAX, append new address on success
@@ -864,25 +906,47 @@
         });
       }
 
-      // ensure shipping selection is saved before navigating to pay page
+      // ensure address + shipping selection is saved before navigating to pay page
       const proceedBtn = document.querySelector('.btn-confirm-pay');
       if (proceedBtn) {
         proceedBtn.addEventListener('click', function(ev){
           ev.preventDefault();
-          const checked = document.querySelector('input[name="shipping_method"]:checked');
-          if (!checked) return window.location = '/cart/pay';
-          const body = new URLSearchParams({ shipping_method_id: checked.value }).toString();
-          fetch('/shipping/select', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
-            body
-          }).then(() => {
-            window.location = '/cart/pay';
-          }).catch(() => {
-            // still navigate even if save fails
-            window.location = '/cart/pay';
-          });
+
+          const addrRadios = document.querySelectorAll('input[name="address_id"]');
+          const addrChecked = document.querySelector('input[name="address_id"]:checked');
+          if (addrRadios.length && !addrChecked) {
+            alert('Please select a delivery address before proceeding to payment.');
+            return;
+          }
+
+          const shipRadios = document.querySelectorAll('input[name="shipping_method"]');
+          const shipChecked = document.querySelector('input[name="shipping_method"]:checked');
+          if (shipRadios.length && !shipChecked) {
+            alert('Please select a shipping method before proceeding to payment.');
+            return;
+          }
+
+          // Save selections (address then shipping) before navigating to payment
+          const tasks = [];
+          if (addrChecked) {
+            tasks.push(fetch('/delivery-addresses/select', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+              body: new URLSearchParams({ address_id: addrChecked.value }).toString()
+            }).catch(() => {}));
+          }
+
+          if (shipChecked) {
+            tasks.push(fetch('/shipping/select', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+              body: new URLSearchParams({ shipping_method_id: shipChecked.value }).toString()
+            }).catch(() => {}));
+          }
+
+          Promise.all(tasks).then(() => { window.location = '/cart/pay'; }).catch(() => { window.location = '/cart/pay'; });
         });
       }
     })();

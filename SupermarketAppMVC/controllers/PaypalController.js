@@ -1,5 +1,6 @@
 const paypalService = require('../services/paypal');
 const db = require('../db');
+const Membership = require('../models/Membership');
 const PaypalTransaction = require('../models/PaypalTransaction');
 
 function uid(req) {
@@ -144,56 +145,82 @@ async function captureOrder(req, res, next) {
             if (!req.session.selectedShippingMethodId) req.session.selectedShippingMethodId = shippingMethodId;
 
             const itemsTotal = cartRows.reduce((s, r) => s + Number(r.unit_price || 0) * Number(r.quantity || 0), 0);
-            const total = itemsTotal + shippingFee;
 
-            conn.query(
-              'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())',
-              [userId, deliveryAddressId, shippingMethodId, shippingFee, total, 'Paid'],
-              (oErr, oRes) => {
-                if (oErr) return conn.rollback(() => next(oErr));
-                const orderId = oRes.insertId;
+            // apply membership perks (free shipping / priority discount / percent discount)
+            Membership.getUserMembership(userId, (mErr, membership) => {
+              if (mErr) console.error('paypal.capture - membership fetch error', mErr);
+              if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
 
-                const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
-                const placeholders = vals.map(() => '(?, ?, ?, ?)').join(',');
-                const flat = vals.flat();
-                conn.query(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ${placeholders}`, flat, (oiErr) => {
-                  if (oiErr) return conn.rollback(() => next(oiErr));
+              let appliedShippingFee = Number(shippingFee || 0);
+              const methodName = String(shipRow?.method_name || '').toLowerCase();
+              const isStandard = methodName.includes('standard');
+              const isPriority = methodName.includes('priority');
 
-                  const updates = cartRows.map(r => new Promise((resolve, reject) => {
-                    conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(r.quantity), r.product_id], (uErr) => uErr ? reject(uErr) : resolve());
-                  }));
-
-                  Promise.all(updates)
-                    .then(() => {
-                      conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (dErr) => {
-                        if (dErr) return conn.rollback(() => next(dErr));
-
-                        // persist paypal transaction
-                        const payerEmail = (capture.payer && capture.payer.email_address) || null;
-                        const amount = (payments.amount && payments.amount.value) || String(total);
-                        const currency = (payments.amount && payments.amount.currency_code) || (process.env.PAYPAL_CURRENCY || 'SGD');
-                        const paymentStatus = payments.status || capture.status || 'COMPLETED';
-                        const paymentTime = (payments && payments.update_time) ? new Date(payments.update_time) : new Date();
-                        const captureId = (payments && payments.id) || null;
-
-                        conn.query('INSERT INTO paypal_transactions (user_id, order_id, paypal_order_id, paypal_capture_id, payer_email, amount, currency, payment_status, payment_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                          [userId, orderId, orderID, captureId, payerEmail, amount, currency, paymentStatus, paymentTime], (ptErr) => {
-                            if (ptErr) return conn.rollback(() => next(ptErr));
-
-                            conn.commit((cmErr) => {
-                              if (cmErr) return conn.rollback(() => next(cmErr));
-                              const txnId = (payments && payments.id) ? payments.id : orderID;
-                              const encodedTxn = encodeURIComponent(txnId || '');
-                              const encodedAmount = encodeURIComponent(amount || total || '');
-                              return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
-                            });
-                          });
-                      });
-                    })
-                    .catch((decErr) => conn.rollback(() => next(decErr)));
-                });
+              if (isStandard && (membership.free_standard_delivery || (itemsTotal >= Number(membership.free_delivery_threshold || 0)))) {
+                appliedShippingFee = 0;
               }
-            );
+              if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) {
+                appliedShippingFee = Math.max(0, Number(shippingFee || 0) - Number(membership.priority_delivery_discount || 0));
+              }
+
+              let discountAmount = 0;
+              const discThresh = Number(membership.discount_threshold || 0);
+              const discPercent = Number(membership.discount_percent || 0);
+              if (discPercent > 0 && itemsTotal >= discThresh) {
+                discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
+              }
+
+              const totalWithShipping = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
+
+              conn.query(
+                'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())',
+                [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, totalWithShipping, 'Paid'],
+                (oErr, oRes) => {
+                  if (oErr) return conn.rollback(() => next(oErr));
+                  const orderId = oRes.insertId;
+
+                  const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
+                  const placeholders = vals.map(() => '(?, ?, ?, ?)').join(',');
+                  const flat = vals.flat();
+                  conn.query(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ${placeholders}`, flat, (oiErr) => {
+                    if (oiErr) return conn.rollback(() => next(oiErr));
+
+                    const updates = cartRows.map(r => new Promise((resolve, reject) => {
+                      conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(r.quantity), r.product_id], (uErr) => uErr ? reject(uErr) : resolve());
+                    }));
+
+                    Promise.all(updates)
+                      .then(() => {
+                        conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (dErr) => {
+                          if (dErr) return conn.rollback(() => next(dErr));
+
+                          // persist paypal transaction
+                          const payerEmail = (capture.payer && capture.payer.email_address) || null;
+                          const amount = (payments.amount && payments.amount.value) || String(totalWithShipping || (itemsTotal + shippingFee));
+                          const currency = (payments.amount && payments.amount.currency_code) || (process.env.PAYPAL_CURRENCY || 'SGD');
+                          const paymentStatus = payments.status || capture.status || 'COMPLETED';
+                          const paymentTime = (payments && payments.update_time) ? new Date(payments.update_time) : new Date();
+                          const captureId = (payments && payments.id) || null;
+
+                          conn.query('INSERT INTO paypal_transactions (user_id, order_id, paypal_order_id, paypal_capture_id, payer_email, amount, currency, payment_status, payment_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                            [userId, orderId, orderID, captureId, payerEmail, amount, currency, paymentStatus, paymentTime], (ptErr) => {
+                              if (ptErr) return conn.rollback(() => next(ptErr));
+
+                              conn.commit((cmErr) => {
+                                if (cmErr) return conn.rollback(() => next(cmErr));
+                                const txnId = (payments && payments.id) ? payments.id : orderID;
+                                const encodedTxn = encodeURIComponent(txnId || '');
+                                const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                              });
+                            });
+                        });
+                      })
+                      .catch((decErr) => conn.rollback(() => next(decErr)));
+                  });
+                }
+              );
+            });
           }).catch((shipErr) => conn.rollback(() => {
             if (shipErr && shipErr.message === 'NO_SHIP_METHOD') return res.status(400).json({ error: 'No shipping method available' });
             return next(shipErr);

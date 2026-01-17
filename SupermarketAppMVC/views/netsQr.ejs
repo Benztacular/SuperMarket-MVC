@@ -49,10 +49,13 @@
             // Check for payment success
             if (data.success) {
                 if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
-                window.location.href = `/nets-qr/success?txn_retrieval_ref=${txnRetrievalRef}`;
+                // Prefer server-provided redirect (may point to /wallet for top-ups).
+                const redirect = data.redirect || `/nets-qr/success?txn_retrieval_ref=${txnRetrievalRef}`;
+                window.location.href = redirect;
             } else if (data.fail) {
                 if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
-                window.location.href = `/nets-qr/fail?txn_retrieval_ref=${txnRetrievalRef}`;
+                const redirect = data.redirect || `/nets-qr/fail?txn_retrieval_ref=${txnRetrievalRef}`;
+                window.location.href = redirect;
             }
         });
 

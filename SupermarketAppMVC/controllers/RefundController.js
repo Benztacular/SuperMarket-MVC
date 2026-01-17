@@ -1,6 +1,7 @@
 const Refund = require('../models/Refund');
 const db = require('../db');
 const paypalService = require('../services/paypal');
+const stripeService = require('../services/stripe');
 const Product = require('../models/Product');
 
 function uid(req) {
@@ -145,24 +146,33 @@ exports.submitRequest = (req, res) => {
         let method = 'unknown';
         if (pRows && pRows.length > 0) {
           method = 'PayPal';
+          createRefund(method);
         } else {
-          // Check NETS
-          db.query('SELECT * FROM nets_transactions WHERE order_id = ? LIMIT 1', [orderId], (nErr, nRows) => {
-            if (nErr) console.error('RefundController.submitRequest - nets check error', nErr);
+          // Check Stripe
+          db.query('SELECT * FROM stripe_transactions WHERE order_id = ? LIMIT 1', [orderId], (sErr, sRows) => {
+            if (sErr) console.error('RefundController.submitRequest - stripe check error', sErr);
             
-            if (nRows && nRows.length > 0) {
-              method = 'NETS QR';
+            if (sRows && sRows.length > 0) {
+              method = 'Stripe';
+              createRefund(method);
             } else {
-              method = 'Wallet';
-            }
+              // Check NETS
+              db.query('SELECT * FROM nets_transactions WHERE order_id = ? LIMIT 1', [orderId], (nErr, nRows) => {
+                if (nErr) console.error('RefundController.submitRequest - nets check error', nErr);
+                
+                if (nRows && nRows.length > 0) {
+                  method = 'NETS QR';
+                } else {
+                  method = 'Wallet';
+                }
 
-            // Create refund request
-            createRefund(method);
+                // Create refund request
+                createRefund(method);
+              });
+            }
           });
           return;
         }
-
-        createRefund(method);
       });
 
       function createRefund(method) {
@@ -285,7 +295,81 @@ exports.adminApproveRefund = async (req, res) => {
     console.log('RefundController.adminApproveRefund - processing refund for method:', refund.method);
 
     // Process refund based on payment method
-    if (refund.method === 'PayPal') {
+    if (refund.method === 'Stripe') {
+      // Process Stripe refund through gateway
+      try {
+        // Get Stripe transaction details
+        db.query('SELECT * FROM stripe_transactions WHERE order_id = ? LIMIT 1', [refund.order_id], async (stErr, stRows) => {
+          if (stErr) {
+            console.error('RefundController.adminApproveRefund - stripe transaction error', stErr);
+            if (req.flash) req.flash('error', 'Failed to load Stripe transaction');
+            return res.redirect('/admin/refunds');
+          }
+
+          const stripeTxn = stRows && stRows[0];
+          if (!stripeTxn) {
+            console.error('RefundController.adminApproveRefund - Stripe transaction not found for order', refund.order_id);
+            if (req.flash) req.flash('error', 'Stripe transaction not found');
+            return res.redirect('/admin/refunds');
+          }
+
+          // Stripe requires the payment intent ID to process refunds
+          const paymentIntentId = stripeTxn.stripe_txn_id;
+          if (!paymentIntentId) {
+            console.error('RefundController.adminApproveRefund - No payment intent ID found for Stripe transaction');
+            if (req.flash) req.flash('error', 'Stripe payment intent ID not found. Cannot process refund.');
+            return res.redirect('/admin/refunds');
+          }
+          console.log('RefundController.adminApproveRefund - attempting Stripe refund, paymentIntentId:', paymentIntentId, 'amount:', refund.amount);
+
+          try {
+            const stripeRefund = await stripeService.createRefund(paymentIntentId, Number(refund.amount), adminNote);
+            console.log('RefundController.adminApproveRefund - Stripe refund response:', stripeRefund);
+
+            const refundStatus = stripeRefund.status || 'succeeded';
+            const gatewayRef = stripeRefund.id || `stripe_refund_${refundId}_${Date.now()}`;
+
+            // Update refund status
+            Refund.updateStatus(refundId, 'SUCCESS', adminNote, gatewayRef, (refundUpdateErr) => {
+              if (refundUpdateErr) {
+                console.error('RefundController.adminApproveRefund - refund update error', refundUpdateErr);
+                return res.status(500).send('Failed to update refund status');
+              }
+
+              // Restore product quantities for the refunded order
+              try {
+                Product.increaseStockForOrder(refund.order_id, (pErr, pRes) => {
+                  if (pErr) console.error('RefundController.adminApproveRefund - failed to restore product stock', pErr);
+
+                  // Update order status regardless of stock restore result
+                  db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                    if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
+
+                    if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to Stripe payment method.`);
+                    return res.redirect('/admin/refunds');
+                  });
+                });
+              } catch (ex) {
+                console.error('RefundController.adminApproveRefund - exception restoring stock', ex);
+                db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                  if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
+                  if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to Stripe payment method.`);
+                  return res.redirect('/admin/refunds');
+                });
+              }
+            });
+          } catch (stripeErr) {
+            console.error('RefundController.adminApproveRefund - Stripe refund error', stripeErr);
+            if (req.flash) req.flash('error', 'Failed to process Stripe refund: ' + (stripeErr.message || 'Unknown error'));
+            return res.redirect('/admin/refunds');
+          }
+        });
+      } catch (ex) {
+        console.error('RefundController.adminApproveRefund - exception', ex);
+        if (req.flash) req.flash('error', 'Failed to process Stripe refund');
+        return res.redirect('/admin/refunds');
+      }
+    } else if (refund.method === 'PayPal') {
       // Process PayPal refund through gateway
       try {
         // Get PayPal transaction details

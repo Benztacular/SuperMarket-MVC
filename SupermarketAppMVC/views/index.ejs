@@ -1,402 +1,581 @@
-<!doctype html>
-<html lang="en" class="scroll-smooth">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FreshMart - Organic & Fresh</title>
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700;900&display=swap" rel="stylesheet">
-
-  <!-- Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-
-  <style>
-    :root {
-      --accent: #0f9d58;
-      --accent-2: #14c38e;
-      --dark: #0f1f28;
-    }
-
-    body {
-      font-family: 'Inter', sans-serif;
-      /* Soft aesthetic gradient: Mint to Warm Cream */
-      background: linear-gradient(135deg, #f0fdf4 0%, #fffbeb 100%);
-      color: var(--dark);
-      min-height: 100vh;
-    }
-
-    h1, h2, h3 { font-family: 'Poppins', sans-serif; }
-
-    /* Initial Load Animation */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .animate-fade-up {
-      animation: fadeUp 0.8s ease-out forwards;
-    }
-
-    /* Infinite Marquee Animation */
-    @keyframes marquee {
-      0% { transform: translateX(0); }
-      100% { transform: translateX(-50%); }
-    }
-    .animate-marquee {
-      display: flex;
-      width: max-content; /* Ensure container fits content width */
-      animation: marquee 25s linear infinite;
-    }
-
-    /* Scroll Reveal Animation Classes */
-    .reveal-on-scroll {
-      opacity: 0;
-      transform: translateY(30px);
-      transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
-    }
-    .reveal-on-scroll.is-visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* Floating Card Animation */
-    @keyframes float {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
-    }
-    .animate-float {
-      animation: float 6s ease-in-out infinite;
-    }
-    /* Delays for natural disjointed movement */
-    .delay-float-1 { animation-delay: 0s; }
-    .delay-float-2 { animation-delay: 2s; }
-    .delay-float-3 { animation-delay: 4s; }
-
-    /* Blob: Transparent so body gradient shows through */
-    .hero-blob {
-      position: absolute;
-      inset: 0;
-      background:
-        radial-gradient(circle at 25% 30%, rgba(20,195,142,0.18), transparent 30%),
-        radial-gradient(circle at 80% 10%, rgba(15,157,88,0.12), transparent 35%);
-      pointer-events: none;
-    }
-
-    /* CRITICAL FIX: FORCE BOOTSTRAP NAVBAR VISIBILITY */
-    @media (min-width: 992px) {
-      .navbar-expand-lg .navbar-collapse {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-      }
-      .navbar-expand-lg .navbar-nav {
-        flex-direction: row !important;
-        align-items: center !important;
-      }
-      .navbar-expand-lg .navbar-toggler {
-        display: none !important;
-      }
-    }
-  </style>
-</head>
-
-<body class="flex flex-col min-h-screen">
-
-  <!-- HEADER -->
-  <%- include('partials/header', { 
-      user: (typeof user !== 'undefined' ? user : null), 
-      cartCount: (typeof cartCount !== 'undefined' ? cartCount : 0), 
-      isAdmin: (typeof isAdmin !== 'undefined' ? isAdmin : false),
-      messages: (typeof messages !== 'undefined' ? messages : {}) 
-    }) %>
-
-  <main class="flex-grow">
-
-    <!-- HERO -->
-    <section class="relative overflow-hidden">
-      <div class="hero-blob"></div>
-
-      <div class="relative z-10 max-w-6xl mx-auto px-6 pt-14 pb-20 lg:pt-24 lg:pb-28 grid lg:grid-cols-2 gap-12 items-center">
-
-        <!-- LEFT: TEXT -->
-        <div class="space-y-7 animate-fade-up">
-
-          <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold bg-green-100 text-green-700 border border-green-300">
-            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            Trusted by thousands
-          </div>
-
-          <h1 class="text-5xl lg:text-6xl font-black text-slate-900 leading-tight">
-            Organic food, <span class="text-[var(--accent)]">fresh</span> to your door.
-          </h1>
-
-          <p class="text-lg text-slate-600 max-w-xl">
-            Premium produce, dairy, and essentials delivered fast. Fresh, healthy, and affordable groceries made simple.
-          </p>
-
-          <div class="flex flex-wrap items-center gap-3">
-            <% if (user) { %>
-              <a href="/shopping"
-                 class="px-7 py-3 rounded-full bg-[var(--accent)] hover:bg-emerald-700 text-white font-semibold shadow-lg transition inline-flex items-center gap-2">
-                Start shopping <i data-lucide="arrow-right" class="w-5 h-5"></i>
-              </a>
-            <% } else { %>
-              <a href="/login"
-                 class="px-7 py-3 rounded-full bg-[var(--accent)] hover:bg-emerald-700 text-white font-semibold shadow-lg transition inline-flex items-center gap-2">
-                Shop now <i data-lucide="arrow-right" class="w-5 h-5"></i>
-              </a>
-
-              <a href="/register"
-                 class="px-6 py-3 rounded-full border border-emerald-300 text-[var(--accent)] font-semibold hover:bg-emerald-50 transition">
-                 Create account
-              </a>
-            <% } %>
-          </div>
-
-        </div>
-
-        <!-- RIGHT: PRODUCT SLIDESHOW -->
-        <div class="relative overflow-hidden rounded-3xl shadow-md bg-white h-[360px]">
-
-          <!-- Slides container -->
-          <div id="slideshow" class="flex h-full transition-transform duration-700">
-            <div class="min-w-full h-full">
-              <img src="/images/product1.jpg" alt="Featured product 1" class="w-full h-full object-cover" />
-            </div>
-            <div class="min-w-full h-full">
-              <img src="/images/product2.jpg" alt="Featured product 2" class="w-full h-full object-cover" />
-            </div>
-            <div class="min-w-full h-full">
-              <img src="/images/product3.jpg" alt="Featured product 3" class="w-full h-full object-cover" />
-            </div>
-          </div>
-
-          <!-- Dots -->
-          <div class="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
-            <span class="slideshow-dot w-3 h-3 rounded-full bg-white/70"></span>
-            <span class="slideshow-dot w-3 h-3 rounded-full bg-white/40"></span>
-            <span class="slideshow-dot w-3 h-3 rounded-full bg-white/40"></span>
-          </div>
-
-        </div>
-
-      </div>
-    </section>
-
-    <!-- INFINITE TEXT SCROLL (MARQUEE) -->
-    <section class="bg-[var(--accent)] py-4 overflow-hidden border-y border-emerald-600/20">
-      <div class="animate-marquee whitespace-nowrap flex items-center gap-8 text-white/90 font-bold text-lg tracking-wider uppercase font-heading">
-        <span>• Fresh From Farm</span>
-        <span>• 100% Organic</span>
-        <span>• Sustainable Packaging</span>
-        <span>• Express Delivery</span>
-        <span>• Premium Quality</span>
-        <span>• Fresh From Farm</span>
-        <span>• 100% Organic</span>
-        <span>• Sustainable Packaging</span>
-        <span>• Express Delivery</span>
-        <span>• Premium Quality</span>
-        <span>• Fresh From Farm</span>
-        <span>• 100% Organic</span>
-        <span>• Sustainable Packaging</span>
-        <span>• Express Delivery</span>
-        <span>• Premium Quality</span>
-      </div>
-    </section>
-
-    <!-- FEATURE HIGHLIGHTS (Elevated + Floating Cards) -->
-    <section class="relative py-24">
-      <!-- Ambient Background Decoration -->
-      <div class="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white/80 pointer-events-none"></div>
-      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-4xl bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.08),transparent_70%)] pointer-events-none blur-3xl"></div>
-
-      <div class="relative z-10 max-w-6xl mx-auto px-6">
-        <div class="text-center mb-16 reveal-on-scroll">
-          <span class="text-emerald-600 font-bold tracking-wider uppercase text-sm">Our Promise</span>
-          <h2 class="text-4xl font-black text-slate-900 mt-2 mb-4">Why choose FreshMart?</h2>
-          <div class="w-24 h-1.5 bg-emerald-500 mx-auto rounded-full"></div>
-        </div>
-
-        <div class="grid md:grid-cols-3 gap-8">
-          
-          <!-- Card 1 -->
-          <div class="reveal-on-scroll group">
-            <div class="animate-float delay-float-1 h-full p-8 bg-white/80 backdrop-blur-md border border-white/60 rounded-[2rem] shadow-xl hover:shadow-2xl hover:bg-white transition-all duration-500 hover:border-emerald-200">
-              <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100 text-emerald-600 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform duration-300">
-                <i data-lucide="sprout" class="w-8 h-8"></i>
-              </div>
-              <h3 class="text-2xl font-bold text-slate-900 mb-3">100% Organic</h3>
-              <p class="text-slate-600 leading-relaxed">
-                Certified produce sourced directly from trusted local farms. We ensure absolutely no harmful chemicals touch your food.
-              </p>
-            </div>
-          </div>
-
-          <!-- Card 2 -->
-          <div class="reveal-on-scroll group" style="transition-delay: 150ms;">
-            <div class="animate-float delay-float-2 h-full p-8 bg-white/80 backdrop-blur-md border border-white/60 rounded-[2rem] shadow-xl hover:shadow-2xl hover:bg-white transition-all duration-500 hover:border-blue-200">
-              <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform duration-300">
-                <i data-lucide="truck" class="w-8 h-8"></i>
-              </div>
-              <h3 class="text-2xl font-bold text-slate-900 mb-3">Fast & Reliable</h3>
-              <p class="text-slate-600 leading-relaxed">
-                Experience our lightning-fast logistics. Order now and get your fresh essentials delivered to your doorstep within 2 hours.
-              </p>
-            </div>
-          </div>
-
-          <!-- Card 3 -->
-          <div class="reveal-on-scroll group" style="transition-delay: 300ms;">
-            <div class="animate-float delay-float-3 h-full p-8 bg-white/80 backdrop-blur-md border border-white/60 rounded-[2rem] shadow-xl hover:shadow-2xl hover:bg-white transition-all duration-500 hover:border-amber-200">
-              <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100 text-amber-600 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform duration-300">
-                <i data-lucide="badge-check" class="w-8 h-8"></i>
-              </div>
-              <h3 class="text-2xl font-bold text-slate-900 mb-3">Freshness Guarantee</h3>
-              <p class="text-slate-600 leading-relaxed">
-                We stand by our quality. If you're not 100% satisfied with the freshness, we'll replace it instantly, no questions asked.
-              </p>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- TESTIMONIALS / REVIEWS (WITH PAZAZ!) -->
-    <section class="relative py-20 bg-slate-900 overflow-hidden">
-      <!-- Background Flair -->
-      <div class="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-         <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-[100px] mix-blend-screen"></div>
-         <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-500/20 rounded-full blur-[100px] mix-blend-screen"></div>
-      </div>
-
-      <div class="relative z-10 max-w-7xl mx-auto px-6">
-        <div class="text-center mb-16 reveal-on-scroll">
-          <h2 class="text-3xl md:text-5xl font-black text-white tracking-tight mb-4">
-            Neighborhood <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Love</span>
-          </h2>
-          <p class="text-slate-400 text-lg">Don't just take our word for it.</p>
-        </div>
-
-        <div class="grid md:grid-cols-3 gap-6">
-          
-          <!-- Review 1 -->
-          <div class="reveal-on-scroll p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg hover:bg-white/10 transition duration-300 hover:-translate-y-2">
-            <div class="flex items-center gap-1 text-yellow-400 mb-4">
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-            </div>
-            <p class="text-slate-200 mb-6 italic">"Honestly a life saver. The veggies are crisper than what I find at the local market, and I didn't even have to leave my house!"</p>
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 flex items-center justify-center text-white font-bold">SJ</div>
-              <div>
-                <h4 class="text-white font-bold text-sm">Sarah Jenkins</h4>
-                <p class="text-slate-500 text-xs">Verified Buyer</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Review 2 -->
-          <div class="reveal-on-scroll p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg hover:bg-white/10 transition duration-300 hover:-translate-y-2" style="transition-delay: 100ms;">
-            <div class="flex items-center gap-1 text-yellow-400 mb-4">
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-            </div>
-            <p class="text-slate-200 mb-6 italic">"I was skeptical about ordering meat online, but the quality was restaurant grade. The 2-hour delivery promise is real!"</p>
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold">MT</div>
-              <div>
-                <h4 class="text-white font-bold text-sm">Mike Thompson</h4>
-                <p class="text-slate-500 text-xs">Chef & Parent</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Review 3 -->
-          <div class="reveal-on-scroll p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg hover:bg-white/10 transition duration-300 hover:-translate-y-2" style="transition-delay: 200ms;">
-            <div class="flex items-center gap-1 text-yellow-400 mb-4">
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star" class="w-4 h-4 fill-current"></i>
-               <i data-lucide="star-half" class="w-4 h-4 fill-current"></i>
-            </div>
-            <p class="text-slate-200 mb-6 italic">"Finally, sustainable packaging that actually works. Everything arrived cold and fresh. FreshMart is my new weekly staple."</p>
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white font-bold">ER</div>
-              <div>
-                <h4 class="text-white font-bold text-sm">Emily Rodriguez</h4>
-                <p class="text-slate-500 text-xs">Eco Enthusiast</p>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- FOOTER -->
-  <%- include('partials/footer') %>
-
-  <script>
-    lucide.createIcons();
-
-    // Slideshow logic
-    document.addEventListener('DOMContentLoaded', () => {
-      // 1. Slideshow
-      const slides = document.getElementById('slideshow');
-      const dots = document.querySelectorAll('.slideshow-dot');
-      if(slides && dots.length > 0) {
-        const total = dots.length;
-        let index = 0;
-
-        function goToSlide(i) {
-          index = i;
-          slides.style.transform = `translateX(-${index * 100}%)`;
-          dots.forEach((d, idx) => {
-            d.classList.remove('bg-white/70');
-            d.classList.add('bg-white/40');
-            if (idx === index) d.classList.add('bg-white/70');
-          });
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= typeof title !== 'undefined' ? title : 'FreshMart SG | Premium Grocery Experience' %></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap');
+        
+        :root {
+            --sg-emerald: #064e3b;
+            --sg-fresh: #10b981;
+            --sg-mint: #d1fae5;
+            --sg-accent: #facc15;
         }
 
-        setInterval(() => {
-          const next = (index + 1) % total;
-          goToSlide(next);
-        }, 3500);
-      }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #ffffff;
+            color: var(--sg-emerald);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
 
-      // 2. Scroll Reveal Observer
-      const observerOptions = {
-        root: null,
-        rootMargin: '0px',
-        threshold: 0.1 // Trigger when 10% of element is visible
-      };
+        /* --- DYNAMIC ANIMATED BACKGROUND --- */
+        .bg-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -10;
+            background: radial-gradient(circle at 50% 50%, #f0fdf4 0%, #ffffff 100%);
+        }
 
-      const observer = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible');
-            observer.unobserve(entry.target); // Only animate once
-          }
+        .mesh-gradient {
+            position: fixed;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            z-index: -9;
+            background-image: 
+                radial-gradient(circle at 20% 30%, var(--sg-mint) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, #ecfdf5 0%, transparent 40%),
+                radial-gradient(circle at 50% 20%, #f0fdfa 0%, transparent 40%),
+                radial-gradient(circle at 30% 80%, #f7fee7 0%, transparent 40%);
+            filter: blur(80px);
+            opacity: 0.6;
+            animation: rotateGradient 20s linear infinite;
+        }
+
+        @keyframes rotateGradient {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.1); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        .float-item {
+            position: fixed;
+            pointer-events: none;
+            z-index: -5;
+            filter: drop-shadow(0 20px 30px rgba(0,0,0,0.05));
+            animation: float 6s ease-in-out infinite alternate;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            100% { transform: translateY(-40px) rotate(10deg); }
+        }
+
+        /* --- SCROLL TRIGGER SYSTEM --- */
+        .scroll-section {
+            height: 250vh;
+            position: relative;
+        }
+
+        .sticky-container {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .scroll-content {
+            opacity: 0;
+            transform: translateY(100px) scale(0.9);
+            filter: blur(20px);
+            transition: all 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: none;
+        }
+
+        .scroll-content.active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0px);
+            pointer-events: auto;
+        }
+
+        /* --- PREMIUM BENTO & INTERACTIVE ELEMENTS --- */
+        .bento-card {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(25px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            border-radius: 48px;
+            transition: all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .bento-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            background: rgba(255, 255, 255, 0.8);
+            border-color: var(--sg-fresh);
+            box-shadow: 0 40px 80px rgba(6, 78, 59, 0.1);
+        }
+
+        /* --- TICKER --- */
+        .ticker-wrap {
+            width: 100%;
+            overflow: hidden;
+            background: rgba(6, 78, 59, 0.03);
+            padding: 12px 0;
+            backdrop-filter: blur(8px);
+        }
+
+        .ticker {
+            display: flex;
+            white-space: nowrap;
+            animation: ticker 40s linear infinite;
+        }
+
+        @keyframes ticker {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        nav {
+            backdrop-filter: blur(30px);
+            background: rgba(255, 255, 255, 0.5);
+            z-index: 1000;
+        }
+
+        .get-started-btn {
+            background: linear-gradient(135deg, var(--sg-emerald) 0%, #059669 100%);
+            color: white;
+            padding: 12px 32px;
+            border-radius: 100px;
+            font-weight: 800;
+            font-size: 13px;
+            box-shadow: 0 10px 30px rgba(6, 78, 59, 0.2);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .progress-indicator {
+            position: fixed;
+            right: 40px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--sg-emerald);
+            opacity: 0.1;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .dot.active {
+            opacity: 1;
+            transform: scale(2);
+            box-shadow: 0 0 15px var(--sg-fresh);
+        }
+
+        .brand-logo-box {
+            width: 40px; height: 40px;
+            background: var(--sg-emerald);
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 18px;
+            box-shadow: 0 10px 20px rgba(6, 78, 59, 0.2);
+        }
+
+        .get-started-btn:hover {
+            box-shadow: 0 15px 35px rgba(6, 78, 59, 0.3);
+            transform: translateY(-3px);
+        }
+        ::-webkit-scrollbar { width: 0px; }
+
+        /* Step Animation Visuals */
+        .step-circle {
+            width: 60px; height: 60px;
+            background: var(--sg-emerald);
+            color: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 24px;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 20px rgba(6, 78, 59, 0.2);
+        }
+
+        /* --- LOGISTICS ANIMATION --- */
+        .truck-container {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .road {
+            position: absolute;
+            bottom: 40px;
+            width: 200%;
+            height: 4px;
+            background: repeating-linear-gradient(90deg, #064e3b 0, #064e3b 40px, transparent 40px, transparent 80px);
+            animation: driveRoad 1s linear infinite;
+        }
+
+        .truck-wrap {
+            position: relative;
+            font-size: 10rem;
+            animation: engineShake 0.2s ease-in-out infinite;
+            z-index: 2;
+        }
+
+        .speed-line {
+            position: absolute;
+            height: 2px;
+            background: var(--sg-fresh);
+            border-radius: 2px;
+            animation: speedLine 0.8s linear infinite;
+        }
+
+        @keyframes driveRoad {
+            from { transform: translateX(0); }
+            to { transform: translateX(-80px); }
+        }
+        @keyframes engineShake {
+            0%, 100% { transform: translateY(0) rotate(-1deg); }
+            50% { transform: translateY(-3px) rotate(1deg); }
+        }
+        @keyframes speedLine {
+            0% { transform: translateX(300px); opacity: 0; width: 20px; }
+            50% { opacity: 0.8; width: 60px; }
+            100% { transform: translateX(-400px); opacity: 0; width: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Components -->
+    <div class="bg-canvas"></div>
+    <div class="mesh-gradient"></div>
+    
+    <!-- Floating Icons (Parallax Layer) -->
+    <div class="float-item text-8xl opacity-10" style="top: 15%; left: 5%;">🛒</div>
+    <div class="float-item text-7xl opacity-10" style="top: 60%; right: 5%;">🥡</div>
+    <div class="float-item text-9xl opacity-10" style="top: 40%; left: 85%;">🥦</div>
+
+    <% if (locals.tickerMessages) { %>
+    <div class="fixed bottom-0 w-full z-[100] ticker-wrap border-t border-emerald-100">
+        <div class="ticker">
+            <% tickerMessages.forEach(msg => { %>
+                <span class="px-8 text-[11px] font-black uppercase tracking-widest text-emerald-800">
+                    <%- msg %>
+                </span>
+            <% }); %>
+        </div>
+    </div>
+    <% } %>
+
+    <nav class="fixed top-0 w-full h-20 border-b border-white/20">
+        <div class="max-w-[1400px] mx-auto px-10 h-full flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="brand-logo-box">
+                    FM
+                </div>
+                <span class="font-extrabold text-xl tracking-tighter text-emerald-950">FreshMart</span>
+            </div>
+            <div class="hidden lg:flex gap-12">
+                <a href="/" class="text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all">Experience</a>
+                <a href="#how-it-works" class="text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all">Flow</a>
+                <a href="#service" class="text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all">Logistics</a>
+                <a href="#plus" class="text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all">Membership</a>
+            </div>
+            <% if (typeof user !== 'undefined' && user) { %>
+                <a href="/shopping" class="get-started-btn">Welcome, <%= user.username %></a>
+            <% } else { %>
+                <a href="/login" class="get-started-btn">Get Started</a>
+            <% } %>
+        </div>
+    </nav>
+
+    <!-- Side UI -->
+    <div class="progress-indicator">
+        <div class="dot active" data-target="hero"></div>
+        <div class="dot" data-target="how-it-works"></div>
+        <div class="dot" data-target="service"></div>
+        <div class="dot" data-target="plus"></div>
+        <div class="dot" data-target="reviews"></div>
+    </div>
+
+    <!-- Chapter 1: Hero -->
+    <section id="hero" class="scroll-section">
+        <div class="sticky-container">
+            <div class="scroll-content active text-center px-6 max-w-5xl">
+                <div class="mb-10 inline-flex items-center gap-3 px-6 py-2 rounded-full bg-white shadow-2xl border border-emerald-50">
+                    <span class="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">The Heart of Singaporean Groceries</span>
+                </div>
+                <h1 class="text-7xl md:text-[10rem] font-black tracking-tighter leading-[0.8] mb-10 text-emerald-950">
+                    Your Home. <br> <span class="text-emerald-500 italic">Restocked.</span>
+                </h1>
+                <p class="text-xl md:text-3xl font-medium text-emerald-900/40 leading-relaxed max-w-3xl mx-auto">
+                    The modern HDB essentials hub. Effortless online ordering meets precision island-wide delivery.
+                </p>
+                <div class="mt-20 flex flex-col items-center gap-4 animate-bounce">
+                    <i class="fas fa-chevron-down text-emerald-200"></i>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chapter 2: How It Works -->
+    <section id="how-it-works" class="scroll-section">
+        <div class="sticky-container">
+            <div class="scroll-content w-full max-w-[1300px] px-10">
+                <div class="mb-20 text-center">
+                    <h2 class="text-6xl font-black tracking-tighter text-emerald-950 leading-none">Freshness, in Motion.</h2>
+                    <p class="text-emerald-500 font-bold uppercase tracking-[0.4em] text-[11px] mt-6">From tap to table in 3 seamless steps</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+                    <div class="bento-card p-12 group">
+                        <div class="step-circle">01</div>
+                        <h3 class="text-3xl font-black text-emerald-950 mb-4">Build your Basket</h3>
+                        <p class="text-emerald-900/50 text-lg leading-relaxed font-medium">Browse 15,000+ local staples and international favorites from our digital aisles.</p>
+                        <div class="mt-12 text-5xl opacity-20">🛒</div>
+                    </div>
+                    <div class="bento-card p-12 group bg-emerald-50/30">
+                        <div class="step-circle bg-emerald-500">02</div>
+                        <h3 class="text-3xl font-black text-emerald-950 mb-4">Pick your Window</h3>
+                        <p class="text-emerald-900/50 text-lg leading-relaxed font-medium">Select a 2-hour slot that fits your busy SG schedule. We handle the heavy lifting.</p>
+                        <div class="mt-12 text-5xl opacity-20">🕒</div>
+                    </div>
+                    <div class="bento-card p-12 group">
+                        <div class="step-circle">03</div>
+                        <h3 class="text-3xl font-black text-emerald-950 mb-4">Doorstep Delivery</h3>
+                        <p class="text-emerald-900/50 text-lg leading-relaxed font-medium">Chilled, fresh, and perfectly packed. Delivered straight to your doorstep.</p>
+                        <div class="mt-12 text-5xl opacity-20">🚚</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chapter 3: Logistics (Moving Truck Animation) -->
+    <section id="service" class="scroll-section">
+        <div class="sticky-container">
+            <div class="scroll-content w-full max-w-[1200px] px-10">
+                <div class="grid lg:grid-cols-2 gap-24 items-center">
+                    <div>
+                        <h2 class="text-7xl font-black tracking-tighter mb-10 leading-none">Logistics <br><span class="text-emerald-500 italic">Perfected.</span></h2>
+                        <div class="space-y-8">
+                            <div class="bento-card p-8 flex gap-8 items-center border-l-4 border-l-emerald-500">
+                                <div class="text-3xl text-emerald-500"><i class="fas fa-shipping-fast"></i></div>
+                                <div>
+                                    <h4 class="text-2xl font-black mb-1">Scheduled Slots</h4>
+                                    <p class="text-emerald-900/40 text-sm font-medium">Precision windows for your busy schedule. We arrive within 5 mins of your target.</p>
+                                </div>
+                            </div>
+                            <div class="bento-card p-8 flex gap-8 items-center">
+                                <div class="text-3xl text-emerald-500"><i class="fas fa-map-marked-alt"></i></div>
+                                <div>
+                                    <h4 class="text-2xl font-black mb-1">Heartland Distribution</h4>
+                                    <p class="text-emerald-900/40 text-sm font-medium">Strategically located hubs across Singapore for chilled local storage.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Animated Truck Visual -->
+                    <div class="relative hidden lg:block text-center bento-card p-12 overflow-hidden h-[400px] flex items-center justify-center">
+                        <div class="speed-line" style="top: 25%; animation-delay: 0s;"></div>
+                        <div class="speed-line" style="top: 45%; animation-delay: 0.2s;"></div>
+                        <div class="speed-line" style="top: 65%; animation-delay: 0.4s;"></div>
+                        
+                        <div class="truck-container">
+                            <div class="road"></div>
+                            <div class="truck-wrap">🚛</div>
+                        </div>
+                        
+                        <div class="absolute bottom-10 left-0 w-full text-center">
+                            <span class="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-900/20">Express Delivery Active</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chapter 4: Membership Plans (Hardcoded) -->
+    <section id="plus" class="scroll-section">
+        <div class="sticky-container">
+            <div class="scroll-content w-full max-w-[1200px] px-10">
+                <div class="text-center mb-16">
+                    <h2 class="text-7xl font-black tracking-tighter mb-4 text-emerald-950">Better Value.</h2>
+                    <p class="text-[11px] font-black uppercase tracking-[0.4em] text-emerald-500">Maximize your household savings</p>
+                </div>
+                <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto items-stretch">
+                    
+                    <!-- Hardcoded Plan: Free -->
+                    <div class="bento-card p-8 flex flex-col justify-between h-full border-2 border-transparent hover:border-emerald-100">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="text-2xl md:text-3xl font-black text-emerald-950">Free</h3>
+                            </div>
+                            <div class="text-3xl md:text-4xl font-black mb-6 text-emerald-950">S$0<span class="text-sm md:text-lg opacity-20">/mo</span></div>
+                            <ul class="space-y-4 mb-8 text-sm font-bold text-emerald-900/50">
+                                <li><i class="fas fa-check text-emerald-500 mr-3"></i>0.25x Linkpoints on every Order</li>
+                                <li><i class="fas fa-check text-emerald-500 mr-3"></i>Free delivery for orders above S$80</li>
+                            </ul>
+                        </div>
+                        <button class="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-2 border-emerald-950 hover:bg-emerald-950 hover:text-white">
+                            Current Plan
+                        </button>
+                    </div>
+
+                    <!-- Hardcoded Plan: Standard -->
+                    <div class="bento-card p-8 flex flex-col justify-between h-full border-2 border-transparent hover:border-emerald-100">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="text-2xl md:text-3xl font-black text-emerald-950">Standard</h3>
+                            </div>
+                            <div class="text-3xl md:text-4xl font-black mb-6 text-emerald-950">S$7<span class="text-sm md:text-lg opacity-20">/mo</span></div>
+                            <ul class="space-y-4 mb-8 text-sm font-bold text-emerald-900/50">
+                                <li><i class="fas fa-check text-emerald-500 mr-3"></i>Free delivery above S$40</li>
+                                <li><i class="fas fa-check text-emerald-500 mr-3"></i>1x Linkpoints on every Order</li>
+                                <li><i class="fas fa-check text-emerald-500 mr-3"></i>5% discount on orders above S$30</li>
+                            </ul>
+                        </div>
+                        <button class="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-2 border-emerald-950 hover:bg-emerald-950 hover:text-white">
+                            Upgrade Now
+                        </button>
+                    </div>
+
+                    <!-- Hardcoded Plan: FreshPlus (Premium) -->
+                    <div class="bento-card !bg-emerald-950 p-8 text-white shadow-2xl relative overflow-hidden flex flex-col justify-between h-full">
+                        <div class="absolute -top-8 -right-8 w-36 h-36 bg-emerald-500/20 rounded-full blur-3xl"></div>
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="text-2xl md:text-3xl font-black text-white">FreshPlus</h3>
+                                <span class="bg-emerald-500 text-emerald-950 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter">Recommended</span>
+                            </div>
+                            <div class="text-3xl md:text-4xl font-black mb-6 text-white">S$15.00<span class="text-sm md:text-lg opacity-40">/mo</span></div>
+                            <ul class="space-y-4 mb-8 text-sm font-bold text-emerald-100/60">                              
+                                <li><i class="fas fa-star text-emerald-400 mr-3"></i>Unlimited Free Standard Delivery</li>
+                                <li><i class="fas fa-star text-emerald-400 mr-3"></i>$5 Off On Priority Delivery</li>
+                                <li><i class="fas fa-star text-emerald-400 mr-3"></i>2.5x LinkPoints on every order</li>
+                                <li><i class="fas fa-star text-emerald-400 mr-3"></i>15% discount on all orders</li>
+                            </ul>
+                        </div>
+                        <button class="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all bg-emerald-500 text-emerald-950 shadow-lg hover:bg-emerald-400">
+                            Upgrade Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chapter 5: Reviews -->
+    <section id="reviews" class="scroll-section">
+        <div class="sticky-container">
+            <div class="scroll-content max-w-[1300px] px-10 w-full">
+                <div class="flex justify-between items-end mb-20">
+                    <div>
+                        <h2 class="text-7xl font-black tracking-tighter text-emerald-950 leading-none">The Crowd.</h2>
+                        <p class="text-xl font-medium text-emerald-900/30 mt-6 leading-relaxed">Trusted by 50,000+ Singaporean's across the island.</p>
+                    </div>
+                    <div class="text-emerald-500 flex gap-2 text-2xl">
+                        <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                    </div>
+                </div>
+                <div class="grid md:grid-cols-3 gap-10">
+                    <div class="bento-card p-14 hover:bg-emerald-50 transition-colors">
+                        <p class="text-2xl font-medium italic mb-12 text-emerald-900 leading-relaxed">"Honestly better than going down to the supermarket. Everything arrived chilled in this humid heat."</p>
+                        <div class="flex gap-4 items-center">
+                            <div class="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center font-bold text-white">WT</div>
+                            <span class="font-black text-sm text-emerald-900">Wei Ting, Tampines</span>
+                        </div>
+                    </div>
+                    <div class="bento-card p-14 bg-white shadow-xl scale-105 border-emerald-500/20">
+                        <p class="text-2xl font-medium italic mb-12 text-emerald-900 leading-relaxed">"The scheduled delivery is always on time. Very convenient for a busy working household."</p>
+                        <div class="flex gap-4 items-center">
+                            <div class="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center font-bold text-white">KL</div>
+                            <span class="font-black text-sm text-emerald-900">Kevin L., Toa Payoh</span>
+                        </div>
+                    </div>
+                    <div class="bento-card p-14 hover:bg-emerald-50 transition-colors">
+                        <p class="text-2xl font-medium italic mb-12 text-emerald-900 leading-relaxed">"Membership pays for itself in just two runs. I love the priority slots during rain."</p>
+                        <div class="flex gap-4 items-center">
+                            <div class="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center font-bold text-white">SR</div>
+                            <span class="font-black text-sm text-emerald-900">Siti R., Jurong</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-white py-32 px-10 relative z-20 border-t border-emerald-50">
+        <div class="max-w-[1400px] mx-auto text-center">
+            <div class="flex items-center justify-center gap-4 mb-10">
+                <i class="fas fa-shopping-basket text-emerald-600 text-3xl"></i>
+                <span class="font-black text-4xl tracking-tighter text-emerald-950">FreshMart Singapore</span>
+            </div>
+            <p class="text-[11px] font-black uppercase tracking-[0.5em] text-emerald-900/20">© <%= new Date().getFullYear() %> FreshMart SG.</p>
+        </div>
+    </footer>
+
+    <script>
+        const sections = document.querySelectorAll('.scroll-section');
+        const contents = document.querySelectorAll('.scroll-content');
+        const dots = document.querySelectorAll('.dot');
+        const floatItems = document.querySelectorAll('.float-item');
+
+        window.addEventListener('scroll', () => {
+            const scrollY = window.scrollY;
+            const viewportHeight = window.innerHeight;
+            
+            sections.forEach((section, index) => {
+                const rect = section.getBoundingClientRect();
+                const content = contents[index];
+                const dot = dots[index];
+
+                if (rect.top <= 0 && rect.bottom >= viewportHeight) {
+                    content.classList.add('active');
+                    if(dot) dot.classList.add('active');
+                    
+                    const progress = Math.abs(rect.top) / (rect.height - viewportHeight);
+                    content.style.transform = `translateY(${-progress * 50}px)`;
+                } else {
+                    content.classList.remove('active');
+                    if(dot) dot.classList.remove('active');
+                }
+            });
+
+            floatItems.forEach((item, i) => {
+                const speed = (i + 1) * 0.2;
+                item.style.transform = `translateY(${scrollY * -speed}px) rotate(${scrollY * 0.02}deg)`;
+            });
         });
-      }, observerOptions);
 
-      document.querySelectorAll('.reveal-on-scroll').forEach((el) => {
-        observer.observe(el);
-      });
-    });
-  </script>
+        dots.forEach(dot => {
+            dot.addEventListener('click', () => {
+                const targetId = dot.getAttribute('data-target');
+                const targetEl = document.getElementById(targetId);
+                if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+    </script>
 </body>
 </html>

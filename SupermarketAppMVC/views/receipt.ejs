@@ -330,8 +330,23 @@
         </div>
         <div class="total-row">
           <span>Shipping</span>
-          <span class="font-mono">$<%= Number((typeof shippingFee !== 'undefined' ? shippingFee : 0)).toFixed(2) %></span>
+          <span class="font-mono">
+            <% if (typeof originalShippingFee !== 'undefined' && Number(originalShippingFee) > Number(shippingFee)) { %>
+              <s>$<%= Number(originalShippingFee || 0).toFixed(2) %></s>
+              &nbsp;<strong style="color:var(--accent)">Free / Discounted</strong>
+            <% } else { %>
+              $<%= Number((typeof shippingFee !== 'undefined' ? shippingFee : 0)).toFixed(2) %>
+            <% } %>
+          </span>
         </div>
+
+        <% if (typeof discountAmount !== 'undefined' && Number(discountAmount) > 0) { %>
+        <div class="total-row">
+          <span>Membership Discount (<%= membershipName || 'Membership' %>)</span>
+          <span class="font-mono">- $<%= Number(discountAmount || 0).toFixed(2) %></span>
+        </div>
+        <% } %>
+
         <div class="grand-total">
           <span class="grand-total-label">Total</span>
           <span class="grand-total-value font-mono">$<%= (Number(typeof totalAmount !== 'undefined' ? totalAmount : (computedTotal + (typeof shippingFee !== 'undefined' ? shippingFee : 0)))).toFixed(2) %></span>

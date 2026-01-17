@@ -42,9 +42,31 @@ const Wallet = {
     cb = safeCb(cb);
     const cols = ['wallet_id','user_id','type','amount','reference_type','reference_id','description','createdAt'];
     const vals = [payload.wallet_id, payload.user_id, payload.type, payload.amount, payload.reference_type || null, payload.reference_id || null, payload.description || null, new Date()];
-    query(`INSERT INTO wallet_transactions (${cols.join(',')}) VALUES (?,?,?,?,?,?,?,?)`, vals, (err, result) => {
-      if (err) return cb(err);
-      cb(null, result);
+
+    const doInsert = (done) => {
+      query(`INSERT INTO wallet_transactions (${cols.join(',')}) VALUES (?,?,?,?,?,?,?,?)`, vals, (err, result) => {
+        if (err) return done(err);
+        return done(null, result);
+      });
+    };
+
+    // Attempt insert; if we receive a data-truncation warning for reference_id, try to alter column and retry once
+    doInsert((err, res) => {
+      if (!err) return cb(null, res);
+      const isTruncation = err && (err.code === 'WARN_DATA_TRUNCATED' || err.errno === 1265 || (err.sqlMessage && err.sqlMessage.includes('Data truncated')));
+      if (!isTruncation) return cb(err);
+
+      // Attempt to alter column to accommodate longer reference ids
+      query("ALTER TABLE wallet_transactions MODIFY reference_id VARCHAR(255) NULL", [], (alterErr) => {
+        if (alterErr) {
+          return cb(alterErr);
+        }
+        // retry insert once
+        doInsert((rErr, rRes) => {
+          if (rErr) return cb(rErr);
+          return cb(null, rRes);
+        });
+      });
     });
   },
 

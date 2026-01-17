@@ -368,8 +368,21 @@
           </div>
           <div class="summary-row">
             <span>Shipping</span>
-            <span class="text-success fw-bold">$<%= Number(shippingFee || 0).toFixed(2) %></span>
+            <span>
+              <% if (originalShippingFee && originalShippingFee > shippingFee) { %>
+                <span class="text-muted text-decoration-line-through small">$<%= Number(originalShippingFee).toFixed(2) %></span>
+                <span class="text-success fw-bold ms-2">$<%= Number(shippingFee || 0).toFixed(2) %></span>
+              <% } else { %>
+                <span class="text-success fw-bold">$<%= Number(shippingFee || 0).toFixed(2) %></span>
+              <% } %>
+            </span>
           </div>
+          <% if (discountAmount && discountAmount > 0) { %>
+          <div class="summary-row">
+            <span>Membership Discount</span>
+            <span class="text-success fw-bold">-$<%= Number(discountAmount).toFixed(2) %></span>
+          </div>
+          <% } %>
 
           <div class="summary-row total">
             <span>Total</span>
@@ -385,6 +398,30 @@
                 <img src="/images/netsLogo.png" alt="Nets QR" style="height:24px; width:auto; display:block;">
               </button>
             </form>
+            <div style="margin-bottom:12px;">
+              <button id="wallet-open-btn" style="width:100%; height:44px; padding:8px 16px; border-radius:10px; background:#10b981; border:none; font-weight:700; color:white; display:flex; align-items:center; justify-content:center; margin-bottom:12px; cursor:pointer;">Pay with FreshMart Wallet</button>
+
+              <!-- Wallet modal (hidden) -->
+              <div id="wallet-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+                <div style="background:#fff; border-radius:12px; padding:20px; width:420px; max-width:94%; box-shadow:0 10px 30px rgba(2,6,23,0.2);">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <div style="font-weight:800;font-size:18px;color:#064e3b;">FreshMart Wallet</div>
+                    <button id="wallet-close" style="background:transparent;border:none;font-size:18px;cursor:pointer;color:#64748b;">✕</button>
+                  </div>
+                  <div style="margin-bottom:8px;color:#374151;">Balance</div>
+                  <div id="wallet-balance" style="font-size:24px;font-weight:800;color:#065f46;margin-bottom:16px;">$0.00</div>
+
+                  <div id="wallet-note" style="font-size:14px;color:#6b7280;margin-bottom:12px;">Click <strong>Pay now</strong> to use your FreshMart Wallet for this purchase.</div>
+
+                  <form id="wallet-pay-form-modal" action="/cart/pay/wallet" method="POST">
+                    <div style="display:flex;gap:8px;">
+                      <button id="wallet-pay-now" type="submit" style="flex:1;padding:10px;border-radius:10px;border:none;background:#065f46;color:white;font-weight:700;cursor:pointer;">Pay now</button>
+                      <a href="/wallet" style="display:inline-flex;align-items:center;justify-content:center;padding:10px;border-radius:10px;border:1px solid #e5e7eb;color:#374151;text-decoration:none;">Top up</a>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
             
             <button id="stripe-button" class="stripe-btn" style="width:100%; height:44px; padding:8px 16px; border-radius:10px; background:#635bff; border:none; font-weight:600; color:white; display:flex; align-items:center; justify-content:center; margin-bottom:12px; cursor:pointer; transition: all 0.2s;">
               <svg style="width:18px; height:18px; margin-right:8px;" viewBox="0 0 24 24" fill="white">
@@ -409,6 +446,7 @@
   </div>
 
   <%- include('partials/footer') %>
+  
   <script>
     (function(){
       const clientId = '<%= paypalClientId || "" %>';
@@ -446,6 +484,56 @@
         }).render('#paypal-button-container');
       };
       document.body.appendChild(s);
+    })();
+  </script>
+  <script>
+    (function(){
+      const openBtn = document.getElementById('wallet-open-btn');
+      const modal = document.getElementById('wallet-modal');
+      const closeBtn = document.getElementById('wallet-close');
+      const balanceEl = document.getElementById('wallet-balance');
+      const payNowBtn = document.getElementById('wallet-pay-now');
+
+      function formatAmt(n){ return Number(n||0).toFixed(2); }
+
+      async function fetchBalance(){
+        try{
+          const r = await fetch('/api/wallet/balance', { credentials: 'same-origin' });
+          if (!r.ok) throw new Error('Failed');
+          const j = await r.json();
+          if (!j || !j.success) throw new Error('Failed');
+          return Number(j.balance || 0);
+        }catch(e){ console.warn('wallet balance fetch failed', e); return null; }
+      }
+
+      async function openModal(){
+        modal.style.display = 'flex';
+        balanceEl.textContent = '$...';
+        payNowBtn.disabled = true;
+        const bal = await fetchBalance();
+        const total = Number(<%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %>);
+        if (bal == null) {
+          balanceEl.textContent = 'Unavailable';
+          payNowBtn.disabled = true;
+        } else {
+          balanceEl.textContent = '$' + formatAmt(bal);
+          if (bal < total) {
+            payNowBtn.disabled = true;
+            payNowBtn.textContent = 'Insufficient balance';
+            payNowBtn.style.background = '#9ca3af';
+          } else {
+            payNowBtn.disabled = false;
+            payNowBtn.textContent = 'Pay now';
+            payNowBtn.style.background = '#065f46';
+          }
+        }
+      }
+
+      function closeModal(){ modal.style.display = 'none'; }
+
+      openBtn?.addEventListener('click', (e)=>{ e.preventDefault(); openModal(); });
+      closeBtn?.addEventListener('click', (e)=>{ e.preventDefault(); closeModal(); });
+      modal?.addEventListener('click', (ev)=>{ if (ev.target === modal) closeModal(); });
     })();
   </script>
   <script>
@@ -560,12 +648,12 @@
             </div>
             <div id="payment-element" style="margin-bottom:24px;"></div>
             <div style="display:flex;gap:12px;">
-              <button id="cancel-stripe" style="flex:1;padding:12px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-weight:600;cursor:pointer;">Cancel</button>
-              <button id="submit-stripe" style="flex:1;padding:12px;border-radius:10px;border:none;background:#10b981;color:white;font-weight:600;cursor:pointer;">Pay $${data.amount.toFixed(2)}</button>
+              <button id="cancel-stripe" type="button" style="flex:1;padding:12px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-weight:600;cursor:pointer;">Cancel</button>
+              <button id="submit-stripe" type="button" style="flex:1;padding:12px;border-radius:10px;border:none;background:#10b981;color:white;font-weight:600;cursor:pointer;">Pay</button>
             </div>
             <div id="payment-message" style="margin-top:16px;font-size:14px;"></div>
           `;
-          
+
           modal.appendChild(modalContent);
           document.body.appendChild(modal);
 
@@ -574,6 +662,7 @@
 
           // Handle cancel
           document.getElementById('cancel-stripe').addEventListener('click', () => {
+            paymentElement.unmount();
             document.body.removeChild(modal);
             stripeBtn.disabled = false;
             stripeBtn.innerHTML = '<svg style="width:18px; height:18px; margin-right:8px;" viewBox="0 0 24 24" fill="white"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z"/></svg>Pay with Stripe';
@@ -600,7 +689,7 @@
               messageEl.textContent = error.message;
               messageEl.style.color = '#ef4444';
               submitBtn.disabled = false;
-              submitBtn.textContent = 'Pay $' + data.amount.toFixed(2);
+              submitBtn.textContent = 'Pay';
             } else {
               // Payment succeeded, confirm on backend
               const confirmResponse = await fetch('/stripe/confirm-payment', {
@@ -619,7 +708,7 @@
                 messageEl.textContent = 'Payment processing failed. Please contact support.';
                 messageEl.style.color = '#ef4444';
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Pay $' + data.amount.toFixed(2);
+                submitBtn.textContent = 'Pay';
               }
             }
           });

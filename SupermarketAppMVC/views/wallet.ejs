@@ -61,8 +61,24 @@
         }
         
         /* Smooth modal transition */
+        :root{
+            --primary: #16a34a;
+            --primary-600: #16a34a;
+            --glass: rgba(255,255,255,0.6);
+            --card-shadow: 0 10px 30px rgba(20,20,20,0.08);
+            --soft-shadow: 0 6px 20px rgba(16,24,40,0.06);
+        }
+
         .modal-content {
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: transform 280ms cubic-bezier(.2,.9,.3,1), opacity 220ms linear;
+            transform-origin: center top;
+            will-change: transform, opacity;
+        }
+
+        /* Modal backdrop smoother */
+        .fixed.inset-0.bg-slate-900\/40 {
+            transition: background-color 300ms ease, opacity 300ms ease;
+            backdrop-filter: blur(6px);
         }
 
         /* 3D Card Styles */
@@ -109,9 +125,65 @@
             z-index: 20;
             pointer-events: none;
         }
+
+        /* Transactions list - smoother hover and entrance */
+        .tx-item{ opacity: 0; transform: translateY(6px) scale(.995); transition: transform 320ms cubic-bezier(.2,.9,.3,1), opacity 220ms ease; }
+        .tx-item.enter{ opacity: 1; transform: translateY(0) scale(1); }
+
+        /* Polished buttons */
+        .btn-primary{ background: linear-gradient(180deg,var(--primary-600), #14532d); color: white; box-shadow: 0 8px 24px rgba(22,83,42,0.12); }
+        .card-elevated{ box-shadow: var(--card-shadow); }
+
+        /* Credit-card styles */
+        .card-chip{ width:48px; height:36px; border-radius:6px; background: linear-gradient(180deg,#ffd27a,#ffb84d); box-shadow: inset 0 -3px 6px rgba(0,0,0,0.06); }
+        .card-number{ letter-spacing:4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Segoe UI Mono', monospace; font-size:1.05rem; }
+        .card-logo{ width:58px; height:34px; border-radius:8px; background: rgba(255,255,255,0.12); display:inline-flex; align-items:center; justify-content:center; }
+        
+        /* Premium Membership Badge Styles */
+        @keyframes shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        
+        .membership-badge-shimmer {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.15) 45%,
+                rgba(255, 255, 255, 0.25) 50%,
+                rgba(255, 255, 255, 0.15) 55%,
+                transparent 100%
+            );
+            background-size: 200% 100%;
+            animation: shimmer 3s linear infinite;
+            pointer-events: none;
+            border-radius: 2rem;
+        }
+        
+        .membership-badge-glow {
+            box-shadow: 
+                0 10px 40px rgba(0, 0, 0, 0.2),
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+        }
+        
+        .membership-tier-icon {
+            filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen p-4 md:p-8">
+
+    <!-- HEADER -->
+    <%- include('partials/header', { 
+        user: (typeof user !== 'undefined' ? user : null), 
+        cartCount: (typeof cartCount !== 'undefined' ? cartCount : 0), 
+        isAdmin: (typeof isAdmin !== 'undefined' ? isAdmin : false),
+        messages: (typeof messages !== 'undefined' ? messages : {}) 
+    }) %>
 
     <!-- Main Container -->
     <main class="max-w-5xl mx-auto">
@@ -127,67 +199,163 @@
 
             <!-- Top Stats Grid -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Main Wallet Card (Clickable Trigger) -->
-                <div onclick="openCardModal()" class="col-span-1 md:col-span-2 credit-card-gradient rounded-[2rem] p-8 text-white shadow-2xl shadow-fresh-900/20 relative overflow-hidden group min-h-[220px] flex flex-col justify-between cursor-pointer transform transition-transform hover:scale-[1.01] hover:shadow-fresh-900/30">
+                <!-- Main Wallet Card (credit-card style) -->
+                <div class="col-span-1 md:col-span-2 credit-card-gradient rounded-[2rem] p-6 text-white shadow-2xl shadow-fresh-900/20 relative overflow-hidden group min-h-[220px] transform transition-transform hover:scale-[1.01] hover:shadow-fresh-900/30">
                     <!-- Decorative Circles -->
-                    <div class="absolute -right-10 -top-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-                    <div class="absolute -left-10 -bottom-10 w-48 h-48 bg-black/10 rounded-full blur-2xl"></div>
-                    
-                    <!-- Click hint overlay -->
-                    <div class="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors z-0"></div>
-                    <div class="absolute top-4 right-4 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 z-20">
-                        <i class="ph-bold ph-arrows-out-simple"></i> Expand
-                    </div>
+                    <div class="absolute -right-8 -top-8 w-56 h-56 bg-white/8 rounded-full blur-3xl"></div>
+                    <div class="absolute -left-8 -bottom-8 w-44 h-44 bg-black/8 rounded-full blur-2xl"></div>
 
-                    <div class="relative z-10 flex justify-between items-start">
-                        <div>
-                            <p class="text-fresh-100 text-sm font-medium mb-1 opacity-80">Total Balance</p>
-                            <h2 class="text-5xl font-bold tracking-tight">$<%= user.balance || '0.00' %></h2>
-                        </div>
-                        <div class="bg-white/20 backdrop-blur-md p-2.5 rounded-xl border border-white/10">
-                            <i class="ph-fill ph-wallet text-2xl"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="relative z-10 flex items-end justify-between mt-6">
-                        <div class="flex gap-3 pointer-events-none">
-                            <div class="bg-white text-fresh-800 px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg flex items-center gap-2">
-                                <i class="ph-bold ph-plus-circle"></i> Add Money
+                    <div class="absolute inset-0 bg-gradient-to-b from-black/0 to-black/5 opacity-40 pointer-events-none"></div>
+
+                    <div class="relative z-10">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="card-chip"></div>
+                                <div>
+                                    <div class="text-xs text-fresh-100 font-medium opacity-90 uppercase">FreshMart Wallet</div>
+                                    <div class="text-[11px] text-white/80">
+                                        <% 
+                                        const memberTier = (membership || 'Free').toLowerCase();
+                                        const tierBadge = memberTier.includes('freshplus') ? '💎 FreshPlus Member' : 
+                                                         memberTier.includes('standard') ? '⭐ Standard Member' : 
+                                                         '🌱 Free Account';
+                                        %>
+                                        <%= tierBadge %>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="card-logo"><i class="ph-fill ph-wallet text-lg"></i></div>
                             </div>
                         </div>
-                        <div class="text-right">
-                            <p class="text-xs text-fresh-200 uppercase tracking-wider mb-1">Card Holder</p>
-                            <p class="font-mono font-medium tracking-widest text-lg uppercase"><%= user.name || 'User' %></p>
+
+                        <div class="mt-6">
+                            <p class="text-fresh-100 text-xs font-medium mb-1 opacity-90 uppercase">Total Balance</p>
+                            <h2 class="text-5xl font-bold tracking-tight">$<%= (wallet && wallet.balance != null) ? Number(wallet.balance).toFixed(2) : '0.00' %></h2>
+                        </div>
+
+                        <div class="mt-6 flex items-center justify-between">
+                            <div>
+                                <div class="card-number text-white/95">•••• •••• •••• <%= (user && user.cardLast4) ? user.cardLast4 : '6769' %></div>
+                                <div class="flex items-center gap-6 mt-3 text-sm">
+                                    <div>
+                                        <p class="text-xs text-white/75 uppercase">Card Holder</p>
+                                        <p class="font-medium uppercase"><%= user.username || 'User' %></p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-white/75 uppercase">Expires</p>
+                                        <p class="font-medium"><%= user.cardExp || '09/34' %></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex-shrink-0">
+                                <div onclick="toggleModal('topupModal')" role="button" tabindex="0" class="px-4 py-2 rounded-lg btn-primary cursor-pointer select-none">
+                                    <i class="ph-bold ph-plus-circle mr-2"></i> Add Money
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Points & Rewards Card -->
-                <div class="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
-                    <div class="absolute top-0 right-0 w-40 h-40 bg-orange-50 rounded-bl-[100%] -z-0"></div>
-                    
-                    <div class="relative z-10">
-                        <div class="flex items-center gap-2 mb-2">
-                            <div class="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-500">
-                                <i class="ph-fill ph-star text-lg"></i>
-                            </div>
-                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loyalty Points</span>
-                        </div>
-                        <h3 class="text-3xl font-bold text-slate-900 mt-2"><%= user.points || '0' %></h3>
-                        <p class="text-sm text-slate-500">FreshMart Rewards</p>
-                    </div>
+                <% 
+                const loyaltyTier = (loyalty && loyalty.tier) ? String(loyalty.tier).toLowerCase() : 'bronze';
+                const isBronze = loyaltyTier === 'bronze';
+                const isSilver = loyaltyTier === 'silver';
+                const isGold = loyaltyTier === 'gold';
+                
+                // Tier-specific styling (namespaced to avoid collisions)
+                const loyaltyTierGradient = isGold ? 'bg-gradient-to-br from-yellow-500 via-amber-400 to-yellow-600' : 
+                                    isSilver ? 'bg-gradient-to-br from-slate-400 via-gray-300 to-slate-500' : 
+                                    'bg-gradient-to-br from-orange-700 via-amber-600 to-orange-800';
+                const loyaltyTierIcon = isGold ? 'ph-crown' : isSilver ? 'ph-medal' : 'ph-shield';
+                const loyaltyTierBgColor = isGold ? 'bg-yellow-50' : isSilver ? 'bg-slate-50' : 'bg-orange-50';
+                const loyaltyTierTextColor = isGold ? 'text-yellow-700' : isSilver ? 'text-slate-700' : 'text-orange-700';
+                const loyaltyTierAccent = isGold ? 'text-yellow-600' : isSilver ? 'text-slate-600' : 'text-orange-600';
+                const loyaltyProgressColor = isGold ? 'bg-gradient-to-r from-yellow-500 to-amber-500' : 
+                                     isSilver ? 'bg-gradient-to-r from-slate-400 to-gray-500' : 
+                                     'bg-gradient-to-r from-orange-600 to-amber-600';
+                const nextTierName = isBronze ? 'Silver' : isSilver ? 'Gold' : 'Max Tier';
+                %>
+                
+                <div class="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-lg hover:shadow-xl transition-all relative overflow-hidden group">
+                    <!-- Decorative gradient corner -->
+                    <div class="absolute top-0 right-0 w-48 h-48 <%= loyaltyTierGradient %> rounded-bl-[100%] opacity-10 -z-0 blur-2xl"></div>
+                    <div class="absolute -top-6 -right-6 w-32 h-32 <%= loyaltyTierGradient %> rounded-full opacity-5"></div>
 
-                    <div class="relative z-10 mt-6">
-                        <div class="flex justify-between text-xs font-bold text-slate-400 mb-1">
-                            <span>Silver</span>
-                            <span class="text-orange-500">Gold</span>
+                    <div class="relative z-10">
+                        <!-- Header with tier badge -->
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-10 h-10 rounded-xl <%= loyaltyTierGradient %> flex items-center justify-center text-white shadow-lg">
+                                    <i class="ph-fill <%= loyaltyTierIcon %> text-xl"></i>
+                                </div>
+                                <div>
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loyalty Points</span>
+                                </div>
+                            </div>
+                            <div class="px-3 py-1 rounded-full <%= loyaltyTierBgColor %> border-2 border-current/10">
+                                <span class="text-xs font-bold <%= loyaltyTierTextColor %> uppercase tracking-wide"><%= (loyalty && loyalty.tier) ? loyalty.tier : 'Bronze' %></span>
+                            </div>
                         </div>
-                        <div class="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
-                            <div class="bg-orange-500 h-2 rounded-full" style="width: 85%"></div>
+
+                        <!-- Points display -->
+                        <div class="mb-4">
+                            <h3 class="text-4xl font-bold <%= loyaltyTierAccent %> mb-1"><span id="loyaltyPointsValue"><%= (loyalty && loyalty.points != null) ? Number(loyalty.points).toLocaleString() : '0' %></span></h3>
+                            <p class="text-sm font-medium text-slate-500">Total Points Earned</p>
                         </div>
-                        <button onclick="toggleModal('rewardsModal')" class="w-full py-2.5 border-2 border-orange-100 bg-orange-50/50 rounded-xl text-sm font-bold text-orange-600 hover:bg-orange-100 hover:border-orange-200 transition-all active:scale-95">
-                            View Rewards
-                        </button>
+
+                        <!-- Progress section -->
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between text-xs font-bold">
+                                <div class="flex items-center gap-1.5">
+                                    <div class="w-2 h-2 rounded-full <%= loyaltyTierGradient %>"></div>
+                                    <span class="text-slate-600"><%= (loyalty && loyalty.tier) ? loyalty.tier : 'Bronze' %> Tier</span>
+                                </div>
+                                <% if (!isGold) { %>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-slate-400">Next:</span>
+                                        <span class="<%= loyaltyTierAccent %>"><%= nextTierName %></span>
+                                        <span class="text-slate-400">(<%= (loyalty && loyalty.nextThreshold) ? Number(loyalty.nextThreshold).toLocaleString() : '5,000' %>)</span>
+                                    </div>
+                                <% } else { %>
+                                    <span class="text-yellow-600 flex items-center gap-1">
+                                        <i class="ph-fill ph-check-circle"></i>
+                                        Max Tier Achieved
+                                    </span>
+                                <% } %>
+                            </div>
+                            
+                            <% const progressWidth = (loyalty && typeof loyalty.progress === 'number') ? loyalty.progress : 0; %>
+                            <div class="relative">
+                                <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
+                                    <div class="<%= loyaltyProgressColor %> h-3 rounded-full loyalty-progress shadow-sm transition-all duration-500" data-progress="<%= progressWidth %>"></div>
+                                </div>
+                                <div class="absolute -top-1 left-0 w-full flex justify-between px-1 pointer-events-none">
+                                    <div class="w-1 h-5 bg-slate-300 rounded-full"></div>
+                                    <% if (!isGold) { %>
+                                        <div class="w-1 h-5 bg-slate-300 rounded-full"></div>
+                                    <% } %>
+                                </div>
+                            </div>
+
+                            <div class="text-[11px] text-slate-500 text-center font-medium">
+                                <% if (!isGold) { %>
+                                    <%= Math.max(0, (loyalty.nextThreshold || 5000) - (loyalty.points || 0)).toLocaleString() %> points to <%= nextTierName %>
+                                <% } else { %>
+                                    You've reached the highest tier!
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Action button -->
+                        <div class="mt-4">
+                            <button onclick="toggleModal('rewardsModal')" class="w-full py-3 <%= loyaltyTierGradient %> text-white rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                                <i class="ph-fill ph-gift"></i>
+                                <span>View Rewards</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -199,24 +367,21 @@
                 <div class="lg:col-span-2 bg-white rounded-[2rem] border border-slate-200 shadow-sm p-8">
                     <div class="flex items-center justify-between mb-6">
                         <h3 class="text-lg font-bold text-slate-900">Recent Transactions</h3>
-                        <button class="text-sm font-semibold text-fresh-600 hover:text-fresh-700 hover:bg-fresh-50 px-3 py-1 rounded-lg transition-colors">View All</button>
+                        <button id="walletViewAllBtn" class="text-sm font-semibold text-fresh-600 hover:text-fresh-700 hover:bg-fresh-50 px-3 py-1 rounded-lg transition-colors">View All</button>
                     </div>
 
                     <div class="space-y-2">
                         <% if (transactions && transactions.length > 0) { %>
                             <% transactions.forEach(function(txn) { %>
                                 <div class="flex items-center justify-between group hover:bg-slate-50 p-3 -mx-3 rounded-2xl transition-all cursor-pointer border border-transparent hover:border-slate-100">
-                                    <div class="flex items-center gap-4">
-                                        <div class="w-12 h-12 rounded-2xl bg-<%= txn.color %>-50 text-<%= txn.color %>-600 flex items-center justify-center text-xl shadow-sm border border-<%= txn.color %>-100">
-                                            <i class="ph-fill <%= txn.icon %>"></i>
-                                        </div>
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-900"><%= txn.title %></p>
-                                            <p class="text-xs text-slate-500"><%= txn.date %> <% if(txn.id) { %>• <%= txn.id %><% } %></p>
-                                        </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-900"><%= txn.description || txn.type || 'Transaction' %></p>
+                                        <p class="text-xs text-slate-500"><%= new Date(txn.createdAt || txn.created_at).toLocaleString() %> <% if(txn.reference_id){ %>• Ref: <%= txn.reference_id %><% } %></p>
                                     </div>
                                     <div class="text-right">
-                                        <p class="text-sm font-bold <%= txn.type === 'income' ? 'text-green-600' : 'text-slate-900' %>"><%= txn.amount %></p>
+                                        <% const amt = Number(txn.amount || 0); %>
+                                        <% const isTopUp = String(txn.type || '').toUpperCase() === 'TOP_UP'; %>
+                                        <p class="text-sm font-bold <%= isTopUp ? 'text-green-600' : 'text-rose-600' %>"><%= (isTopUp ? '+' : '-') %>$<%= Math.abs(amt).toFixed(2) %></p>
                                     </div>
                                 </div>
                             <% }); %>
@@ -228,29 +393,116 @@
 
                 <!-- Right Column: Methods & Chart -->
                 <div class="space-y-6">
-                    <!-- Linked Card -->
-                    <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wide">Linked Method</h3>
-                            <button class="text-fresh-600 hover:bg-fresh-50 p-1.5 rounded-lg transition-colors"><i class="ph-bold ph-gear"></i></button>
-                        </div>
+                    <!-- Premium Membership Badge Card -->
+                    <% 
+                    const membershipLower = (membership || 'Free').toLowerCase();
+                    const isFreshPlus = membershipLower.includes('freshplus');
+                    const isStandard = membershipLower.includes('standard');
+                    const isFree = !isFreshPlus && !isStandard;
+                    
+                    // Tier-specific styling
+                    const bgGradient = isFreshPlus ? 'bg-gradient-to-br from-amber-600 via-yellow-500 to-amber-700' : 
+                                      isStandard ? 'bg-gradient-to-br from-blue-600 via-indigo-500 to-blue-700' : 
+                                      'bg-gradient-to-br from-slate-600 via-slate-500 to-slate-700';
+                    const tierIcon = isFreshPlus ? 'ph-crown' : isStandard ? 'ph-star' : 'ph-leaf';
+                    const tierName = isFreshPlus ? 'FreshPlus' : isStandard ? 'Standard' : 'Free';
+                    const tierTagline = isFreshPlus ? 'Premium Membership' : isStandard ? 'Standard Benefits' : 'Basic Access';
+                    %>
+                    
+                    <div class="<%= bgGradient %> membership-badge-glow rounded-[2rem] shadow-2xl p-6 text-white relative overflow-hidden transform transition-all hover:scale-[1.02] hover:shadow-2xl">
+                        <!-- Shimmer Effect -->
+                        <div class="membership-badge-shimmer"></div>
                         
-                        <div class="bg-slate-900 text-white p-5 rounded-2xl shadow-lg relative overflow-hidden mb-4 group cursor-pointer transition-transform hover:scale-[1.02]">
-                            <div class="absolute right-0 top-0 h-24 w-24 bg-white/5 rounded-full blur-2xl"></div>
-                            <div class="flex justify-between items-start mb-6">
-                                <i class="ph-fill ph-bank text-white/70 text-2xl"></i>
-                                <span class="font-bold italic text-white/90">VISA</span>
-                            </div>
-                            <div class="text-lg font-mono tracking-widest mb-1 text-shadow">•••• 4242</div>
-                            <div class="flex justify-between text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-                                <span>Debit</span>
-                                <span>09/25</span>
-                            </div>
-                        </div>
+                        <!-- Decorative Elements -->
+                        <div class="absolute -right-12 -top-12 w-48 h-48 bg-white/10 rounded-full blur-3xl"></div>
+                        <div class="absolute -left-8 -bottom-8 w-32 h-32 bg-black/10 rounded-full blur-2xl"></div>
                         
-                        <button class="w-full py-2.5 border border-dashed border-slate-300 rounded-xl text-sm font-bold text-slate-500 hover:border-fresh-500 hover:text-fresh-600 hover:bg-fresh-50 transition-all flex items-center justify-center gap-2">
-                            <i class="ph-bold ph-plus"></i> Add New Card
-                        </button>
+                        <!-- Badge Content -->
+                        <div class="relative z-10">
+                            <!-- Header -->
+                            <div class="flex items-center justify-between mb-6">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center membership-tier-icon">
+                                        <i class="ph-fill <%= tierIcon %> text-2xl"></i>
+                                    </div>
+                                    <div>
+                                        <div class="text-[10px] uppercase tracking-widest opacity-90 font-bold">Membership</div>
+                                        <div class="text-xs font-medium opacity-75"><%= tierTagline %></div>
+                                    </div>
+                                </div>
+                                <% if (isFreshPlus) { %>
+                                    <div class="px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 animate-pulse">
+                                        <span class="text-[10px] font-bold uppercase tracking-wider">RECOMMENDED</span>
+                                    </div>
+                                <% } %>
+                            </div>
+                            
+                            <!-- Tier Name -->
+                            <div class="mb-6">
+                                <h2 class="text-3xl font-bold tracking-tight mb-1"><%= tierName %></h2>
+                                <div class="flex items-center gap-2">
+                                    <div class="h-1 w-12 bg-white/40 rounded-full"></div>
+                                    <div class="h-1 w-6 bg-white/25 rounded-full"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Benefits Preview -->
+                            <div class="space-y-2 mb-6 text-sm">
+                                <% if (isFreshPlus) { %>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">Unlimited Free Standard Delivery</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">$5 Off Priority Delivery</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">2.5x LinkPoints on every order</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">5% discount on all orders</span>
+                                    </div>
+                                <% } else if (isStandard) { %>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">Free delivery above $40</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">1x LinkPoints on every order</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">2% discount on orders above $30</span>
+                                    </div>
+                                <% } else { %>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">0.25x LinkPoints on every order</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <i class="ph-fill ph-check-circle text-white/90"></i>
+                                        <span class="opacity-90">Free delivery above $80</span>
+                                    </div>
+                                <% } %>
+                            </div>
+                            
+                            <!-- Action Button -->
+                            <% if (!isFreshPlus) { %>
+                                <button onclick="window.location.href='/wallet/membership/upgrade'" class="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <i class="ph-bold ph-arrow-up-right"></i>
+                                    <span>Upgrade to <%= isStandard ? 'FreshPlus' : 'Premium' %></span>
+                                </button>
+                            <% } else { %>
+                                <button onclick="window.location.href='/wallet/membership/manage'" class="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <i class="ph-bold ph-gear"></i>
+                                    <span>Manage Membership</span>
+                                </button>
+                            <% } %>
+                        </div>
                     </div>
 
                     <!-- Spending Chart -->
@@ -316,7 +568,7 @@
                     <!-- Bottom Info -->
                     <div class="flex justify-between items-end relative z-10">
                         <div>
-                            <p class="text-[10px] text-fresh-200 uppercase tracking-widest mb-1">Card Holder</p>
+                            <p class="text-[10px] text-fresh-200 uppercase tracking-widest mb-1">Customer Name</p>
                             <p class="font-mono text-lg font-medium tracking-wider uppercase"><%= user.name || 'User' %></p>
                         </div>
                         <div class="text-right">
@@ -375,7 +627,7 @@
 
     <!-- Top Up Modal Overlay -->
     <div id="topupModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
-        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md transform scale-95 modal-content overflow-hidden">
+                <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md transform scale-95 modal-content overflow-hidden">
             
             <!-- Modal Header -->
             <div class="bg-white p-6 pb-2 flex justify-between items-center">
@@ -385,33 +637,48 @@
 
             <!-- Modal Body -->
             <div class="p-6 pt-2">
-                <p class="text-sm text-slate-500 mb-6">Instantly top up your FreshWallet using your linked method.</p>
-                
-                <div class="grid grid-cols-3 gap-3 mb-6">
-                    <button class="py-3 rounded-2xl border border-slate-200 font-bold text-slate-600 hover:border-fresh-500 hover:bg-fresh-50 hover:text-fresh-700 transition-all active:scale-95">$20</button>
-                    <button class="py-3 rounded-2xl border-2 border-fresh-500 bg-fresh-50 font-bold text-fresh-700 active:scale-95 shadow-sm">$50</button>
-                    <button class="py-3 rounded-2xl border border-slate-200 font-bold text-slate-600 hover:border-fresh-500 hover:bg-fresh-50 hover:text-fresh-700 transition-all active:scale-95">$100</button>
-                </div>
+                <form action="/wallet/topup" method="post" id="topupForm">
+                    <p class="text-sm text-slate-500 mb-4">Instantly top up your FreshWallet using your linked method.</p>
 
-                <div class="relative mb-6">
-                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-400">$</span>
-                    <input type="number" class="w-full bg-slate-50 border-transparent hover:bg-slate-100 focus:bg-white border-2 focus:border-fresh-500 rounded-2xl py-4 pl-8 pr-4 text-xl font-bold text-slate-900 focus:outline-none transition-all placeholder:text-slate-300" placeholder="Custom" value="50.00">
-                </div>
+                    <div class="grid grid-cols-3 gap-3 mb-4">
+                        <button type="button" data-amount="20" onclick="setAmount(20)" class="py-3 rounded-2xl border border-slate-200 font-bold text-slate-600 hover:border-fresh-500 hover:bg-fresh-50 hover:text-fresh-700 transition-all active:scale-95">$20</button>
+                        <button type="button" data-amount="50" onclick="setAmount(50)" class="py-3 rounded-2xl border-2 border-fresh-500 bg-fresh-50 font-bold text-fresh-700 active:scale-95 shadow-sm">$50</button>
+                        <button type="button" data-amount="100" onclick="setAmount(100)" class="py-3 rounded-2xl border border-slate-200 font-bold text-slate-600 hover:border-fresh-500 hover:bg-fresh-50 hover:text-fresh-700 transition-all active:scale-95">$100</button>
+                    </div>
 
-                <div class="flex items-center justify-between p-3 border border-slate-200 rounded-2xl mb-8 cursor-pointer hover:border-fresh-500 hover:bg-fresh-50/30 transition-colors group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-7 bg-slate-800 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shadow-sm">VISA</div>
-                        <div class="flex flex-col">
-                            <span class="text-xs font-bold text-slate-500 uppercase">From</span>
-                            <span class="text-sm font-bold text-slate-900">Chase Debit **** 4242</span>
+                    <div class="relative mb-4">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-slate-400">$</span>
+                        <input id="topupAmount" name="amount" type="number" step="0.01" class="w-full bg-slate-50 border-transparent hover:bg-slate-100 focus:bg-white border-2 focus:border-fresh-500 rounded-2xl py-4 pl-8 pr-4 text-xl font-bold text-slate-900 focus:outline-none transition-all placeholder:text-slate-300" placeholder="Custom" value="50.00">
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="text-xs font-bold text-slate-500 uppercase mb-2 block">Pay From</label>
+                        <p class="text-sm text-slate-500 mb-3">Choose a provider to complete the top-up. You'll be redirected to finish payment.</p>
+
+                        <input type="hidden" name="payment_method" id="payment_method_input" value="" />
+
+                        <div class="flex flex-col gap-3">
+                            <button id="provider-paypal" type="button" onclick="selectProvider('paypal')" class="w-full py-3 rounded-2xl border border-slate-200 font-bold text-slate-600 hover:border-fresh-500 hover:bg-fresh-50 hover:text-fresh-700 transition-all active:scale-95 flex items-center justify-center gap-3">
+                                <img src="/images/paypal-logo.png" alt="PayPal" class="h-6" onerror="this.style.display='none'" />
+                                <span>Pay with PayPal</span>
+                            </button>
+
+                            <button id="provider-nets" type="button" onclick="selectProvider('nets')" class="w-full py-3 rounded-2xl border border-slate-200 font-bold text-slate-600 hover:border-fresh-500 hover:bg-fresh-50 hover:text-fresh-700 transition-all active:scale-95 flex items-center justify-center gap-3">
+                                <i class="ph-fill ph-qr-code text-lg"></i>
+                                <span>Pay with NETS QR</span>
+                            </button>
+
+                            <button id="provider-stripe" type="button" onclick="selectProvider('stripe')" class="w-full py-3 rounded-2xl border border-slate-200 font-bold text-slate-600 hover:border-fresh-500 hover:bg-fresh-50 hover:text-fresh-700 transition-all active:scale-95 flex items-center justify-center gap-3">
+                                <img src="/images/stripe-logo.png" alt="Stripe" class="h-6" onerror="this.style.display='none'" />
+                                <span>Pay with Card (Stripe)</span>
+                            </button>
                         </div>
                     </div>
-                    <i class="ph-bold ph-caret-down text-slate-400 group-hover:text-fresh-600"></i>
-                </div>
 
-                <button class="w-full bg-fresh-600 hover:bg-fresh-700 text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-fresh-500/20 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2">
-                    <i class="ph-bold ph-check-circle"></i> Confirm & Add $50.00
-                </button>
+                    <button type="submit" class="w-full bg-fresh-600 hover:bg-fresh-700 text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-fresh-500/20 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2">
+                        <i class="ph-bold ph-check-circle"></i> Confirm & Add $<span id="confirmAmount">50.00</span>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -424,104 +691,66 @@
             <div class="bg-orange-50 p-6 flex justify-between items-center border-b border-orange-100">
                 <div>
                     <h3 class="text-xl font-bold text-slate-900">Member Rewards</h3>
-                    <p class="text-xs font-bold text-orange-600 uppercase tracking-wide mt-1">Balance: <%= user.points || '0' %> Pts</p>
+                    <p class="text-xs font-bold text-orange-600 uppercase tracking-wide mt-1">Balance: <span id="rewardsBalance"><%= user.points || '0' %></span> Pts</p>
                 </div>
                 <button onclick="toggleModal('rewardsModal')" class="text-slate-400 hover:text-slate-700 bg-white p-2 rounded-full shadow-sm"><i class="ph-bold ph-x"></i></button>
             </div>
 
             <!-- Modal Body (Scrollable) -->
-            <div class="p-6 overflow-y-auto space-y-4">
-                
-                <!-- Reward Item -->
-                <div class="flex items-center gap-4 p-4 border border-slate-100 rounded-2xl hover:border-orange-200 hover:bg-orange-50/30 transition-colors group">
-                    <div class="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-2xl flex-shrink-0">
-                        <i class="ph-fill ph-tag"></i>
-                    </div>
-                    <div class="flex-1">
-                        <h4 class="font-bold text-slate-900 text-sm">$5 Off Fresh Produce</h4>
-                        <p class="text-xs text-slate-500">Min. spend $30</p>
-                    </div>
-                    <button class="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-fresh-600 transition-colors">
-                        500 Pts
-                    </button>
-                </div>
-
-                <!-- Reward Item -->
-                <div class="flex items-center gap-4 p-4 border border-slate-100 rounded-2xl hover:border-orange-200 hover:bg-orange-50/30 transition-colors group">
-                    <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-2xl flex-shrink-0">
-                        <i class="ph-fill ph-truck"></i>
-                    </div>
-                    <div class="flex-1">
-                        <h4 class="font-bold text-slate-900 text-sm">Free Delivery Voucher</h4>
-                        <p class="text-xs text-slate-500">Valid for 30 days</p>
-                    </div>
-                    <button class="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-fresh-600 transition-colors">
-                        1,200 Pts
-                    </button>
-                </div>
-
-                <!-- Reward Item -->
-                <div class="flex items-center gap-4 p-4 border border-slate-100 rounded-2xl hover:border-orange-200 hover:bg-orange-50/30 transition-colors group">
-                    <div class="w-12 h-12 rounded-xl bg-fresh-100 text-fresh-600 flex items-center justify-center text-2xl flex-shrink-0">
-                        <i class="ph-fill ph-wallet"></i>
-                    </div>
-                    <div class="flex-1">
-                        <h4 class="font-bold text-slate-900 text-sm">$20 Wallet Credit</h4>
-                        <p class="text-xs text-slate-500">Auto-added to balance</p>
-                    </div>
-                    <button class="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-fresh-600 transition-colors">
-                        2,500 Pts
-                    </button>
-                </div>
-
-                 <!-- Reward Item -->
-                 <div class="flex items-center gap-4 p-4 border border-slate-100 rounded-2xl hover:border-orange-200 hover:bg-orange-50/30 transition-colors group opacity-60">
-                    <div class="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-2xl flex-shrink-0">
-                        <i class="ph-fill ph-crown"></i>
-                    </div>
-                    <div class="flex-1">
-                        <h4 class="font-bold text-slate-900 text-sm">Platinum Status (1 Year)</h4>
-                        <p class="text-xs text-slate-500">2x points on all orders</p>
-                    </div>
-                    <button class="bg-slate-200 text-slate-400 px-4 py-2 rounded-lg text-xs font-bold cursor-not-allowed">
-                        20,000 Pts
-                    </button>
-                </div>
-
+            <div id="rewardsList" class="p-6 overflow-y-auto space-y-4">
+                <p id="rewardsLoading" class="text-sm text-slate-500 text-center">Loading rewards...</p>
+            </div>
             </div>
             
-            <div class="p-4 border-t border-slate-100 bg-slate-50">
-                <button onclick="toggleModal('rewardsModal')" class="w-full py-3 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">Close Rewards</button>
-            </div>
+            <!-- modal footer removed per user request -->
         </div>
     </div>
 
+    <script type="application/json" id="tx-data"><%- JSON.stringify(transactions || []) %></script>
+        <!-- Wallet Transactions Modal -->
+        <div id="walletTransactionsModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+            <div class="bg-white rounded-[1rem] shadow-2xl w-full max-w-3xl transform scale-95 modal-content overflow-hidden max-h-[80vh]">
+                <div class="flex items-center justify-between p-4 border-b border-slate-100">
+                    <h3 class="text-lg font-bold">All Wallet Transactions</h3>
+                    <button onclick="toggleModal('walletTransactionsModal')" class="text-slate-400 hover:text-slate-700 p-2 rounded-full"><i class="ph-bold ph-x"></i></button>
+                </div>
+                <div class="p-4 overflow-y-auto" style="max-height:60vh">
+                    <div id="walletTxContainer" class="space-y-2">
+                        <!-- transactions will be rendered here -->
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-center">
+                    <div id="walletTxPagination" class="flex gap-2 items-center"></div>
+                </div>
+            </div>
+        </div>
     <script>
         // Set Current Date
         const dateOptions = { weekday: 'short', month: 'short', day: 'numeric' };
         document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', dateOptions);
 
-        // Toggle Modal Logic
+        // Toggle Modal Logic (smoother)
         function toggleModal(modalID){
             const modal = document.getElementById(modalID);
-            // Use class selector to find the inner content div
+            if(!modal) return;
             const content = modal.querySelector('.modal-content');
-            
-            if(modal.classList.contains('hidden')){
+            const open = !modal.classList.contains('hidden');
+
+            if(!open){
                 modal.classList.remove('hidden');
-                // Small delay to allow display:block to apply before opacity transition
-                setTimeout(() => {
+                // allow browser to apply layout
+                requestAnimationFrame(()=>{
                     modal.classList.remove('opacity-0');
-                    content.classList.remove('scale-95');
-                    content.classList.add('scale-100');
-                }, 10);
+                    if(content){ content.style.transform = 'translateY(0) scale(1)'; content.style.opacity = '1'; }
+                    document.body.classList.add('modal-open');
+                    // if opening rewards modal, fetch latest rewards and balance
+                    try{ if(modalID === 'rewardsModal' && typeof fetchRewards === 'function') fetchRewards(); }catch(e){/*ignore*/}
+                });
             } else {
                 modal.classList.add('opacity-0');
-                content.classList.remove('scale-100');
-                content.classList.add('scale-95');
-                setTimeout(() => {
-                    modal.classList.add('hidden');
-                }, 300);
+                if(content){ content.style.transform = 'translateY(6px) scale(.98)'; content.style.opacity = '0'; }
+                document.body.classList.remove('modal-open');
+                setTimeout(()=> modal.classList.add('hidden'), 300);
             }
         }
 
@@ -533,127 +762,402 @@
             if (event.target.id === 'rewardsModal') {
                 toggleModal('rewardsModal');
             }
+            if (event.target.id === 'walletTransactionsModal') {
+                toggleModal('walletTransactionsModal');
+            }
         }
 
-        // --- 3D CARD ANIMATION LOGIC ---
+        // Small helpers for top-up modal and 3D card modal
+        function updatePresetButtons(selectedVal){
+            const presets = [20,50,100];
+            presets.forEach(v => {
+                const btn = document.querySelector('button[data-amount="' + v + '"]');
+                if(!btn) return;
+                if(Number(selectedVal) === v){
+                    btn.classList.remove('border-slate-200','text-slate-600');
+                    btn.classList.add('border-fresh-500','bg-fresh-50','text-fresh-700','border-2','shadow-sm');
+                } else {
+                    btn.classList.remove('border-fresh-500','bg-fresh-50','text-fresh-700','border-2','shadow-sm');
+                    btn.classList.add('border-slate-200','text-slate-600');
+                }
+            });
+        }
 
-        function openCardModal() {
+        function setAmount(val){
+            const el = document.getElementById('topupAmount');
+            const preview = document.getElementById('confirmAmount');
+            const numeric = Number(val) || 0;
+            if(el){ el.value = numeric.toFixed(2); }
+            if(preview){ preview.textContent = numeric.toFixed(2); }
+            updatePresetButtons(numeric);
+        }
+
+        // when user types a custom amount, clear presets unless it's exact match
+        (function attachTopupAmountInput(){
+            const el = document.getElementById('topupAmount');
+            if(!el) return;
+            el.addEventListener('input', function(){
+                const v = Number(el.value) || 0;
+                const presets = [20,50,100];
+                if(presets.includes(Math.round(v)) || presets.includes(v)){
+                    // if it matches a preset exactly (allow integer), highlight it
+                    updatePresetButtons(v);
+                } else {
+                    // clear selections
+                    updatePresetButtons(null);
+                }
+                const preview = document.getElementById('confirmAmount');
+                if(preview) preview.textContent = (Number(el.value) ? Number(el.value).toFixed(2) : '0.00');
+            });
+
+            // initialize preset button state from input's current value
+            const initial = Number(el.value) || null;
+            updatePresetButtons(initial);
+            // ensure preview shows initial amount
+            const preview = document.getElementById('confirmAmount');
+            if(preview) preview.textContent = (initial ? Number(initial).toFixed(2) : '0.00');
+        })();
+
+        // Select a provider (make button active) but don't submit immediately
+        function selectProvider(method){
+            const input = document.getElementById('payment_method_input');
+            const providers = ['paypal','nets','stripe'];
+            providers.forEach(p => {
+                const btn = document.getElementById('provider-' + p);
+                if(!btn) return;
+                if(p === method){
+                    btn.classList.remove('border-slate-200','text-slate-600');
+                    btn.classList.add('border-fresh-500','bg-fresh-50','text-fresh-700');
+                } else {
+                    btn.classList.remove('border-fresh-500','bg-fresh-50','text-fresh-700');
+                    btn.classList.add('border-slate-200','text-slate-600');
+                }
+            });
+            if(input) input.value = method;
+        }
+
+        // Validate provider selected on form submit, otherwise prevent
+        (function attachTopupValidation(){
+            const form = document.getElementById('topupForm');
+            if(!form) return;
+            form.addEventListener('submit', function(e){
+                const method = document.getElementById('payment_method_input')?.value || '';
+                if(!method){
+                    e.preventDefault();
+                    alert('Please choose a payment provider (PayPal, NETS, or Stripe) before confirming.');
+                    return false;
+                }
+                // Optionally disable the submit button to prevent double-submit
+                const btn = form.querySelector('button[type="submit"]');
+                if(btn){ btn.disabled = true; btn.classList.add('opacity-60','cursor-not-allowed'); }
+                return true;
+            });
+        })();
+
+        // open/close handlers for the 3D card modal referenced by the page
+        function openCardModal(){
             const modal = document.getElementById('card3DModal');
-            const card = document.getElementById('interactiveCard');
-            
+            if(!modal) return;
             modal.classList.remove('hidden');
-            
-            // Add entry animation class
-            card.style.animation = 'enterCard 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards';
-
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-                // Remove animation after it's done so we can tilt manually
-                setTimeout(() => {
-                    card.style.animation = 'none';
-                }, 1000);
-            }, 10);
+            setTimeout(()=> modal.classList.remove('opacity-0'), 10);
         }
 
-        function closeCardModal() {
+        function closeCardModal(){
             const modal = document.getElementById('card3DModal');
+            if(!modal) return;
             modal.classList.add('opacity-0');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                // Reset flip state
-                document.getElementById('interactiveCard').classList.remove('is-flipped');
-                document.getElementById('interactiveCard').style.transform = 'rotateY(0deg) rotateX(0deg)';
-            }, 300);
+            setTimeout(()=> modal.classList.add('hidden'), 300);
         }
 
-        function flipCard(event) {
-            // Prevent flip if dragging (optional refinement, but simple click is fine here)
-            const card = document.getElementById('interactiveCard');
-            card.classList.toggle('is-flipped');
-        }
+        // Initialize Simple Chart using real transactions data
+        (function(){
+            const txs = JSON.parse(document.getElementById('tx-data')?.textContent || '[]');
+            const days = 7;
+            const now = new Date();
+            const labels = [];
+            const dataPoints = new Array(days).fill(0);
 
-        // Tilt Logic
-        const container = document.getElementById('tiltContainer');
-        const card = document.getElementById('interactiveCard');
+            // build labels = last 7 days (oldest -> newest)
+            for (let i = days - 1; i >= 0; i--) {
+                const d = new Date(now);
+                d.setDate(now.getDate() - i);
+                labels.push(d.toLocaleDateString(undefined, { weekday: 'short' }));
+            }
 
-        container.addEventListener('mousemove', (e) => {
-            // If flipped, don't do the tilt logic to prevent confusion or complex math
-            if(card.classList.contains('is-flipped')) return;
+            // accumulate spending amounts (PAYMENT) into buckets
+            txs.forEach(tx => {
+                const created = new Date(tx.createdAt || tx.created_at || tx.created_at);
+                if (isNaN(created)) return;
+                const diffDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+                if (diffDays < 0 || diffDays >= days) return;
+                const idx = days - 1 - diffDays; // map diff to index
+                const amt = Number(tx.amount || 0) || 0;
+                // count only payments as spending; treat TOP_UP as income (ignore)
+                if (String(tx.type || '').toUpperCase() === 'PAYMENT') dataPoints[idx] += Math.abs(amt);
+            });
 
-            const rect = container.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            // Calculate center
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-            
-            // Calculate rotation (max 20 degrees)
-            const rotateX = ((y - centerY) / centerY) * -20; 
-            const rotateY = ((x - centerX) / centerX) * 20;
+            const ctx = document.getElementById('spendingChart').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 150);
+            gradient.addColorStop(0, 'rgba(34, 197, 94, 0.35)');
+            gradient.addColorStop(1, 'rgba(34, 197, 94, 0.02)');
 
-            card.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-        });
-
-        container.addEventListener('mouseleave', () => {
-            if(card.classList.contains('is-flipped')) return;
-            card.style.transform = `rotateX(0deg) rotateY(0deg)`;
-        });
-
-        // --- END 3D LOGIC ---
-
-        // Initialize Simple Chart
-        const ctx = document.getElementById('spendingChart').getContext('2d');
-        // Gradient for chart
-        const gradient = ctx.createLinearGradient(0, 0, 0, 150);
-        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.5)'); // fresh-500
-        gradient.addColorStop(1, 'rgba(34, 197, 94, 0.0)');
-
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                datasets: [{
-                    label: 'Spending',
-                    data: [12, 45, 22, 18, 65, 80, 40],
-                    borderColor: '#22c55e',
-                    backgroundColor: gradient,
-                    borderWidth: 3,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#22c55e',
-                    pointBorderWidth: 2,
-                    pointRadius: 4,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: '#1e293b',
-                        padding: 10,
-                        titleFont: { family: '"Plus Jakarta Sans", sans-serif' },
-                        bodyFont: { family: '"Plus Jakarta Sans", sans-serif' },
-                        cornerRadius: 8,
-                        displayColors: false
-                    }
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Spending',
+                        data: dataPoints,
+                        borderColor: '#22c55e',
+                        backgroundColor: gradient,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#22c55e',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.36
+                    }]
                 },
-                scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: { font: { size: 10, family: '"Plus Jakarta Sans", sans-serif' }, color: '#94a3b8' }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { backgroundColor: '#1e293b', padding: 10, cornerRadius: 8, displayColors: false }
                     },
-                    y: {
-                        display: false,
-                        grid: { display: false },
-                        min: 0
+                    animation: { duration: 900, easing: 'easeOutQuart' },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                        y: { display: true, grid: { display: false }, beginAtZero: true }
                     }
                 }
+            });
+        })();
+
+        // Wallet 'View All' pagination and modal
+        (function(){
+            const btn = document.getElementById('walletViewAllBtn');
+            const modalId = 'walletTransactionsModal';
+            const container = document.getElementById('walletTxContainer');
+            const paginationEl = document.getElementById('walletTxPagination');
+
+            if(!btn) return;
+
+            btn.addEventListener('click', async function(){
+                toggleModal(modalId);
+                await loadPage(1);
+            });
+
+            async function loadPage(page){
+                const per = 5;
+                try{
+                    const resp = await fetch('/api/wallet/transactions?page=' + page + '&per=' + per, { credentials: 'same-origin' });
+                    if(!resp.ok) throw new Error('Failed to fetch');
+                    const payload = await resp.json();
+                    renderTransactions(payload.transactions || []);
+                    renderPagination(Math.max(1, Math.ceil((payload.total || 0) / per)), page);
+                }catch(err){
+                    container.innerHTML = '<p class="text-sm text-slate-500">Unable to load transactions.</p>';
+                    paginationEl.innerHTML = '';
+                    console.error('wallet.tx.load', err);
+                }
             }
+
+            function renderTransactions(txns){
+                if(!txns || !txns.length){
+                    container.innerHTML = '<p class="text-sm text-slate-500">No transactions found.</p>';
+                    return;
+                }
+                container.innerHTML = '';
+                // create elements but animate them in with a small stagger for premium feel
+                txns.forEach((tx, idx) => {
+                    const div = document.createElement('div');
+                    div.className = 'tx-item flex items-center justify-between group hover:bg-slate-50 p-3 -mx-3 rounded-2xl transition-all border border-transparent hover:border-slate-100 card-elevated';
+                    const left = document.createElement('div');
+                    const title = document.createElement('p');
+                    title.className = 'text-sm font-bold text-slate-900';
+                    title.textContent = tx.description || tx.type || 'Transaction';
+                    const meta = document.createElement('p');
+                    meta.className = 'text-xs text-slate-500';
+                    const date = new Date(tx.createdAt || tx.created_at || Date.now());
+                    meta.textContent = date.toLocaleString() + (tx.reference_id ? ' • Ref: ' + tx.reference_id : '');
+                    left.appendChild(title);
+                    left.appendChild(meta);
+
+                    const right = document.createElement('div');
+                    right.className = 'text-right';
+                    const amt = Number(tx.amount || 0);
+                    const isTopUp = String(tx.type || '').toUpperCase() === 'TOP_UP';
+                    const p = document.createElement('p');
+                    p.className = 'text-sm font-bold ' + (isTopUp ? 'text-green-600' : 'text-rose-600');
+                    p.textContent = (isTopUp ? '+' : '-') + '$' + Math.abs(amt).toFixed(2);
+                    right.appendChild(p);
+
+                    div.appendChild(left);
+                    div.appendChild(right);
+                    container.appendChild(div);
+
+                    // staggered enter
+                    window.requestAnimationFrame(()=>{
+                        setTimeout(()=> div.classList.add('enter'), idx * 60);
+                    });
+                });
+            }
+
+            function renderPagination(totalPages, active){
+                paginationEl.innerHTML = '';
+                if(totalPages <= 1) return;
+
+                // previous
+                const prev = document.createElement('button');
+                prev.className = 'px-3 py-1 rounded bg-white border';
+                prev.textContent = 'Prev';
+                prev.disabled = active <= 1;
+                prev.onclick = () => loadPage(Math.max(1, active - 1));
+                paginationEl.appendChild(prev);
+
+                // numbered pages (limit to 7 buttons)
+                const maxButtons = 7;
+                let start = Math.max(1, active - Math.floor(maxButtons/2));
+                let end = Math.min(totalPages, start + maxButtons - 1);
+                if(end - start + 1 < maxButtons) start = Math.max(1, end - maxButtons + 1);
+
+                for(let i = start; i <= end; i++){
+                    const b = document.createElement('button');
+                    b.className = 'px-3 py-1 rounded ' + (i === active ? 'bg-fresh-600 text-white' : 'bg-white border');
+                    b.textContent = String(i);
+                    b.onclick = () => loadPage(i);
+                    paginationEl.appendChild(b);
+                }
+
+                // next
+                const next = document.createElement('button');
+                next.className = 'px-3 py-1 rounded bg-white border';
+                next.textContent = 'Next';
+                next.disabled = active >= totalPages;
+                next.onclick = () => loadPage(Math.min(totalPages, active + 1));
+                paginationEl.appendChild(next);
+            }
+        })();
+    </script>
+
+    <script>
+        // Apply loyalty progress widths (set from server-side data attribute)
+        document.addEventListener('DOMContentLoaded', function(){
+            document.querySelectorAll('.loyalty-progress').forEach(function(el){
+                var v = Number(el.getAttribute('data-progress') || 0);
+                el.style.width = Math.max(0, Math.min(100, v)) + '%';
+            });
         });
     </script>
+
+    <script>
+        // Rewards modal: fetch list and redeem
+        async function fetchRewards(){
+            const container = document.getElementById('rewardsList');
+            const loading = document.getElementById('rewardsLoading');
+            if(loading) loading.textContent = 'Loading rewards...';
+            try{
+                const resp = await fetch('/api/loyalty/rewards', { credentials: 'same-origin' });
+                if(!resp.ok) throw new Error('Failed to fetch rewards');
+                const payload = await resp.json();
+                const points = (payload.points != null) ? payload.points : (payload.user && payload.user.points) || 0;
+                const rewards = payload.rewards || [];
+                const rb = document.getElementById('rewardsBalance'); if(rb) rb.textContent = Number(points).toLocaleString();
+                const main = document.getElementById('loyaltyPointsValue'); if(main) main.textContent = Number(points).toLocaleString();
+                renderRewards(rewards, points);
+            }catch(err){
+                console.error('fetchRewards', err);
+                if(loading) loading.textContent = 'Unable to load rewards.';
+                if(container) container.innerHTML = '<p class="text-sm text-slate-500 text-center">Unable to load rewards.</p>';
+            }
+        }
+
+        function renderRewards(rewards, points){
+            const container = document.getElementById('rewardsList');
+            if(!container) return;
+            container.innerHTML = '';
+            if(!rewards || rewards.length === 0){
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center">No active rewards.</p>';
+                return;
+            }
+            rewards.forEach(r => {
+                const cost = Number(r.cost || r.points_cost || r.points || 0);
+                const item = document.createElement('div');
+                item.className = 'flex items-center gap-4 p-4 border border-slate-100 rounded-2xl hover:border-orange-200 hover:bg-orange-50/30 transition-colors group';
+
+                const iconWrap = document.createElement('div');
+                iconWrap.className = 'w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0';
+                // choose icon and color by reward type or provided icon
+                const iconType = (r.icon || r.type || (r.slug || '')).toString().toLowerCase();
+                let iconClass = 'ph-fill ph-gift';
+                let bgClass = 'bg-slate-100 text-slate-700';
+                if(iconType.includes('delivery') || iconType.includes('truck')){ iconClass = 'ph-fill ph-truck'; bgClass = 'bg-blue-100 text-blue-600'; }
+                else if(iconType.includes('wallet') || iconType.includes('credit')){ iconClass = 'ph-fill ph-wallet'; bgClass = 'bg-fresh-100 text-fresh-600'; }
+                else if(iconType.includes('off') || iconType.includes('discount') || iconType.includes('tag')){ iconClass = 'ph-fill ph-tag'; bgClass = 'bg-orange-100 text-orange-600'; }
+                else if(iconType.includes('platinum') || iconType.includes('crown') || iconType.includes('status')){ iconClass = 'ph-fill ph-crown'; bgClass = 'bg-purple-100 text-purple-600'; }
+                iconWrap.className += ' ' + bgClass;
+                iconWrap.innerHTML = '<i class="' + iconClass + '"></i>';
+
+                const info = document.createElement('div');
+                info.className = 'flex-1';
+                const title = document.createElement('h4');
+                title.className = 'font-bold text-slate-900 text-sm';
+                title.textContent = r.title || r.name || 'Reward';
+                const desc = document.createElement('p');
+                desc.className = 'text-xs text-slate-500';
+                desc.textContent = r.description || '';
+                info.appendChild(title); info.appendChild(desc);
+
+                const btn = document.createElement('button');
+                btn.className = 'px-4 py-2 rounded-lg text-xs font-bold transition-colors';
+                btn.textContent = Number(cost).toLocaleString() + ' Pts';
+                if(cost > Number(points)){
+                    btn.classList.add('bg-slate-200','text-slate-400','cursor-not-allowed');
+                    btn.disabled = true;
+                } else {
+                    btn.classList.add('bg-slate-900','text-white');
+                    btn.addEventListener('click', function(){ redeemReward(r.id, btn); });
+                }
+
+                item.appendChild(iconWrap);
+                item.appendChild(info);
+                item.appendChild(btn);
+                container.appendChild(item);
+            });
+        }
+
+        async function redeemReward(rewardId, btn){
+            if(!confirm('Claim this reward now?')) return;
+            btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Processing...';
+            try{
+                const resp = await fetch('/api/loyalty/redeem', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rewardId })
+                });
+                const payload = await resp.json();
+                if(!resp.ok){
+                    alert(payload.message || 'Unable to redeem reward.');
+                    btn.disabled = false; btn.textContent = orig; return;
+                }
+                // update balances displayed
+                const newPts = payload.points != null ? payload.points : payload.newPoints;
+                if(newPts != null){
+                    const rb = document.getElementById('rewardsBalance'); if(rb) rb.textContent = Number(newPts).toLocaleString();
+                    const main = document.getElementById('loyaltyPointsValue'); if(main) main.textContent = Number(newPts).toLocaleString();
+                }
+                alert(payload.message || 'Reward claimed!');
+                await fetchRewards();
+            }catch(err){
+                console.error('redeemReward', err);
+                alert('Unable to redeem reward at this time.');
+                btn.disabled = false; btn.textContent = orig;
+            }
+        }
+    </script>
+
 </body>
 </html>

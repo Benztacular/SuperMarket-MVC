@@ -375,7 +375,10 @@
             </div>
           <% } else { rows.forEach(it => { %>
             <!-- Modern Card Item -->
-            <div class="cart-item-card d-flex flex-column flex-sm-row align-items-sm-center gap-4">
+            <div class="cart-item-card d-flex flex-column flex-sm-row align-items-sm-center gap-4" data-cart-id="<%= it.id %>" data-price="<%= it.price %>" data-qty="<%= it.quantity %>" data-stock="<%= it.stock || 0 %>">
+              <div class="form-check me-3" style="align-self:flex-start;">
+                <input class="form-check-input select-item" type="checkbox" value="<%= it.id %>" id="select-item-<%= it.id %>" checked>
+              </div>
               
               <!-- Image -->
               <% if (it.image) { %>
@@ -400,13 +403,13 @@
                 <div class="d-flex justify-content-between align-items-end mt-3">
                   
                   <!-- Quantity Control -->
-                  <form class="d-flex align-items-center gap-3" action="/cart/update/<%= it.id %>" method="POST">
+                  <form class="d-flex align-items-center gap-3 qty-form" action="/cart/update/<%= it.id %>" method="POST">
                     <div class="qty-group">
                       <button type="button" class="qty-btn qty-decrement">−</button>
                       <input class="qty-input" type="number" name="quantity" min="0" value="<%= it.quantity %>">
                       <button type="button" class="qty-btn qty-increment">+</button>
                     </div>
-                    <button class="btn btn-sm text-primary fw-semibold p-0" type="submit" style="font-size: 0.8rem; background:none; border:none;">Update</button>
+                    <button class="btn btn-sm text-primary fw-semibold p-0 qty-update-btn" type="submit" style="font-size: 0.8rem; background:none; border:none; display:none;">Update</button>
                   </form>
 
                   <!-- Remove Action -->
@@ -446,7 +449,7 @@
 
           <div class="summary-row">
             <span>Subtotal</span>
-            <span>$<%= price(sum) %></span>
+            <span id="summary-subtotal-value">$<%= price(sum) %></span>
           </div>
           <div class="summary-row">
             <span>Shipping</span>
@@ -455,11 +458,11 @@
 
           <div class="summary-row total">
             <span>Total</span>
-            <span>$<%= price(sum) %></span>
+            <span id="summary-total-value">$<%= price(sum) %></span>
           </div>
 
-          <form action="/cart/checkout" method="GET" class="mt-4">
-            <button class="btn-checkout" <%= rows.length ? '' : 'disabled' %>>
+          <form id="checkout-form" action="/cart/checkout" method="GET" class="mt-4">
+            <button id="checkout-btn" class="btn-checkout" <%= rows.length ? '' : 'disabled' %>>
               Checkout <i data-lucide="arrow-right" style="width: 18px;"></i>
             </button>
           </form>
@@ -506,7 +509,118 @@
       if (dec) v = Math.max(0, v - 1);
       if (inc) v = v + 1;
       input.value = v;
+        // trigger input event for recalculation
+        input.dispatchEvent(new Event('input', { bubbles: true }));
     });
+
+      // Selection and summary logic
+      (function () {
+        const checkoutForm = document.getElementById('checkout-form');
+        const checkoutItemsInput = document.getElementById('checkout-items');
+        const checkoutBtn = document.getElementById('checkout-btn');
+        const summarySubtotal = document.getElementById('summary-subtotal-value');
+
+        function getItemRow(el) {
+          return el.closest('.cart-item-card');
+        }
+
+        function computeSelectedSubtotal() {
+          const rows = Array.from(document.querySelectorAll('.cart-item-card'));
+          let total = 0;
+          let any = false;
+          rows.forEach(r => {
+            const id = r.getAttribute('data-cart-id');
+            const price = Number(r.getAttribute('data-price') || 0);
+            const qtyInput = r.querySelector('.qty-input');
+            const qty = qtyInput ? Number(qtyInput.value || 0) : Number(r.getAttribute('data-qty') || 0);
+            const checkbox = r.querySelector('.select-item');
+            if (checkbox && checkbox.checked) {
+              any = true;
+              total += price * qty;
+            }
+          });
+          // update summary
+          if (summarySubtotal) summarySubtotal.textContent = '$' + (isFinite(total) ? total.toFixed(2) : '0.00');
+          const summaryTotal = document.getElementById('summary-total-value');
+          if (summaryTotal) summaryTotal.textContent = '$' + (isFinite(total) ? total.toFixed(2) : '0.00');
+          // enable/disable checkout
+          if (checkoutBtn) checkoutBtn.disabled = !any;
+          return { total, any };
+        }
+
+        // on init
+        computeSelectedSubtotal();
+
+        // listen for selection changes
+        document.addEventListener('change', function (e) {
+          if (e.target.matches('.select-item') || e.target.matches('.qty-input')) {
+            computeSelectedSubtotal();
+          }
+        }, true);
+
+        // Auto-save quantity changes (debounced) without clicking Update
+        function debounce(fn, wait){ let t; return function(...args){ clearTimeout(t); t = setTimeout(()=> fn.apply(this, args), wait); }; }
+
+        async function sendQtyUpdate(cartId, qty) {
+          try {
+            const res = await fetch('/cart/update/' + encodeURIComponent(cartId), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: 'quantity=' + encodeURIComponent(qty)
+            });
+            if (!res.ok) throw new Error('Update failed');
+            // success: nothing more needed (we already updated UI optimistically)
+          } catch (err) {
+            alert('Could not update quantity: ' + (err.message || 'server error'));
+            // reload to sync state
+            window.location.reload();
+          }
+        }
+
+        const debouncedSend = debounce((id, qty) => sendQtyUpdate(id, qty), 600);
+
+        document.addEventListener('input', function (e) {
+          if (!e.target.matches('.qty-input')) return;
+          const input = e.target;
+          const card = input.closest('.cart-item-card');
+          if (!card) return;
+          let qty = parseInt(input.value, 10) || 0;
+          if (qty < 0) qty = 0;
+          const stock = Number(card.getAttribute('data-stock') || 0);
+          if (Number.isFinite(stock) && stock >= 0 && qty > stock) {
+            qty = stock;
+            input.value = String(qty);
+          }
+          // optimistic UI update attributes
+          card.setAttribute('data-qty', String(qty));
+          // recompute totals immediately
+          computeSelectedSubtotal();
+          // send debounced update to server
+          const cartId = card.getAttribute('data-cart-id');
+          if (cartId) debouncedSend(cartId, qty);
+        }, true);
+
+        // intercept checkout submit to include selected items
+        checkoutForm.addEventListener('submit', function (ev) {
+          const selected = Array.from(document.querySelectorAll('.select-item')).filter(c => c.checked).map(c => c.value);
+          if (!selected.length) {
+            ev.preventDefault();
+            alert('Please select at least one item to checkout');
+            return;
+          }
+          // set hidden input to comma-separated list (server accepts items[] or items param)
+          // create multiple inputs for items[]
+          // remove previous dynamic inputs
+          const existing = checkoutForm.querySelectorAll('input[name="items[]"].dynamic-item');
+          existing.forEach(n => n.remove());
+          selected.forEach(id => {
+            const inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'items[]'; inp.value = id; inp.className = 'dynamic-item';
+            checkoutForm.appendChild(inp);
+          });
+          // allow form to submit
+        });
+      })();
+
   </script>
 </body>
 </html>

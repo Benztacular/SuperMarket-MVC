@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const db = require('../db'); // adjust path if different
 const ProductController = require('./ProductController'); // add near top of file (with other requires)
 const DeliveryAddress = require('../models/DeliveryAddress');
+const Membership = require('../models/Membership');
 
 function uid(req) {
   const u = req.session?.user;
@@ -33,7 +34,7 @@ exports.page = (req, res) => {
 
   const sql = `
     SELECT ci.id AS cart_id, ci.quantity AS qty,
-           p.*
+           p.*, p.quantity AS stock_qty
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
     WHERE ci.user_id = ?
@@ -43,10 +44,20 @@ exports.page = (req, res) => {
       console.error('Cart.page - db error', err);
       return res.status(500).send('Failed to load cart');
     }
-    const items = (rows || []).map(r => {
+      // Allow selecting a subset of cart items via query parameter `items[]` (from cart page checkboxes)
+      let selectedIds = req.query && (req.query.items || req.query['items[]']) ? req.query.items || req.query['items[]'] : null;
+      if (selectedIds && !Array.isArray(selectedIds)) {
+        // could be comma-separated
+        selectedIds = String(selectedIds).split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      const filteredRows = Array.isArray(selectedIds) && selectedIds.length ? (rows || []).filter(r => selectedIds.includes(String(r.id || r.cart_id || r.cartId))) : (rows || []);
+
+      const items = (filteredRows || []).map(r => {
       const resolvedName = r.productName || r.product_name || r.title || r.name || r.product || '';
       const price = Number(r.price || r.unitPrice || r.cost || 0);
       const quantity = Number(r.qty || r.quantity || 0);
+      const stock = Number(r.stock_qty || r.quantity || r.stock || 0);
       const productId = r.product_id || r.id;
 
       return {
@@ -55,6 +66,7 @@ exports.page = (req, res) => {
         productName: resolvedName,
         price,
         quantity,
+        stock,
         image: r.image || r.img || ''
       };
     });
@@ -358,54 +370,108 @@ exports.confirmPayment = function (req, res) {
         const total = cartRows.reduce((s, r) => s + Number(r.unit_price || 0) * Number(r.quantity || 0), 0);
         const agg = aggregateByProduct(cartRows);
 
-        conn.query('INSERT INTO orders (user_id, totalAmount, status, createdAt) VALUES (?, ?, ?, NOW())', [userId, total, 'Pending'], (oErr, oRes) => {
-          if (oErr) return rollbackFail('Failed to create order', oErr);
-          const orderId = oRes.insertId;
-          console.log('confirmPayment: created orderId =', orderId);
+        // Resolve shipping method (use session selection or default active standard)
+        const selectedShippingMethodId = req.session.selectedShippingMethodId || null;
+        const fetchShipping = (cb) => {
+          if (!selectedShippingMethodId) {
+            return conn.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
+              if (sErr) return cb(sErr);
+              if (!sRows.length) return cb(new Error('NO_SHIP_METHOD'));
+              return cb(null, sRows[0]);
+            });
+          }
+          conn.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
+            if (sErr) return cb(sErr);
+            if (sRows && sRows[0]) return cb(null, sRows[0]);
+            // fallback to default
+            return conn.query('SELECT id, method_name, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
+              if (fErr) return cb(fErr);
+              if (!fRows.length) return cb(new Error('NO_SHIP_METHOD'));
+              return cb(null, fRows[0]);
+            });
+          });
+        };
 
-          // batch insert order_items
-          const values = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
-          const placeholders = values.map(() => '(?, ?, ?, ?)').join(', ');
-          const flat = values.flat();
+        fetchShipping((sErr, shipRow) => {
+          if (sErr) return rollbackFail('Failed to resolve shipping method', sErr);
+          const originalShippingFee = Number(shipRow?.price || 0);
 
-          conn.query(`INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ${placeholders}`, flat, (oiErr, oiRes) => {
-            if (oiErr) return rollbackFail('Failed to create order items', oiErr);
-            console.log('confirmPayment: Inserted order_items for orderId=', orderId, 'rows=', (oiRes && oiRes.affectedRows) || 0);
+          // Get membership and apply perks to compute appliedShippingFee and discountAmount
+          Membership.getUserMembership(userId, (mErr, membership) => {
+            if (mErr) console.error('confirmPayment - membership fetch error', mErr);
+            if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
 
-            // --- START: decrement product stock for each ordered product (use cart_items.quantity) ---
-            try {
-              // build list from cartRows (cartRows came from SELECT cart_items JOIN products earlier)
-              const itemsToDecrement = (cartRows || []).map(r => ({
-                productId: Number(r.product_id || r.productId || r.id),
-                quantity: Number(r.quantity || r.qty || 0)
-              })).filter(it => Number.isFinite(it.productId) && it.productId > 0 && it.quantity > 0);
+            let appliedShippingFee = originalShippingFee;
+            const methodName = String(shipRow?.method_name || '').toLowerCase();
+            const isStandard = methodName.includes('standard');
+            const isPriority = methodName.includes('priority');
 
-              // finalize: clear cart, commit transaction, release connection and redirect
-              const finalize = () => {
-                // after commit succeed, send shopper to payment success page
-                const last4 = (req.body && (req.body.cardLast4 || req.body.card_last4 || req.body.last4)) || '';
-                const encodedLast4 = encodeURIComponent(last4 || '');
-                const encodedAmount = encodeURIComponent(total || '');
-                return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
-              };
-
-              if (itemsToDecrement.length === 0) {
-                console.log('confirmPayment: nothing to decrement for orderId=', orderId);
-                return finalize();
-              }
-
-              // Use the correct ProductController function that expects { productId, quantity }
-              ProductController.decrementStockUsingConn(conn, itemsToDecrement, (decErr) => {
-                if (decErr) return rollbackFail('Failed to decrement product stock', decErr);
-                console.log('confirmPayment: decremented stock for orderId=', orderId, 'items=', itemsToDecrement);
-                // proceed to clear cart and commit only after successful decrement
-                return finalize();
-              });
-            } catch (ex) {
-              return rollbackFail('Stock decrement step failed', ex);
+            if (isStandard && (membership.free_standard_delivery || (total >= Number(membership.free_delivery_threshold || 0)))) {
+              appliedShippingFee = 0;
             }
-            // --- END: decrement product stock ---
-           });
+            if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) {
+              appliedShippingFee = Math.max(0, originalShippingFee - Number(membership.priority_delivery_discount));
+            }
+
+            let discountAmount = 0;
+            const discThresh = Number(membership.discount_threshold || 0);
+            const discPercent = Number(membership.discount_percent || 0);
+            if (discPercent > 0 && total >= discThresh) {
+              discountAmount = Number((total * (discPercent / 100)).toFixed(2));
+            }
+
+            const totalWithShipping = Number((total + appliedShippingFee - discountAmount).toFixed(2));
+
+            conn.query('INSERT INTO orders (user_id, shipping_method_id, shipping_fee, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, NOW())', [userId, shipRow.id, appliedShippingFee, totalWithShipping, 'Pending'], (oErr, oRes) => {
+              if (oErr) return rollbackFail('Failed to create order', oErr);
+              const orderId = oRes.insertId;
+              console.log('confirmPayment: created orderId =', orderId);
+
+              // batch insert order_items
+              const values = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
+              const placeholders = values.map(() => '(?, ?, ?, ?)').join(', ');
+              const flat = values.flat();
+
+              conn.query(`INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ${placeholders}`, flat, (oiErr, oiRes) => {
+                if (oiErr) return rollbackFail('Failed to create order items', oiErr);
+                console.log('confirmPayment: Inserted order_items for orderId=', orderId, 'rows=', (oiRes && oiRes.affectedRows) || 0);
+
+                // --- START: decrement product stock for each ordered product (use cart_items.quantity) ---
+                try {
+                  // build list from cartRows (cartRows came from SELECT cart_items JOIN products earlier)
+                  const itemsToDecrement = (cartRows || []).map(r => ({
+                    productId: Number(r.product_id || r.productId || r.id),
+                    quantity: Number(r.quantity || r.qty || 0)
+                  })).filter(it => Number.isFinite(it.productId) && it.productId > 0 && it.quantity > 0);
+
+                  // finalize: clear cart, commit transaction, release connection and redirect
+                  const finalize = () => {
+                    // after commit succeed, send shopper to payment success page
+                    const last4 = (req.body && (req.body.cardLast4 || req.body.card_last4 || req.body.last4)) || '';
+                    const encodedLast4 = encodeURIComponent(last4 || '');
+                    const encodedAmount = encodeURIComponent(totalWithShipping || '');
+                    return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
+                  };
+
+                  if (itemsToDecrement.length === 0) {
+                    console.log('confirmPayment: nothing to decrement for orderId=', orderId);
+                    return finalize();
+                  }
+
+                  // Use the correct ProductController function that expects { productId, quantity }
+                  ProductController.decrementStockUsingConn(conn, itemsToDecrement, (decErr) => {
+                    if (decErr) return rollbackFail('Failed to decrement product stock', decErr);
+                    console.log('confirmPayment: decremented stock for orderId=', orderId, 'items=', itemsToDecrement);
+                    // proceed to clear cart and commit only after successful decrement
+                    return finalize();
+                  });
+                } catch (ex) {
+                  return rollbackFail('Stock decrement step failed', ex);
+                }
+                // --- END: decrement product stock ---
+              });
+            });
+          });
         });
       });
     });
@@ -477,31 +543,60 @@ exports.pay = function (req, res) {
         let selectedShippingMethodId = req.session.selectedShippingMethodId || null;
         const validSelectedShipping = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
         if (!validSelectedShipping) {
-          // Default to Standard Shipping (price = 4.50) if available, otherwise first method
-          const standardShipping = shippingMethods.find(m => Number(m.price) === 4.50) || shippingMethods[0];
+          // Default to Standard Shipping if available
+          const standardShipping = shippingMethods.find(m => String(m.method_name || '').toLowerCase().includes('standard')) || shippingMethods[0];
           selectedShippingMethodId = standardShipping?.id || null;
         }
         if (!req.session.selectedShippingMethodId && selectedShippingMethodId) {
           req.session.selectedShippingMethodId = selectedShippingMethodId;
         }
         const selectedShippingMethod = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
-        const shippingFee = Number(selectedShippingMethod?.price || 0);
-        const totalWithShipping = total + shippingFee;
+        const originalShippingFee = Number(selectedShippingMethod?.price || 0);
 
-        return res.render('pay', {
-          items,
-          cartItems: items,
-          total,
-          totalWithShipping,
-          shippingFee,
-          shippingMethods,
-          selectedShippingMethodId,
-          selectedShippingMethod,
-          addresses,
-          selectedAddressId,
-          selectedAddress,
-          paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
-          paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+        // Get membership and apply perks
+        Membership.getUserMembership(userId, (mErr, membership) => {
+          if (mErr) console.error('pay - membership fetch error', mErr);
+          if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
+
+          let shippingFee = originalShippingFee;
+          const methodName = String(selectedShippingMethod?.method_name || '').toLowerCase();
+          const isStandard = methodName.includes('standard');
+          const isPriority = methodName.includes('priority');
+
+          if (isStandard && (membership.free_standard_delivery || (total >= Number(membership.free_delivery_threshold || 0)))) {
+            shippingFee = 0;
+          }
+          if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) {
+            shippingFee = Math.max(0, originalShippingFee - Number(membership.priority_delivery_discount));
+          }
+
+          let discountAmount = 0;
+          const discThresh = Number(membership.discount_threshold || 0);
+          const discPercent = Number(membership.discount_percent || 0);
+          if (discPercent > 0 && total >= discThresh) {
+            discountAmount = Number((total * (discPercent / 100)).toFixed(2));
+          }
+
+          const totalWithShipping = Number((total + shippingFee - discountAmount).toFixed(2));
+
+          return res.render('pay', {
+            items,
+            cartItems: items,
+            total,
+            totalWithShipping,
+            shippingFee,
+            originalShippingFee,
+            discountAmount,
+            shippingMethods,
+            selectedShippingMethodId,
+            selectedShippingMethod,
+            addresses,
+            selectedAddressId,
+            selectedAddress,
+            membership,
+            paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+            paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+          });
         });
       });
     });
@@ -535,7 +630,15 @@ exports.checkoutPage = function (req, res) {
       return res.status(500).render('checkout', { items: [], cartItems: [], total: 0, error: 'Failed to load checkout' });
     }
 
-    const items = (rows || []).map(r => ({
+    // If client provided selected cart item ids via query param `items[]`, filter to those only
+    let selectedIds = req.query && (req.query.items || req.query['items[]']) ? req.query.items || req.query['items[]'] : null;
+    if (selectedIds && !Array.isArray(selectedIds)) selectedIds = String(selectedIds).split(',').map(s => s.trim()).filter(Boolean);
+    const filteredRows = Array.isArray(selectedIds) && selectedIds.length ? (rows || []).filter(r => selectedIds.includes(String(r.cart_id || r.id))) : (rows || []);
+
+    // persist selected cart ids in session so later order creation can respect the selection
+    try { req.session.selectedCartItemIds = Array.isArray(selectedIds) && selectedIds.length ? selectedIds : null; } catch (e) { /* ignore if session not writable */ }
+
+    const items = (filteredRows || []).map(r => ({
       id: r.product_id,
       cartId: r.cart_id,
       productName: r.productName || '',
@@ -569,31 +672,60 @@ exports.checkoutPage = function (req, res) {
         let selectedShippingMethodId = req.session.selectedShippingMethodId || null;
         const validSelected = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
         if (!validSelected) {
-          // Default to Standard Shipping (price = 4.50) if available, otherwise first method
-          const standardShipping = shippingMethods.find(m => Number(m.price) === 4.50) || shippingMethods[0];
+          // Default to Standard Shipping if available
+          const standardShipping = shippingMethods.find(m => String(m.method_name || '').toLowerCase().includes('standard')) || shippingMethods[0];
           selectedShippingMethodId = standardShipping?.id || null;
         }
         if (!req.session.selectedShippingMethodId && selectedShippingMethodId) {
           req.session.selectedShippingMethodId = selectedShippingMethodId;
         }
         const selectedShippingMethod = shippingMethods.find(m => Number(m.id) === Number(selectedShippingMethodId)) || null;
-        const shippingFee = Number(selectedShippingMethod?.price || 0);
-        const totalWithShipping = total + shippingFee;
+        const originalShippingFee = Number(selectedShippingMethod?.price || 0);
 
-        return res.render('checkout', {
-          items,
-          cartItems: items,
-          total,
-          totalWithShipping,
-          shippingFee,
-          shippingMethods,
-          selectedShippingMethodId,
-          selectedShippingMethod,
-          addresses,
-          selectedAddressId,
-          selectedAddress,
-          paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
-          paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+        // Get membership and apply perks
+        Membership.getUserMembership(userId, (mErr, membership) => {
+          if (mErr) console.error('checkoutPage - membership fetch error', mErr);
+          if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
+
+          let shippingFee = originalShippingFee;
+          const methodName = String(selectedShippingMethod?.method_name || '').toLowerCase();
+          const isStandard = methodName.includes('standard');
+          const isPriority = methodName.includes('priority');
+
+          if (isStandard && (membership.free_standard_delivery || (total >= Number(membership.free_delivery_threshold || 0)))) {
+            shippingFee = 0;
+          }
+          if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) {
+            shippingFee = Math.max(0, originalShippingFee - Number(membership.priority_delivery_discount));
+          }
+
+          let discountAmount = 0;
+          const discThresh = Number(membership.discount_threshold || 0);
+          const discPercent = Number(membership.discount_percent || 0);
+          if (discPercent > 0 && total >= discThresh) {
+            discountAmount = Number((total * (discPercent / 100)).toFixed(2));
+          }
+
+          const totalWithShipping = Number((total + shippingFee - discountAmount).toFixed(2));
+
+          return res.render('checkout', {
+            items,
+            cartItems: items,
+            total,
+            totalWithShipping,
+            shippingFee,
+            originalShippingFee,
+            discountAmount,
+            shippingMethods,
+            selectedShippingMethodId,
+            selectedShippingMethod,
+            addresses,
+            selectedAddressId,
+            selectedAddress,
+            membership,
+            paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+            paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+          });
         });
       });
     });

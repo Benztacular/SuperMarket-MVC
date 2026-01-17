@@ -129,6 +129,10 @@
                 </div>
             </div>
             <div class="h-px bg-white/10 my-3"></div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-gray-400 text-sm">Points Earned</span>
+                <span class="text-sm text-gray-200 font-bold"><%= (typeof pointsEarned !== 'undefined') ? (Number(pointsEarned).toLocaleString() + ' pts') : '0 pts' %></span>
+            </div>
             <div class="flex justify-between items-center">
                 <span class="text-gray-300 font-medium">Amount Paid</span>
                 <span class="text-xl font-bold text-white"><%= amount ? ('$' + Number(amount).toFixed(2)) : '—' %></span>

@@ -18,23 +18,32 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-async function createOrder(amount) {
+// createOrder now accepts optional returnUrl and cancelUrl so PayPal can redirect back
+async function createOrder(amount, returnUrl = null, cancelUrl = null) {
   const accessToken = await getAccessToken();
+  const body = {
+    intent: 'CAPTURE',
+    purchase_units: [{
+      amount: {
+        currency_code: 'SGD',
+        value: amount
+      }
+    }]
+  };
+
+  if (returnUrl || cancelUrl) {
+    body.application_context = {};
+    if (returnUrl) body.application_context.return_url = returnUrl;
+    if (cancelUrl) body.application_context.cancel_url = cancelUrl;
+  }
+
   const response = await fetch(`${PAYPAL_API}/v2/checkout/orders`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${accessToken}`
     },
-    body: JSON.stringify({
-      intent: 'CAPTURE',
-      purchase_units: [{
-        amount: {
-          currency_code: 'SGD',
-          value: amount
-        }
-      }]
-    })
+    body: JSON.stringify(body)
   });
   return await response.json();
 }

@@ -1,7 +1,9 @@
 const services = require('../services/nets');
 const NetsTxn = require('../models/NetsTransaction');
+const Wallet = require('../models/Wallet');
 const axios = require('axios');
 const db = require('../db');
+const Membership = require('../models/Membership');
 
 // In-memory store for txn statuses and active SSE clients
 const txnStatusMap = new Map();
@@ -76,173 +78,83 @@ exports.createQr = (req, res, next) => {
 function createOrderFromCart(userId, txnRetrievalRef, options, callback) {
   if (typeof options === 'function') { callback = options; options = {}; }
   options = options || {};
+
   const conn = db;
-  
-  conn.beginTransaction((txErr) => {
-    if (txErr) {
-      console.error('[NETS] createOrderFromCart - transaction begin error', txErr);
-      return callback(txErr);
-    }
+  const util = require('util');
+  const q = util.promisify(conn.query).bind(conn);
+  const begin = util.promisify(conn.beginTransaction).bind(conn);
+  const commit = util.promisify(conn.commit).bind(conn);
+  const rollback = async (err) => { try { conn.rollback(() => {}); } catch (e) {} return err; };
 
-    // Get cart items
-    const cartSql = `
-      SELECT ci.id AS cart_id, ci.product_id, ci.quantity,
-             p.price AS unit_price, p.quantity AS stock, p.productName
-      FROM cart_items ci
-      JOIN products p ON p.id = ci.product_id
-      WHERE ci.user_id = ?
-      FOR UPDATE
-    `;
+  (async () => {
+    try {
+      await begin();
 
-    conn.query(cartSql, [userId], (cErr, cartRows) => {
-      if (cErr) {
-        console.error('[NETS] createOrderFromCart - cart query error', cErr);
-        return conn.rollback(() => callback(cErr));
+      const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity, p.price AS unit_price, p.quantity AS stock, p.productName FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? FOR UPDATE`, [userId])) || [];
+      if (!cartRows.length) throw new Error('Cart empty');
+      const insufficient = cartRows.find(r => Number(r.quantity) > Number(r.stock));
+      if (insufficient) throw new Error(`Insufficient stock for ${insufficient.productName}`);
+
+      const addrRows = (await q('SELECT id FROM delivery_addresses WHERE user_id = ? ORDER BY is_default DESC, id ASC LIMIT 1', [userId])) || [];
+      if (!addrRows.length) throw new Error('No delivery address found');
+      const deliveryAddressId = addrRows[0].id;
+
+      const standardPrice = 4.50;
+      let shipRow = null;
+      if (options.selectedShippingMethodId) {
+        const sRows = await q('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [options.selectedShippingMethodId]);
+        if (sRows && sRows.length) shipRow = sRows[0];
       }
-      if (!cartRows || cartRows.length === 0) {
-        console.error('[NETS] createOrderFromCart - cart empty');
-        return conn.rollback(() => callback(new Error('Cart empty')));
+      if (!shipRow) {
+        const std = await q('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 AND price = ? LIMIT 1', [standardPrice]);
+        if (std && std.length) shipRow = std[0];
+      }
+      if (!shipRow) {
+        const first = await q('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', []);
+        shipRow = (first && first[0]) || null;
+      }
+      if (!shipRow) throw new Error('No shipping method available');
+
+      const itemsTotal = cartRows.reduce((s, r) => s + Number(r.unit_price || 0) * Number(r.quantity || 0), 0);
+      const membership = await new Promise((resolve) => Membership.getUserMembership(userId, (e, m) => resolve(m || { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 })));
+
+      let appliedShippingFee = Number(shipRow.price || 0);
+      const methodName = String(shipRow?.method_name || '').toLowerCase();
+      const isStandard = methodName.includes('standard');
+      const isPriority = methodName.includes('priority');
+      if (isStandard && (membership.free_standard_delivery || (itemsTotal >= Number(membership.free_delivery_threshold || 0)))) appliedShippingFee = 0;
+      if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) appliedShippingFee = Math.max(0, appliedShippingFee - Number(membership.priority_delivery_discount || 0));
+
+      let discountAmount = 0;
+      const discThresh = Number(membership.discount_threshold || 0);
+      const discPercent = Number(membership.discount_percent || 0);
+      if (discPercent > 0 && itemsTotal >= discThresh) discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
+
+      const total = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
+
+      const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, total, 'Paid']);
+      const orderId = orderRes.insertId;
+
+      if (cartRows.length) {
+        const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
+        const placeholders = vals.map(() => '(?, ?, ?, ?)').join(',');
+        await q(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ${placeholders}`, vals.flat());
       }
 
-      // Check stock
       for (const r of cartRows) {
-        if (Number(r.quantity) > Number(r.stock)) {
-          console.error('[NETS] createOrderFromCart - insufficient stock', r.productName);
-          return conn.rollback(() => callback(new Error(`Insufficient stock for ${r.productName}`)));
-        }
+        await q('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(r.quantity), r.product_id]);
       }
 
-      // Get delivery address (from session or default)
-      const addressSql = 'SELECT id FROM delivery_addresses WHERE user_id = ? ORDER BY is_default DESC, id ASC LIMIT 1';
-      conn.query(addressSql, [userId], (addrErr, addrRows = []) => {
-        if (addrErr) {
-          console.error('[NETS] createOrderFromCart - address query error', addrErr);
-          return conn.rollback(() => callback(addrErr));
-        }
-        if (!addrRows.length) {
-          console.error('[NETS] createOrderFromCart - no delivery address');
-          return conn.rollback(() => callback(new Error('No delivery address found')));
-        }
-        const deliveryAddressId = addrRows[0].id;
+      await q('INSERT INTO nets_transactions (user_id, order_id, merchant_txn_ref, nets_txn_id, amount, currency, payment_status, payment_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())', [userId, orderId, txnRetrievalRef, txnRetrievalRef, total, 'SGD', 'SUCCESS']);
+      await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
 
-        // Get shipping method. Prefer the selected shipping method if provided,
-        // otherwise prefer the standard shipping priced at 4.50, then fallback to first active.
-        const selectedShippingMethodId = options.selectedShippingMethodId || null;
-        const standardPrice = 4.50;
-        const pickShipping = (cb) => {
-          if (selectedShippingMethodId) {
-            return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
-              if (sErr) return cb(sErr);
-              if (sRows && sRows.length) return cb(null, sRows[0]);
-              // fall through to price-based lookup
-              return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND price = ? LIMIT 1', [standardPrice], (pErr, pRows = []) => {
-                if (pErr) return cb(pErr);
-                if (pRows && pRows.length) return cb(null, pRows[0]);
-                return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
-                  if (fErr) return cb(fErr);
-                  if (!fRows || !fRows.length) return cb(new Error('No shipping method available'));
-                  return cb(null, fRows[0]);
-                });
-              });
-            });
-          }
-
-          // Try to find the standard shipping price first
-          conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND price = ? LIMIT 1', [standardPrice], (pErr, pRows = []) => {
-            if (pErr) return cb(pErr);
-            if (pRows && pRows.length) return cb(null, pRows[0]);
-            // Fallback to first active shipping method
-            return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
-              if (fErr) return cb(fErr);
-              if (!fRows || !fRows.length) return cb(new Error('No shipping method available'));
-              return cb(null, fRows[0]);
-            });
-          });
-        };
-
-        pickShipping((sErr, chosen) => {
-          if (sErr) {
-            console.error('[NETS] createOrderFromCart - shipping query error', sErr);
-            return conn.rollback(() => callback(sErr));
-          }
-          const shippingMethodId = chosen.id;
-          const shippingFee = Number(chosen.price || 0);
-
-          // Calculate total
-          const itemsTotal = cartRows.reduce((s, r) => s + Number(r.unit_price || 0) * Number(r.quantity || 0), 0);
-          const total = itemsTotal + shippingFee;
-
-          // Create order
-          conn.query(
-            'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())',
-            [userId, deliveryAddressId, shippingMethodId, shippingFee, total, 'Paid'],
-            (oErr, oRes) => {
-              if (oErr) {
-                console.error('[NETS] createOrderFromCart - order insert error', oErr);
-                return conn.rollback(() => callback(oErr));
-              }
-              const orderId = oRes.insertId;
-              console.log('[NETS] createOrderFromCart - order created', orderId);
-
-              // Insert order items
-              const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
-              const placeholders = vals.map(() => '(?, ?, ?, ?)').join(',');
-              const flat = vals.flat();
-              
-              conn.query(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ${placeholders}`, flat, (oiErr) => {
-                if (oiErr) {
-                  console.error('[NETS] createOrderFromCart - order items insert error', oiErr);
-                  return conn.rollback(() => callback(oiErr));
-                }
-
-                // Update product quantities
-                const updates = cartRows.map(r => new Promise((resolve, reject) => {
-                  conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(r.quantity), r.product_id], (uErr) => uErr ? reject(uErr) : resolve());
-                }));
-
-                Promise.all(updates)
-                  .then(() => {
-                    // Create NETS transaction record
-                    conn.query(
-                      'INSERT INTO nets_transactions (user_id, order_id, merchant_txn_ref, nets_txn_id, amount, currency, payment_status, payment_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
-                      [userId, orderId, txnRetrievalRef, txnRetrievalRef, total, 'SGD', 'SUCCESS'],
-                      (ntErr) => {
-                        if (ntErr) {
-                          console.error('[NETS] createOrderFromCart - nets_transactions insert error', ntErr);
-                          return conn.rollback(() => callback(ntErr));
-                        }
-
-                        // Clear cart
-                        conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (dErr) => {
-                          if (dErr) {
-                            console.error('[NETS] createOrderFromCart - cart clear error', dErr);
-                            return conn.rollback(() => callback(dErr));
-                          }
-
-                          // Commit transaction
-                          conn.commit((cmErr) => {
-                            if (cmErr) {
-                              console.error('[NETS] createOrderFromCart - commit error', cmErr);
-                              return conn.rollback(() => callback(cmErr));
-                            }
-                            console.log('[NETS] createOrderFromCart - success, orderId:', orderId);
-                            callback(null, orderId, total);
-                          });
-                        });
-                      }
-                    );
-                  })
-                  .catch((decErr) => {
-                    console.error('[NETS] createOrderFromCart - product quantity update error', decErr);
-                    conn.rollback(() => callback(decErr));
-                  });
-              });
-            }
-          );
-        });
-      });
-    });
-  });
+      await commit();
+      return callback(null, orderId, total);
+    } catch (err) {
+      await rollback(err);
+      return callback(err);
+    }
+  })();
 }
 
 exports.successPage = (req, res) => {
@@ -258,6 +170,55 @@ exports.successPage = (req, res) => {
   if (!userId) {
     console.error('[NETS] successPage - no user in session');
     return res.redirect('/login');
+  }
+
+  // If this session initiated a NETS wallet top-up, apply it and redirect to wallet
+  try {
+    const pendingTopUp = req.session && req.session.pendingNetsTopup;
+    if (pendingTopUp && pendingTopUp.amount) {
+      const topupAmount = Number(pendingTopUp.amount || 0);
+      console.log('[NETS] successPage - detected pendingNetsTopup, applying wallet top-up', { txn, topupAmount });
+
+      Wallet.findByUserId(userId, (wErr, walletRow) => {
+        if (wErr || !walletRow) {
+          console.error('[NETS] successPage - wallet lookup error', wErr);
+          // fallback to generic success redirect
+          txnStatusMap.set(txn, 'success');
+          notifyClients(txn, { success: true, redirect: `/payment/success?method=netsqr&txn=${encodeURIComponent(txn)}` });
+          return res.redirect(`/payment/success?method=netsqr&txn=${encodeURIComponent(txn)}`);
+        }
+
+        Wallet.updateBalanceByUserId(userId, topupAmount, (uErr, updated) => {
+          if (uErr) {
+            console.error('[NETS] successPage - wallet update error', uErr);
+            txnStatusMap.set(txn, 'success');
+            notifyClients(txn, { success: true, redirect: `/payment/success?method=netsqr&txn=${encodeURIComponent(txn)}` });
+            return res.redirect(`/payment/success?method=netsqr&txn=${encodeURIComponent(txn)}`);
+          }
+          const walletId = (updated && updated.id) || (walletRow && walletRow.id) || null;
+          Wallet.addTransaction({
+            wallet_id: walletId,
+            user_id: userId,
+            type: 'TOP_UP',
+            amount: topupAmount,
+            reference_type: 'nets',
+            reference_id: txn,
+            description: `NETS top-up ${topupAmount}`
+          }, (tErr) => {
+            if (tErr) console.error('[NETS] successPage - addTransaction err', tErr);
+            // clear pending flag from session
+            try { delete req.session.pendingNetsTopup; } catch (e) {}
+            NetsTxn.markStatus({ netsTxnId: txn, status: 'SUCCESS', rawResponse: req.query });
+            txnStatusMap.set(txn, 'success');
+            notifyClients(txn, { success: true, redirect: `/wallet` });
+            return res.redirect('/wallet');
+          });
+        });
+      });
+      return;
+    }
+  } catch (e) {
+    console.error('[NETS] successPage pendingTopUp handling error', e);
   }
 
   // Check if order already exists for this transaction
@@ -521,40 +482,83 @@ exports.ssePollingStatus = async (req, res) => {
         clearInterval(interval);
         
         // Create order if not already created
-        if (!orderCreated) {
-          orderCreated = true;
-          
-          // Check if order already exists
-          db.query('SELECT order_id FROM nets_transactions WHERE nets_txn_id = ? OR merchant_txn_ref = ? LIMIT 1', 
-            [txnRetrievalRef, txnRetrievalRef], 
-            (checkErr, checkRows) => {
-              if (!checkErr && checkRows && checkRows.length > 0 && checkRows[0].order_id) {
-                // Order already exists
-                const orderId = checkRows[0].order_id;
-                console.log('[NETS] ssePollingStatus - order already exists', orderId);
-                const redirectUrl = `/payment/success?orderId=${orderId}&method=netsqr&txn=${encodeURIComponent(txnRetrievalRef)}`;
-                res.write(`data: ${JSON.stringify({ success: true, redirect: redirectUrl })}\n\n`);
-                res.end();
-              } else {
-                // Create new order (use session-selected shipping method if available)
-                createOrderFromCart(userId, txnRetrievalRef, { selectedShippingMethodId: req.session?.selectedShippingMethodId }, (err, orderId, totalAmount) => {
-                  if (err) {
-                    console.error('[NETS] ssePollingStatus - createOrderFromCart error', err);
-                    res.write(`data: ${JSON.stringify({ success: true, error: err.message, redirect: `/payment/success?method=netsqr&txn=${encodeURIComponent(txnRetrievalRef)}` })}\n\n`);
-                  } else {
-                    console.log('[NETS] ssePollingStatus - order created', orderId);
-                    const redirectUrl = `/payment/success?orderId=${orderId}&method=netsqr&txn=${encodeURIComponent(txnRetrievalRef)}&amount=${encodeURIComponent(totalAmount)}`;
-                    res.write(`data: ${JSON.stringify({ success: true, redirect: redirectUrl })}\n\n`);
+            if (!orderCreated) {
+              orderCreated = true;
+
+              // If this session initiated a wallet top-up, apply it instead of creating an order
+              const pendingTopUp = req.session && req.session.pendingNetsTopup;
+              if (pendingTopUp && pendingTopUp.amount) {
+                const topupAmount = Number(pendingTopUp.amount || 0);
+                // perform wallet update and add a TOP_UP transaction
+                Wallet.findByUserId(userId, (wErr, walletRow) => {
+                  if (wErr || !walletRow) {
+                    console.error('[NETS] ssePollingStatus - wallet lookup error', wErr);
+                    // fallback: notify frontend to redirect to generic success
+                    res.write(`data: ${JSON.stringify({ success: true, redirect: `/wallet` })}\n\n`);
+                    res.end();
+                    return;
                   }
-                  res.end();
+                  Wallet.updateBalanceByUserId(userId, topupAmount, (uErr, updated) => {
+                    if (uErr) {
+                      console.error('[NETS] ssePollingStatus - wallet update error', uErr);
+                      res.write(`data: ${JSON.stringify({ success: true, redirect: `/wallet` })}\n\n`);
+                      res.end();
+                      return;
+                    }
+                    const walletId = (updated && updated.id) || (walletRow && walletRow.id) || null;
+                    Wallet.addTransaction({
+                      wallet_id: walletId,
+                      user_id: userId,
+                      type: 'TOP_UP',
+                      amount: topupAmount,
+                      reference_type: 'nets',
+                      reference_id: txnRetrievalRef,
+                      description: `NETS top-up ${topupAmount}`
+                    }, (tErr) => {
+                      if (tErr) console.error('[NETS] ssePollingStatus - addTransaction err', tErr);
+                      // clear pending flag from session
+                      try { delete req.session.pendingNetsTopup; } catch (e) {}
+                      // mark nets txn status and notify frontend to redirect to wallet with success
+                      NetsTxn.markStatus({ netsTxnId: txnRetrievalRef, status: 'SUCCESS', rawResponse: resData });
+                      const redirectUrl = `/wallet`;
+                      res.write(`data: ${JSON.stringify({ success: true, redirect: redirectUrl })}\n\n`);
+                      res.end();
+                    });
+                  });
                 });
+              } else {
+                // Check if order already exists
+                db.query('SELECT order_id FROM nets_transactions WHERE nets_txn_id = ? OR merchant_txn_ref = ? LIMIT 1', 
+                  [txnRetrievalRef, txnRetrievalRef], 
+                  (checkErr, checkRows) => {
+                    if (!checkErr && checkRows && checkRows.length > 0 && checkRows[0].order_id) {
+                      // Order already exists
+                      const orderId = checkRows[0].order_id;
+                      console.log('[NETS] ssePollingStatus - order already exists', orderId);
+                      const redirectUrl = `/payment/success?orderId=${orderId}&method=netsqr&txn=${encodeURIComponent(txnRetrievalRef)}`;
+                      res.write(`data: ${JSON.stringify({ success: true, redirect: redirectUrl })}\n\n`);
+                      res.end();
+                    } else {
+                      // Create new order (use session-selected shipping method if available)
+                      createOrderFromCart(userId, txnRetrievalRef, { selectedShippingMethodId: req.session?.selectedShippingMethodId }, (err, orderId, totalAmount) => {
+                        if (err) {
+                          console.error('[NETS] ssePollingStatus - createOrderFromCart error', err);
+                          res.write(`data: ${JSON.stringify({ success: true, error: err.message, redirect: `/payment/success?method=netsqr&txn=${encodeURIComponent(txnRetrievalRef)}` })}\n\n`);
+                        } else {
+                          console.log('[NETS] ssePollingStatus - order created', orderId);
+                          const redirectUrl = `/payment/success?orderId=${orderId}&method=netsqr&txn=${encodeURIComponent(txnRetrievalRef)}&amount=${encodeURIComponent(totalAmount)}`;
+                          res.write(`data: ${JSON.stringify({ success: true, redirect: redirectUrl })}\n\n`);
+                        }
+                        res.end();
+                      });
+                    }
+                  }
+                );
               }
+            } else {
+              res.write(`data: ${JSON.stringify({ success: true })}\n\n`);
+              res.end();
             }
-          );
-        } else {
-          res.write(`data: ${JSON.stringify({ success: true })}\n\n`);
-          res.end();
-        }
       } else if (frontendTimeoutStatus == 1 && resData && (resData.response_code !== "00" || resData.txn_status === 2)) {
         // Payment failure: send a fail message
         clearInterval(interval);

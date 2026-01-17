@@ -1,6 +1,7 @@
 const stripeService = require('../services/stripe');
 const db = require('../db');
 const StripeTransaction = require('../models/StripeTransaction');
+const Membership = require('../models/Membership');
 
 function uid(req) {
   const u = req.session?.user;
@@ -87,178 +88,96 @@ async function createPaymentIntent(req, res, next) {
  * Confirm Stripe Payment and Create Order
  */
 async function confirmPayment(req, res, next) {
-  try {
-    const userId = uid(req);
-    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
-    
-    const { paymentIntentId } = req.body || {};
-    if (!paymentIntentId) return res.status(400).json({ error: 'Missing paymentIntentId' });
+  const util = require('util');
+  const userId = uid(req);
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
 
-    // Retrieve payment intent from Stripe
+  const { paymentIntentId } = req.body || {};
+  if (!paymentIntentId) return res.status(400).json({ error: 'Missing paymentIntentId' });
+
+  try {
     const paymentIntent = await stripeService.retrievePaymentIntent(paymentIntentId);
-    
-    if (paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({ 
-        error: 'Payment not succeeded', 
-        status: paymentIntent.status 
-      });
+    if (paymentIntent.status !== 'succeeded') return res.status(400).json({ error: 'Payment not succeeded', status: paymentIntent.status });
+
+    const conn = db;
+    const q = util.promisify(conn.query).bind(conn);
+    const begin = util.promisify(conn.beginTransaction).bind(conn);
+    const commit = util.promisify(conn.commit).bind(conn);
+    const rollback = (cb) => { try { conn.rollback(() => cb && cb()); } catch (e) { if (cb) cb(e); } };
+
+    await begin();
+
+    const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity, p.price AS unit_price, p.quantity AS stock, p.productName FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? FOR UPDATE`, [userId])) || [];
+    if (!cartRows.length) { rollback(() => res.status(400).json({ error: 'Cart empty' })); return; }
+
+    for (const r of cartRows) {
+      if (Number(r.quantity) > Number(r.stock)) { rollback(() => res.status(400).json({ error: `Insufficient stock for ${r.productName}` })); return; }
     }
 
-    // Create local order in transaction
-    const conn = db;
-    conn.beginTransaction((txErr) => {
-      if (txErr) return next(txErr);
+    const addrRows = (await q('SELECT id FROM delivery_addresses WHERE user_id = ? ORDER BY (id = ?) DESC, is_default DESC, id ASC LIMIT 1', [userId, req.session?.selectedAddressId || 0])) || [];
+    if (!addrRows.length) { rollback(() => res.status(400).json({ error: 'Please add a delivery address' })); return; }
+    const deliveryAddressId = addrRows[0].id;
 
-      const cartSql = `
-        SELECT ci.id AS cart_id, ci.product_id, ci.quantity,
-               p.price AS unit_price, p.quantity AS stock, p.productName
-        FROM cart_items ci
-        JOIN products p ON p.id = ci.product_id
-        WHERE ci.user_id = ?
-        FOR UPDATE
-      `;
-      
-      conn.query(cartSql, [userId], (cErr, cartRows) => {
-        if (cErr) return conn.rollback(() => next(cErr));
-        if (!cartRows || cartRows.length === 0) {
-          return conn.rollback(() => res.status(400).json({ error: 'Cart empty' }));
-        }
+    const shipRows = (await q('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [req.session?.selectedShippingMethodId || 0])) || [];
+    let shipRow = shipRows[0];
+    if (!shipRow) {
+      const fallback = (await q('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [])) || [];
+      shipRow = fallback[0] || null;
+    }
+    if (!shipRow) { rollback(() => res.status(400).json({ error: 'No shipping method available' })); return; }
 
-        // Check stock
-        for (const r of cartRows) {
-          if (Number(r.quantity) > Number(r.stock)) {
-            return conn.rollback(() => res.status(400).json({ 
-              error: `Insufficient stock for ${r.productName}` 
-            }));
-          }
-        }
+    const itemsTotal = cartRows.reduce((s, r) => s + Number(r.unit_price || 0) * Number(r.quantity || 0), 0);
 
-        // Resolve delivery address
-        const selectedAddressId = req.session?.selectedAddressId || null;
-        const addressSql = 'SELECT id FROM delivery_addresses WHERE user_id = ? ORDER BY (id = ?) DESC, is_default DESC, id ASC LIMIT 1';
-        
-        conn.query(addressSql, [userId, selectedAddressId || 0], (addrErr, addrRows = []) => {
-          if (addrErr) return conn.rollback(() => next(addrErr));
-          if (!addrRows.length) {
-            return conn.rollback(() => res.status(400).json({ 
-              error: 'Please add a delivery address' 
-            }));
-          }
-          const deliveryAddressId = addrRows[0].id;
+    // membership perks
+    const membership = await new Promise((resolve) => Membership.getUserMembership(userId, (e, m) => resolve(m || { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 })));
 
-          // Resolve shipping method
-          const selectedShippingMethodId = req.session?.selectedShippingMethodId || null;
-          const pickShipping = () => new Promise((resolve, reject) => {
-            if (!selectedShippingMethodId) {
-              return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
-                if (sErr) return reject(sErr);
-                if (!sRows.length) return reject(new Error('NO_SHIP_METHOD'));
-                return resolve(sRows[0]);
-              });
-            }
-            conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
-              if (sErr) return reject(sErr);
-              if (sRows.length) return resolve(sRows[0]);
-              conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
-                if (fErr) return reject(fErr);
-                if (!fRows.length) return reject(new Error('NO_SHIP_METHOD'));
-                return resolve(fRows[0]);
-              });
-            });
-          });
+    let appliedShippingFee = Number(shipRow.price || 0);
+    const methodName = String(shipRow?.method_name || '').toLowerCase();
+    const isStandard = methodName.includes('standard');
+    const isPriority = methodName.includes('priority');
+    if (isStandard && (membership.free_standard_delivery || (itemsTotal >= Number(membership.free_delivery_threshold || 0)))) appliedShippingFee = 0;
+    if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) appliedShippingFee = Math.max(0, appliedShippingFee - Number(membership.priority_delivery_discount || 0));
 
-          pickShipping().then((shipRow) => {
-            const shippingMethodId = shipRow.id;
-            const shippingFee = Number(shipRow.price || 0);
-            if (!req.session.selectedShippingMethodId) {
-              req.session.selectedShippingMethodId = shippingMethodId;
-            }
+    let discountAmount = 0;
+    const discThresh = Number(membership.discount_threshold || 0);
+    const discPercent = Number(membership.discount_percent || 0);
+    if (discPercent > 0 && itemsTotal >= discThresh) discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
 
-            const itemsTotal = cartRows.reduce((s, r) => s + Number(r.unit_price || 0) * Number(r.quantity || 0), 0);
-            const total = itemsTotal + shippingFee;
+    const total = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
 
-            // Create order
-            conn.query(
-              'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())',
-              [userId, deliveryAddressId, shippingMethodId, shippingFee, total, 'Paid'],
-              (oErr, oResult) => {
-                if (oErr) return conn.rollback(() => next(oErr));
-                const orderId = oResult.insertId;
+    const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, total, 'Paid']);
+    const orderId = orderRes && orderRes.insertId;
 
-                // Insert order items and decrement stock
-                let inserted = 0;
-                for (const r of cartRows) {
-                  conn.query(
-                    'INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES (?, ?, ?, ?, NOW())',
-                    [orderId, r.product_id, r.quantity, r.unit_price],
-                    (oiErr) => {
-                      if (oiErr) return conn.rollback(() => next(oiErr));
-                      
-                      conn.query(
-                        'UPDATE products SET quantity = quantity - ? WHERE id = ?',
-                        [r.quantity, r.product_id],
-                        (pErr) => {
-                          if (pErr) return conn.rollback(() => next(pErr));
-                          
-                          inserted++;
-                          if (inserted === cartRows.length) {
-                            // Create Stripe transaction record
-                            const amount = paymentIntent.amount / 100; // Convert from cents
-                            // Try to use latest_charge (present on PaymentIntent) first, fallback to charges.data[0].id
-                            const stripeChargeId = paymentIntent.latest_charge || (paymentIntent.charges && paymentIntent.charges.data && paymentIntent.charges.data[0] && paymentIntent.charges.data[0].id) || null;
-                            StripeTransaction.create({
-                              userId: userId,
-                              orderId: orderId,
-                              stripeTxnId: paymentIntent.id,
-                              stripeChargeId: stripeChargeId,
-                              paymentStatus: 'success',
-                              amount: amount,
-                              currency: paymentIntent.currency.toUpperCase(),
-                              paymentTime: new Date(),
-                              rawResponse: paymentIntent
-                            }, (stErr) => {
-                              if (stErr) {
-                                console.error('Failed to save Stripe transaction:', stErr);
-                                // Don't rollback - payment succeeded
-                              }
+    const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
+    const placeholders = vals.map(() => '(?, ?, ?, ?)').join(',');
+    const flat = vals.flat();
+    await q(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ${placeholders}`, flat);
 
-                              // Clear cart
-                              conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (delErr) => {
-                                if (delErr) console.error('Failed to clear cart:', delErr);
+    // decrement stock
+    for (const r of cartRows) {
+      await q('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(r.quantity), r.product_id]);
+    }
 
-                                conn.commit((commitErr) => {
-                                  if (commitErr) return conn.rollback(() => next(commitErr));
+    await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
 
-                                  // Clear session
-                                  delete req.session.selectedAddressId;
-                                  delete req.session.selectedShippingMethodId;
+    // Persist stripe transaction record (best-effort)
+    try {
+      const amount = paymentIntent.amount / 100;
+      const stripeChargeId = paymentIntent.latest_charge || (paymentIntent.charges && paymentIntent.charges.data && paymentIntent.charges.data[0] && paymentIntent.charges.data[0].id) || null;
+      await q('INSERT INTO stripe_transactions (user_id, order_id, stripe_txn_id, stripe_charge_id, payment_status, amount, currency, payment_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())', [userId, orderId, paymentIntent.id, stripeChargeId, 'success', amount, (paymentIntent.currency || 'sgd').toUpperCase()]);
+    } catch (e) { console.error('stripe tx record error', e); }
 
-                                  return res.json({ 
-                                    success: true, 
-                                    redirect: `/payment/success?orderId=${orderId}` 
-                                  });
-                                });
-                              });
-                            });
-                          }
-                        }
-                      );
-                    }
-                  );
-                }
-              }
-            );
-          }).catch((shipErr) => {
-            return conn.rollback(() => res.status(400).json({ 
-              error: 'Shipping method error: ' + shipErr.message 
-            }));
-          });
-        });
-      });
-    });
+    await commit();
+
+    // Clear session selection
+    delete req.session.selectedAddressId;
+    delete req.session.selectedShippingMethodId;
+
+    return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&amount=${encodeURIComponent(total)}` });
   } catch (ex) {
     console.error('Stripe confirmPayment error:', ex);
-    next(ex);
+    try { if (db && typeof db.rollback === 'function') db.rollback(() => {}); } catch (e) {}
+    return next(ex);
   }
 }
 

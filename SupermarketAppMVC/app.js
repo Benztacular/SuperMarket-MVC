@@ -18,6 +18,8 @@ const StripeController = require('./controllers/StripeController');
 const ReviewController = require('./controllers/ReviewController');
 const DeliveryAddressController = require('./controllers/DeliveryAddressController');
 const WalletController = require('./controllers/WalletController');
+const MembershipController = require('./controllers/MembershipController');
+const LoyaltyPointsController = require('./controllers/LoyaltyPointsController');
 const AdminController = require('./controllers/AdminController');
 const NetsController = require('./controllers/NetsController');
 const RefundController = require('./controllers/RefundController');
@@ -260,6 +262,36 @@ app.post('/profile/2fa/disable', requireUser, ensure(UserController.disableTwoFa
 // Wallet
 app.get('/wallet', requireUser, ensure(WalletController.page, 'WalletController.page'));
 app.post('/wallet/topup', requireUser, ensure(WalletController.topUp, 'WalletController.topUp'));
+app.post('/wallet/methods/add', requireUser, ensure(WalletController.addMethod, 'WalletController.addMethod'));
+app.post('/wallet/stripe/setup-intent', requireUser, ensure(WalletController.createSetupIntent, 'WalletController.createSetupIntent'));
+app.post('/wallet/stripe/save', requireUser, ensure(WalletController.saveStripeMethod, 'WalletController.saveStripeMethod'));
+app.get('/wallet/paypal/return', requireUser, ensure(WalletController.paypalReturn, 'WalletController.paypalReturn'));
+app.get('/wallet/stripe/success', requireUser, ensure(WalletController.stripeSuccess, 'WalletController.stripeSuccess'));
+// API: wallet balance (for checkout modal)
+app.get('/api/wallet/balance', requireUser, (req, res, next) => {
+  try {
+    const uid = (req.session && (req.session.userId || req.session.user && req.session.user.id)) || null;
+    if (!uid) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    return WalletController.balance(req, res, next);
+  } catch (e) { return next(e); }
+});
+app.get('/api/wallet/transactions', requireUser, (req, res, next) => {
+  return WalletController.transactions(req, res, next);
+});
+
+// Membership API routes
+app.get('/api/membership/plans', ensure(MembershipController.getPlans, 'MembershipController.getPlans'));
+app.get('/api/membership/current', requireUser, ensure(MembershipController.getCurrentMembership, 'MembershipController.getCurrentMembership'));
+app.post('/api/membership/upgrade', requireUser, ensure(MembershipController.upgradeMembership, 'MembershipController.upgradeMembership'));
+app.post('/api/membership/cancel', requireUser, ensure(MembershipController.cancelMembership, 'MembershipController.cancelMembership'));
+
+// Loyalty API routes
+app.get('/api/loyalty/account', requireUser, ensure(LoyaltyPointsController.getAccount, 'LoyaltyPointsController.getAccount'));
+app.get('/api/loyalty/rewards', requireUser, ensure(LoyaltyPointsController.getRewards, 'LoyaltyPointsController.getRewards'));
+app.post('/api/loyalty/redeem', requireUser, ensure(LoyaltyPointsController.redeemReward, 'LoyaltyPointsController.redeemReward'));
+app.get('/api/loyalty/redemptions', requireUser, ensure(LoyaltyPointsController.getUserRedemptions, 'LoyaltyPointsController.getUserRedemptions'));
+
+app.post('/cart/pay/wallet', requireUser, ensure(WalletController.pay, 'WalletController.pay'));
 
 // Refunds (User)
 app.get('/orders/:orderId/refund', requireUser, ensure(RefundController.requestPage, 'RefundController.requestPage'));
