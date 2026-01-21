@@ -1,0 +1,220 @@
+<%- include('partials/header') %>
+
+<main class="w-full bg-gradient-to-b from-emerald-50/40 to-white" style="min-height:calc(100vh - var(--nav-height) - var(--footer-height));">
+    <div class="max-w-6xl mx-auto px-6 pt-2 pb-6">
+        <div class="text-center mb-2">
+            <h1 class="text-5xl font-extrabold text-emerald-900">Better Value.</h1>
+            <p class="mt-3 text-emerald-700/80">Maximize your household savings</p>
+        </div>
+
+        <!-- Billing toggle: Monthly / Yearly -->
+        <div class="flex items-center justify-center mb-6">
+            <div id="billing-toggle" class="relative inline-flex items-center bg-white/30 rounded-full p-1">
+                <button type="button" data-period="month" class="billing-btn px-5 py-2 rounded-full text-sm font-semibold bg-emerald-100 text-emerald-900">Monthly</button>
+                <button type="button" data-period="year" class="billing-btn px-5 py-2 rounded-full text-sm font-semibold ml-1 text-emerald-700">Yearly</button>
+                <div id="billing-bubble" class="absolute left-0 top-0 w-1/2 h-full rounded-full bg-emerald-700/10 pointer-events-none transition-all"></div>
+            </div>
+        </div>
+
+        <% const currentPlan = (membership && membership.plan_name) || (user && user.membership) || 'Free'; %>
+        <% const currentNorm = String(currentPlan || '').replace(/\s*\(.*?\)\s*/,'').toLowerCase(); %>
+
+        <% 
+            // Build plan lookups for display
+            const pList = plans || [];
+            const find = (re, period) => pList.find(p => re.test(p.plan_name) && String(p.billing_period).toUpperCase() === String(period || '').toUpperCase());
+            const freePlan = pList.find(p=>/^\s*Free\s*$/i.test(p.plan_name)) || { id: 0, price: 0 };
+            const standardMonth = find(/standard/i, 'MONTHLY');
+            const standardYear = find(/standard/i, 'YEARLY');
+            const freshMonth = find(/fresh/i, 'MONTHLY');
+            const freshYear = find(/fresh/i, 'YEARLY');
+        %>
+        <!-- Cards container: centered, wide, with prominent spacing -->
+        <div class="relative">
+            <div class="flex justify-center">
+                <div class="w-full md:w-11/12 lg:w-full">
+                    <div class="flex flex-col md:flex-row items-stretch justify-center gap-10">
+
+                        <!-- Card component (white) -->
+                        <div class="flex-1 max-w-md mx-auto bg-white rounded-2xl shadow-2xl p-8 transform transition hover:-translate-y-2 flex flex-col justify-between min-h-[420px]">
+                            <div class="text-sm font-semibold text-gray-500">Free</div>
+                            <div class="mt-6 text-4xl font-extrabold price" 
+                                 data-month-price="<%= Number(freePlan.price || 0) %>" data-year-price="<%= Number((freePlan.price || 0) * 12) %>" 
+                                 data-month-id="<%= freePlan.id || 0 %>" data-year-id="<%= freePlan.id || 0 %>">
+                                <span class="price-amount">S$<%= Number(freePlan.price || 0) %></span>
+                                <span class="price-old text-sm line-through text-red-600 ml-3"></span>
+                                <span class="text-base font-medium text-gray-500 price-unit">/mo</span>
+                            </div>
+                            <ul class="mt-6 space-y-3 text-gray-600">
+                                <li>0.25× Linkpoints on every Order</li>
+                                <li>Free delivery for orders above S$80</li>
+                            </ul>
+                            <div class="mt-8">
+                                <% if (currentNorm === 'free') { %>
+                                    <button class="w-full py-3 rounded-full border-2 border-emerald-800 text-emerald-800 font-bold">CURRENT PLAN</button>
+                                <% } else if (currentNorm === 'standard' || currentNorm.includes('fresh')) { %>
+                                    <button class="w-full py-3 rounded-full border-2 border-emerald-300 text-gray-400 font-bold" disabled>UNAVAILABLE</button>
+                                <% } else { %>
+                                    <form method="get" action="/membership/checkout" class="plan-form">
+                                        <input type="hidden" name="planId" value="<%= freePlan.id || 0 %>">
+                                        <button type="submit" class="w-full py-3 rounded-full border-2 border-emerald-800 text-emerald-800 font-bold">GET PLAN</button>
+                                    </form>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Card component (white) -->
+                        <div class="flex-1 max-w-md mx-auto bg-white rounded-2xl shadow-2xl p-8 transform transition hover:-translate-y-2 flex flex-col justify-between min-h-[420px]">
+                            <div class="text-sm font-semibold text-gray-500">Standard</div>
+                            <div class="mt-6 text-4xl font-extrabold price" 
+                                 data-month-price="<%= Number((standardMonth && standardMonth.price) || 0) %>" 
+                                 data-year-price="<%= Number((standardYear && standardYear.price) || ((standardMonth && standardMonth.price * 12) || 0)) %>"
+                                 data-month-id="<%= (standardMonth && standardMonth.id) || 0 %>" data-year-id="<%= (standardYear && standardYear.id) || 0 %>">
+                                <span class="price-amount">S$<%= Number((standardMonth && standardMonth.price) || 0) %></span>
+                                <span class="price-old text-sm line-through text-red-600 ml-3"></span>
+                                <span class="text-base font-medium text-gray-500 price-unit">/mo</span>
+                            </div>
+                            <ul class="mt-6 space-y-3 text-gray-600">
+                                <li>Free delivery above S$40</li>
+                                <li>1× Linkpoints on every Order</li>
+                                <li>5% discount on orders above S$30</li>
+                            </ul>
+                            <div class="mt-8">
+                                <% if (currentNorm === 'standard') { %>
+                                    <button class="w-full py-3 rounded-full border-2 border-emerald-800 text-emerald-800 font-bold">CURRENT PLAN</button>
+                                <% } else if (currentNorm.includes('fresh')) { %>
+                                    <button class="w-full py-3 rounded-full border-2 border-emerald-300 text-gray-400 font-bold" disabled>UNAVAILABLE</button>
+                                <% } else { %>
+                                    <form method="get" action="/membership/checkout" class="plan-form">
+                                        <input type="hidden" name="planId" value="<%= (standardMonth && standardMonth.id) || 0 %>">
+                                        <button type="submit" class="w-full py-3 rounded-full border-2 border-emerald-800 text-emerald-800 font-bold">GET PLAN</button>
+                                    </form>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Card component (emerald) -->
+                        <div class="flex-1 max-w-md mx-auto rounded-2xl p-8 transform transition hover:-translate-y-2 bg-emerald-900 text-white shadow-2xl border border-emerald-800 flex flex-col justify-between min-h-[420px]">
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm font-semibold">FreshPlus</div>
+                                <div class="text-xs bg-emerald-700/30 px-3 py-1 rounded-full">RECOMMENDED</div>
+                            </div>
+                            <div class="mt-6 text-4xl font-extrabold price" 
+                                 data-month-price="<%= Number((freshMonth && freshMonth.price) || 0) %>" 
+                                 data-year-price="<%= Number((freshYear && freshYear.price) || ((freshMonth && freshMonth.price * 12) || 0)) %>"
+                                 data-month-id="<%= (freshMonth && freshMonth.id) || 0 %>" data-year-id="<%= (freshYear && freshYear.id) || 0 %>">
+                                <span class="price-amount">S$<%= Number((freshMonth && freshMonth.price) || 0) %></span>
+                                <span class="price-old text-sm line-through text-red-600 ml-3"></span>
+                                <span class="text-base font-medium text-emerald-200 price-unit">/mo</span>
+                            </div>
+                            <ul class="mt-6 space-y-3 text-emerald-100">
+                                <li>Unlimited Free Standard Delivery</li>
+                                <li>$5 Off On Priority Delivery</li>
+                                <li>2.5× LinkPoints on every order</li>
+                                <li>15% discount on all orders</li>
+                            </ul>
+                            <div class="mt-8">
+                                <% if (currentNorm.includes('fresh') || currentNorm.includes('plus')) { %>
+                                    <button class="w-full py-3 rounded-full bg-emerald-700 font-bold">CURRENT PLAN</button>
+                                <% } else { %>
+                                    <form method="get" action="/membership/checkout" class="plan-form">
+                                        <input type="hidden" name="planId" value="<%= (freshMonth && freshMonth.id) || 0 %>">
+                                        <button type="submit" class="w-full py-3 rounded-full bg-emerald-500 font-bold">GET PLAN</button>
+                                    </form>
+                                <% } %>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<%- include('partials/footer') %>
+
+<script>
+    // Billing toggle logic: switch prices between monthly and yearly
+    (function(){
+        const toggle = document.getElementById('billing-toggle');
+        if (!toggle) return;
+
+        const btns = toggle.querySelectorAll('.billing-btn');
+        const bubble = document.getElementById('billing-bubble');
+        const prices = document.querySelectorAll('.price-amount');
+        const units = document.querySelectorAll('.price-unit');
+
+        function formatCurrency(n) {
+            return Number(n) % 1 === 0 ? `S$${Number(n)}` : `S$${Number(n).toFixed(2)}`;
+        }
+
+        function setPeriod(period) {
+            // move bubble
+            if (period === 'month') bubble.style.transform = 'translateX(0%)';
+            else bubble.style.transform = 'translateX(100%)';
+
+            btns.forEach(b => {
+                if (b.getAttribute('data-period') === period) {
+                    b.classList.remove('text-emerald-700');
+                    b.classList.add('bg-emerald-100','text-emerald-900');
+                } else {
+                    b.classList.remove('bg-emerald-100','text-emerald-900');
+                    b.classList.add('text-emerald-700');
+                }
+            });
+
+            // update prices and associated form planId inputs
+            const priceCards = document.querySelectorAll('.price');
+                priceCards.forEach(card => {
+                const amountEl = card.querySelector('.price-amount');
+                const unitEl = card.querySelector('.price-unit');
+                const oldEl = card.querySelector('.price-old');
+                const monthPrice = parseFloat(card.getAttribute('data-month-price')) || 0;
+                const yearPrice = parseFloat(card.getAttribute('data-year-price')) || (monthPrice * 12);
+                const monthId = card.getAttribute('data-month-id') || 0;
+                const yearId = card.getAttribute('data-year-id') || 0;
+
+                if (period === 'month') {
+                    amountEl.textContent = formatCurrency(monthPrice);
+                    if (oldEl) oldEl.textContent = '';
+                } else {
+                    amountEl.textContent = formatCurrency(yearPrice);
+                    // Show strike-through of regular price (month*12) when yearly price is cheaper than regular
+                    const regular = monthPrice * 12;
+                    if (oldEl) {
+                        if (yearPrice < regular) {
+                            oldEl.textContent = formatCurrency(regular);
+                            oldEl.style.display = 'inline';
+                        } else {
+                            oldEl.textContent = '';
+                            oldEl.style.display = 'none';
+                        }
+                    }
+                }
+
+                if (unitEl) unitEl.textContent = period === 'month' ? '/mo' : '/yr';
+
+                // update the closest form hidden input
+                const form = card.closest('form') || card.parentElement.querySelector('.plan-form') || card.parentElement.querySelector('form.plan-form');
+                // Some card markup places the form as a sibling; search upward
+                let planForm = null;
+                if (card.closest('.max-w-md')) {
+                    const cardRoot = card.closest('.max-w-md');
+                    planForm = cardRoot.querySelector('form.plan-form');
+                }
+                if (!planForm) planForm = form;
+                if (planForm) {
+                    const input = planForm.querySelector('input[name="planId"]');
+                    if (input) input.value = (period === 'month') ? (monthId || 0) : (yearId || monthId || 0);
+                }
+            });
+        }
+
+        // wire events
+        btns.forEach(b => b.addEventListener('click', () => setPeriod(b.getAttribute('data-period'))));
+
+        // initialize to month
+        setPeriod('month');
+    })();
+</script>

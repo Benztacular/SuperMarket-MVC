@@ -511,7 +511,7 @@
         balanceEl.textContent = '$...';
         payNowBtn.disabled = true;
         const bal = await fetchBalance();
-        const total = Number(<%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %>);
+        const total = Number('<%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %>');
         if (bal == null) {
           balanceEl.textContent = 'Unavailable';
           payNowBtn.disabled = true;

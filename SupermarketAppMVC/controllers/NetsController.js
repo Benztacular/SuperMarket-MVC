@@ -217,6 +217,33 @@ exports.successPage = (req, res) => {
       });
       return;
     }
+  
+    // If this session initiated a membership purchase via NETS, apply membership and redirect
+    try {
+      const pendingMembership = req.session && req.session.pendingMembership;
+      if (pendingMembership && pendingMembership.planId) {
+        const planId = Number(pendingMembership.planId || 0);
+        console.log('[NETS] successPage - detected pendingMembership, applying membership', { planId });
+        const userId = req.session && (req.session.user && (req.session.user.id || req.session.user.user_id)) || req.session.userId;
+        if (userId && planId) {
+          // fetch plan info to show on success
+          Membership.getPlanById(planId, (gpErr, planObj) => {
+            Membership.setUserMembership(userId, planId, (mErr) => {
+              try { delete req.session.pendingMembership; } catch (e) {}
+              if (mErr) console.error('[NETS] apply membership error', mErr);
+              NetsTxn.markStatus({ netsTxnId: txn, status: 'SUCCESS', rawResponse: req.query });
+              txnStatusMap.set(txn, 'success');
+              // render membership success page showing plan and amount; use txn as subscriptionId-like reference
+              const period = (pendingMembership && pendingMembership.period) ? String(pendingMembership.period).toLowerCase() : (planObj && planObj.billing_period ? String(planObj.billing_period).toLowerCase() : 'monthly');
+              const amount = (planObj && planObj.price) ? planObj.price : 0;
+              notifyClients(txn, { success: true, redirect: `/payment/success?method=netsqr&txn=${encodeURIComponent(txn)}` });
+              return res.render('membership_success', { plan: planObj || {}, period: period, amount: amount, subscriptionId: txn });
+            });
+          });
+          return;
+        }
+      }
+    } catch (e) { console.error('[NETS] pendingMembership handling error', e); }
   } catch (e) {
     console.error('[NETS] successPage pendingTopUp handling error', e);
   }

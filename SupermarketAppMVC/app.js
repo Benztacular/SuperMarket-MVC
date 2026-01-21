@@ -213,6 +213,10 @@ app.get('/nets-qr/fail', ensure(NetsController.failPage, 'NetsController.failPag
 // NETS webhook (NETS may call GET or POST with txn params)
 app.post('/nets/webhook', express.json(), NetsController.webhook);
 app.get('/nets/webhook', NetsController.webhook);
+// Stripe webhook (expects raw body)
+app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, res, next) => MembershipController.stripeWebhook(req, res, next));
+// PayPal webhook
+app.post('/webhooks/paypal', express.json(), (req, res, next) => MembershipController.paypalWebhook(req, res, next));
 // Development helper to trigger webhook-like events (simulate NETS callback)
 app.get('/nets/debug-trigger', NetsController.debugTrigger);
 // SSE endpoint used by netsQr.ejs to receive payment status updates
@@ -225,6 +229,8 @@ app.post('/cart/clear', requireUser, CartController.clear);
 // Delivery addresses
 app.get('/api/delivery-addresses', requireUser, ensure(DeliveryAddressController.list, 'DeliveryAddressController.list'));
 app.post('/delivery-addresses', requireUser, ensure(DeliveryAddressController.create, 'DeliveryAddressController.create'));
+// API endpoint to create delivery addresses (returns JSON)
+app.post('/api/delivery-addresses', requireUser, ensure(DeliveryAddressController.create, 'DeliveryAddressController.create'));
 app.post('/delivery-addresses/select', requireUser, ensure(DeliveryAddressController.select, 'DeliveryAddressController.select'));
 app.post('/delivery-addresses/:id/default', requireUser, ensure(DeliveryAddressController.setDefault, 'DeliveryAddressController.setDefault'));
 
@@ -279,11 +285,23 @@ app.get('/api/wallet/transactions', requireUser, (req, res, next) => {
   return WalletController.transactions(req, res, next);
 });
 
+// Membership page (public - shows plans; shows user's active membership if logged in)
+app.get('/membership', ensure(MembershipController.membershipPage, 'MembershipController.membershipPage'));
+
+// Membership checkout / payment
+app.get('/membership/checkout', requireUser, ensure(MembershipController.checkoutPage, 'MembershipController.checkoutPage'));
+
 // Membership API routes
 app.get('/api/membership/plans', ensure(MembershipController.getPlans, 'MembershipController.getPlans'));
 app.get('/api/membership/current', requireUser, ensure(MembershipController.getCurrentMembership, 'MembershipController.getCurrentMembership'));
 app.post('/api/membership/upgrade', requireUser, ensure(MembershipController.upgradeMembership, 'MembershipController.upgradeMembership'));
 app.post('/api/membership/cancel', requireUser, ensure(MembershipController.cancelMembership, 'MembershipController.cancelMembership'));
+// Membership payment routes
+app.post('/membership/pay/paypal', requireUser, ensure(MembershipController.payWithPaypal, 'MembershipController.payWithPaypal'));
+app.get('/membership/paypal/return', requireUser, ensure(MembershipController.paypalReturn, 'MembershipController.paypalReturn'));
+app.post('/membership/pay/stripe', requireUser, ensure(MembershipController.payWithStripe, 'MembershipController.payWithStripe'));
+app.get('/membership/stripe/success', requireUser, ensure(MembershipController.stripeSuccess, 'MembershipController.stripeSuccess'));
+app.post('/membership/pay/nets', requireUser, ensure(MembershipController.payWithNets, 'MembershipController.payWithNets'));
 
 // Loyalty API routes
 app.get('/api/loyalty/account', requireUser, ensure(LoyaltyPointsController.getAccount, 'LoyaltyPointsController.getAccount'));

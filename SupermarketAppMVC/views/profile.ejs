@@ -43,7 +43,8 @@
       font-family: 'Plus Jakarta Sans', sans-serif;
       color: var(--text-main);
       /* Refined padding for better visual connection to navbar */
-      padding-top: calc(var(--header-height) + 40px); 
+      /* Increased to create more breathing space below header */
+      padding-top: calc(var(--header-height) + 80px);
       padding-bottom: 80px;
       background-image: 
         radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 40%),
@@ -51,23 +52,23 @@
       background-attachment: fixed;
     }
 
-    /* --- GRID LAYOUT --- */
+    /* --- LAYOUT --- */
     .profile-container {
       max-width: 1200px;
       margin: 0 auto;
       padding: 0 1.5rem;
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 2rem;
+      position: relative;
     }
 
     @media (min-width: 992px) {
+      /* Use a two-column flex layout for stable alignment between sidebar and content */
       .profile-container {
-        /* Wider gap for better breathing room on desktop */
-        grid-template-columns: 300px 1fr; 
-        gap: 3.5rem; 
+        display: flex;
+        gap: 3.5rem;
         align-items: start;
       }
+      .sidebar-card { flex: 0 0 300px; }
+      .content-wrapper { flex: 1 1 0; }
     }
 
     /* --- LEFT SIDEBAR CARD --- */
@@ -80,9 +81,12 @@
       box-shadow: var(--shadow-lg);
       position: relative;
       overflow: hidden;
-      /* Sticky positioning adjusted to sit closer to navbar */
+      /* Sticky positioning aligned with content so both cards sit level.
+        Use `top: 0` so the sidebar's sticky offset is relative to the
+        `.profile-container` (which is already pushed down by body padding).
+        This avoids double offsets when JS updates `document.body.style.paddingTop`. */
       position: sticky;
-      top: calc(var(--header-height) + 20px); 
+      top: 0;
       z-index: 10;
     }
 
@@ -114,6 +118,69 @@
       border-radius: 50%;
       background: #fff;
     }
+    /* avatar bubble buttons (labelled, clickable) */
+    .avatar-bubbles { display:flex; gap:8px; justify-content:center; margin-top:10px; position:relative; z-index:15; }
+    .avatar-bubble { padding:6px 10px; border-radius:999px; background: #fff; color: var(--sidebar-bg); font-weight:700; font-size:0.85rem; border: none; cursor: pointer; box-shadow: 0 6px 18px rgba(16,185,129,0.06); transition: transform .12s, background .12s; }
+    .avatar-bubble:hover { transform: translateY(-3px); }
+    .avatar-bubble.active { background: var(--primary); color: #fff; box-shadow: 0 8px 24px rgba(16,185,129,0.18); }
+
+    /* move bubbles up so they visually sit above the Profile Settings card */
+    @media (min-width: 992px) {
+      .avatar-bubbles { margin-top: -48px; }
+      /* Anchor the floating bubbles to the content card so they move with it */
+      .content-card { position: relative; }
+        .top-bubbles { position: absolute; top: -44px; right: 28px; left: auto; transform: none; display:flex; gap:8px; z-index:30; }
+      .top-bubbles .avatar-bubble { padding:8px 12px; }
+    }
+
+      /* Floating add-address FAB (theme color) — when inside .top-bubbles it will sit next to the labelled bubbles */
+      .fab-add-address {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        height: 40px;
+        min-width: 56px;
+        border-radius: 999px;
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 8px 18px rgba(16,185,129,0.18);
+        border: none;
+        cursor: pointer;
+        z-index: 35;
+        margin-left: 8px;
+        font-weight: 700;
+        font-size: 0.95rem;
+      }
+      .fab-add-address:hover { transform: translateY(-2px); }
+
+      /* When layout falls back on small screens, keep FAB absolutely positioned above card */
+      @media (max-width: 991px) {
+        .fab-add-address { position: absolute; top: -48px; right: 24px; padding: 8px 12px; }
+      }
+
+      /* When FAB is placed in the Addresses header, position it above the list
+        and align the heading with the card header content for consistent layout */
+      .addresses-header { position: relative; padding-left: 0; margin-top: 0.25rem; }
+      /* align the Addresses heading text with the Profile header title precisely.
+        The card uses 3rem (48px) inner padding; the header title places an icon-box
+        (44px) and a 12px gap before the title text. We calculate the total offset
+        so the Addresses heading lines up exactly with the Profile header text. */
+      .addresses-header h6 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-main); padding-left: calc(3rem + 44px + 12px); }
+      @media (max-width: 991px) { .addresses-header h6 { padding-left: 0; } }
+      .addresses-header .fab-add-address { position: absolute; right: 0; top: -22px; }
+
+      .fab-plus {
+        display: inline-flex;
+        width: 26px;
+        height: 26px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.12);
+        color: #fff;
+        font-weight: 800;
+      }
 
     .user-meta h3 { font-weight: 700; margin-bottom: 0.25rem; font-size: 1.25rem; }
     .user-meta p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 1rem; }
@@ -338,6 +405,37 @@
     /* Modal Styling */
     #changePwdModal .backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
     #changePwdModal .dialog { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0; }
+
+    /* Addresses list items */
+    .address-item { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .address-item .address-left { max-width: calc(100% - 140px); }
+    .address-item .address-left strong { display:block; margin-bottom:6px; }
+    .address-item .address-meta { color: var(--text-muted); font-size:0.9rem; line-height:1.4; }
+    .address-item .address-postal { color: var(--text-muted); font-size:0.85rem; margin-top:6px; }
+    .address-item .address-contact { color: var(--text-muted); font-size:0.85rem; margin-top:6px; }
+    .address-actions { min-width:120px; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+    @media (max-width: 767px) { .address-item { flex-direction: column; } .address-actions { align-items:flex-start; } }
+    /* Default addresses body nudge */
+    .addresses-body { padding-left: 2rem; }
+    @media (max-width: 991px) { .addresses-body { padding-left: 0.75rem; } }
+
+    /* When the Delivery tab is active, switch the content card into
+       a left-aligned mode so the addresses line up exactly under the
+       header title. We add `addresses-active` to `.content-card` via JS. */
+    .content-card.addresses-active .card-header-styled { justify-content: flex-start; gap: 1rem; }
+    .content-card.addresses-active .card-header-styled .header-title { margin-right: 1rem; }
+    .content-card.addresses-active .addresses-header { padding-left: 0; margin-bottom: 1rem; }
+    /* Calculate header text offset: card padding (3rem) + icon-box (44px) + gap (12px) */
+    .content-card.addresses-active .addresses-body {
+      padding-left: 0;
+      margin-left: calc(3rem + 44px + 12px);
+      max-width: calc(100% - (calc(3rem + 44px + 12px) + 3rem));
+    }
+    .content-card.addresses-active .addresses-header .fab-add-address { position: absolute; right: 3rem; top: -22px; }
+    @media (max-width: 991px) {
+      .content-card.addresses-active .addresses-body { margin-left: 0; max-width: 100%; padding-left: 0.75rem; }
+      .content-card.addresses-active .addresses-header .fab-add-address { position: absolute; right: 1rem; }
+    }
   </style>
 </head>
 <body>
@@ -349,10 +447,11 @@
 
     <!-- 1. LEFT SIDEBAR (Sticky) -->
     <aside class="sidebar-card">
-      <div class="avatar-container">
-        <% const avatar = profileUser?.profileImage ? `/images/${profileUser.profileImage}` : '/images/placeholder.png'; %>
-        <img src="<%= avatar %>?t=<%= Date.now() %>" class="avatar-img" alt="Avatar">
-      </div>
+        <div class="avatar-container">
+          <% const avatar = profileUser?.profileImage ? `/images/${profileUser.profileImage}` : '/images/placeholder.png'; %>
+          <img src="<%= avatar %>?t=<%= Date.now() %>" class="avatar-img" alt="Avatar">
+        
+        </div>
 
       <div class="user-meta">
         <h3><%= profileUser.username %></h3>
@@ -394,7 +493,7 @@
 
     <!-- 2. RIGHT CONTENT (Scrollable) -->
     <main class="content-wrapper">
-      
+
       <!-- Alerts -->
       <% if ((typeof error !== 'undefined') && (error||[]).length) { %>
         <div class="alert alert-danger shadow-sm border-0 rounded-3 mb-4 d-flex align-items-center gap-2">
@@ -410,15 +509,21 @@
       <% } %>
 
       <div class="content-card">
+        <div class="top-bubbles" aria-hidden="false">
+          <button type="button" class="avatar-bubble" data-tab="profile">Profile</button>
+          <button type="button" class="avatar-bubble" data-tab="addresses">Delivery Address</button>
+          <button type="button" class="avatar-bubble" data-tab="membership">Membership</button>
+        </div>
         <div class="card-header-styled">
           <div class="header-title">
             <div class="icon-box"><i data-lucide="sliders" width="20"></i></div>
-            Profile Settings
+            <span class="header-text">Profile Settings</span>
           </div>
         </div>
 
         <!-- Details Form -->
-        <form action="/profile" method="post" enctype="multipart/form-data" id="detailsForm">
+        <div class="tab-section" data-tab="profile">
+          <form action="/profile" method="post" enctype="multipart/form-data" id="detailsForm">
           <div class="row g-4">
             
             <div class="col-md-6">
@@ -459,7 +564,29 @@
               <i data-lucide="save" width="18"></i> Save Changes
             </button>
           </div>
-        </form>
+          </form>
+        </div>
+
+        <!-- Addresses Tab -->
+        <div class="tab-section" data-tab="addresses" style="display:none;">
+          <div class="addresses-header d-flex align-items-start mb-3" style="position:relative;">
+              <h6 class="mb-0">Saved Delivery Addresses</h6>
+              <!-- Ensure button is explicit type and provide a small inline fallback onclick
+                   so the modal opens even if event bindings are replaced by other scripts -->
+              <button type="button" id="openAddAddressBtn" class="fab-add-address" title="Add address"
+                onclick="(function(){const m=document.getElementById('addAddressModal'); if(m){m.style.display='flex'; const f=m.querySelector('input,select,textarea'); if(f) setTimeout(()=>f.focus(),120);} else { const inline=document.getElementById('inlineAddAddress'); if(inline) inline.style.display = inline.style.display === 'block' ? 'none' : 'block'; }})();">
+                <span class="fab-plus">+</span> Add new address
+              </button>
+          </div>
+          <div class="addresses-body">
+            <div id="addressesList" class="mb-4">
+              <!-- Address items will be injected here -->
+              <div class="text-muted">Loading addresses...</div>
+            </div>
+
+            <div class="text-muted small mb-4">Use the + button to add a new address.</div>
+          </div>
+        </div>
 
         <!-- Security Section -->
         <div class="security-section">
@@ -506,7 +633,7 @@
     </main>
   </div>
 
-  <%- include('partials/footer') %>
+ 
 
   <!-- PASSWORD MODAL (No logic changes) -->
   <div id="changePwdModal" style="position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2000;">
@@ -545,6 +672,33 @@
     </div>
   </div>
 
+  <!-- ADD ADDRESS MODAL -->
+  <div id="addAddressModal" style="position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2100;">
+    <div class="backdrop" data-close="true" style="position: absolute; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(3px);"></div>
+    <div class="dialog p-4 bg-white rounded-4 w-100" style="position: relative; max-width: 640px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid #e2e8f0;">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="m-0 fw-bold">Add Delivery Address</h5>
+        <button type="button" class="btn btn-light btn-sm rounded-circle p-2" id="closeAddAddressModal">✕</button>
+      </div>
+      <form id="addAddressModalForm">
+        <div class="row g-3">
+          <div class="col-md-6"><input name="recipient_name" class="input-styled" placeholder="Recipient name" required></div>
+          <div class="col-md-6"><input name="contact_number" class="input-styled" placeholder="Contact number (8 digits)" required></div>
+          <div class="col-md-4"><input name="block_number" class="input-styled" placeholder="Block number" required></div>
+          <div class="col-md-8"><input name="street_name" class="input-styled" placeholder="Street name" required></div>
+          <div class="col-md-4"><input name="unit_number" class="input-styled" placeholder="Unit (eg 12-34)" required></div>
+          <div class="col-md-4"><input name="postal_code" class="input-styled" placeholder="Postal code (6 digits)" required></div>
+          <div class="col-md-4"><select name="country" class="input-styled"><option value="Singapore">Singapore</option></select></div>
+        </div>
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn-save-styled">Save Address</button>
+          <button type="button" id="cancelAddAddress" class="btn btn-outline-secondary">Cancel</button>
+          <div id="addAddrModalMsg" class="text-muted align-self-center ms-2"></div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Disable 2FA Modal -->
   <div id="disable2faModal" style="position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2000;">
     <div class="backdrop" data-close="true" style="position: absolute; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);"></div>
@@ -568,6 +722,30 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     lucide.createIcons();
+
+    // Ensure page content always sits below the site header.
+    // This measures the actual header height and applies it to the body padding-top
+    // and to the sticky sidebar top so the profile cards never sit beneath the header.
+    (function alignBelowHeader(){
+      function apply() {
+        const header = document.querySelector('header') || document.querySelector('.site-header') || document.querySelector('.navbar');
+        const headerH = header ? header.offsetHeight : (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--header-height')) || 80);
+        const extra = 90; // breathing room under header
+        document.body.style.paddingTop = (headerH + extra) + 'px';
+        // Sidebar sticky top is controlled via CSS (top: 0).
+        // Avoid setting an explicit `sidebar.style.top` here so the
+        // sidebar's initial position remains in-flow with the container.
+        const sidebar = document.querySelector('.sidebar-card');
+        // ensure headings are adjusted after layout changes
+        requestAnimationFrame(() => { if (typeof alignHeaderOffsets === 'function') alignHeaderOffsets(); });
+      }
+      window.addEventListener('resize', apply);
+      document.addEventListener('DOMContentLoaded', apply);
+      window.addEventListener('resize', () => { if (typeof alignHeaderOffsets === 'function') alignHeaderOffsets(); });
+      document.addEventListener('DOMContentLoaded', () => { if (typeof alignHeaderOffsets === 'function') alignHeaderOffsets(); });
+      // run immediately in case script runs after DOM ready
+      apply();
+    })();
 
     // 1. Char Count Logic (Preserved)
     function setupCharCount(inputId, countId, max) {
@@ -594,6 +772,160 @@
     }
     setupCharCount('usernameInput', 'usernameCount', 20);
     setupCharCount('contactInput', 'contactCount', 10);
+
+    // Avatar bubble buttons: activate and update hash
+    (function(){
+      const bubbles = document.querySelectorAll('.avatar-bubble');
+      if(!bubbles || bubbles.length===0) return;
+      bubbles.forEach(btn => btn.addEventListener('click', () => {
+        bubbles.forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = btn.dataset.tab;
+        if (target) {
+          // update URL hash
+          location.hash = `#${target}`;
+          // show the matching tab section if present
+          if (typeof showTabSection === 'function') showTabSection(target);
+          // also activate the corresponding tab button if present
+          const tabBtn = document.querySelector(`.tab-btn[data-tab="${target}"]`);
+          if (tabBtn) tabBtn.click();
+        }
+      }));
+
+      // If URL has hash on load, activate matching bubble and corresponding tab
+      const h = (location.hash||'').replace('#','');
+      if (h) {
+        const match = Array.from(bubbles).find(b=>b.dataset.tab===h);
+        if (match) {
+          match.classList.add('active');
+          if (typeof showTabSection === 'function') showTabSection(h);
+          const tabBtn = document.querySelector(`.tab-btn[data-tab="${h}"]`);
+          if (tabBtn) tabBtn.click();
+        }
+      } else {
+        // No hash -> default to `profile` bubble on initial load
+        const defaultBubble = Array.from(bubbles).find(b=>b.dataset.tab==='profile');
+        if (defaultBubble) {
+          defaultBubble.classList.add('active');
+          if (typeof showTabSection === 'function') showTabSection('profile');
+          const tabBtn = document.querySelector(`.tab-btn[data-tab="profile"]`);
+          if (tabBtn) tabBtn.click();
+        }
+      }
+    })();
+
+
+    // Load addresses via API and render into #addressesList
+    async function loadAddresses() {
+      const container = document.getElementById('addressesList');
+      if (!container) return;
+      container.innerHTML = '<div class="text-muted">Loading addresses...</div>';
+      try {
+        const res = await fetch('/api/delivery-addresses', { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('Failed to load');
+        const data = await res.json();
+        const rows = (data && data.addresses) || [];
+        if (rows.length === 0) {
+          container.innerHTML = '<div class="text-muted">No saved addresses.</div>';
+          return;
+        }
+        container.innerHTML = '';
+        rows.forEach(a => {
+          const el = document.createElement('div');
+          el.className = 'p-3 mb-2 rounded-3 border address-item';
+          el.innerHTML = `
+            <div class="address-left">
+              <strong>${escapeHtml(a.recipient_name || '')}</strong>
+              <div class="address-meta">${escapeHtml(a.block_number || '')} ${escapeHtml(a.street_name || '')} ${escapeHtml(a.unit_number || '')}</div>
+              <div class="address-postal">${escapeHtml(a.postal_code || '')}</div>
+              <div class="address-contact">${escapeHtml(a.contact_number || '')}</div>
+            </div>
+            <div class="address-actions">
+              ${a.is_default ? '<span class="badge bg-success">Default</span>' : `<form method="POST" action="/delivery-addresses/${a.id}/default" style="display:inline;"><button class="btn btn-outline-secondary btn-sm">Set default</button></form>`}
+            </div>
+          `;
+          container.appendChild(el);
+        });
+      } catch (e) {
+        container.innerHTML = '<div class="text-danger">Unable to load addresses.</div>';
+      }
+    }
+
+    // Add-address modal form handler (AJAX)
+    (function(){
+      const openBtn = document.getElementById('openAddAddressBtn');
+      const modal = document.getElementById('addAddressModal');
+      const closeBtn = document.getElementById('closeAddAddressModal');
+      const cancelBtn = document.getElementById('cancelAddAddress');
+      const backdrop = modal ? modal.querySelector('.backdrop') : null;
+      const form = document.getElementById('addAddressModalForm');
+      const msg = document.getElementById('addAddrModalMsg');
+
+      function openModal() { if (modal) { modal.style.display = 'flex'; if (msg) msg.textContent = ''; } }
+      function closeModal() { if (modal) modal.style.display = 'none'; }
+
+      if (openBtn) openBtn.addEventListener('click', openModal);
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+      if (backdrop) backdrop.addEventListener('click', closeModal);
+
+      if (!form) return;
+      form.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.7'; }
+        if (msg) msg.textContent = 'Saving...';
+        const fd = new FormData(form);
+        const payload = {};
+        fd.forEach((v,k) => payload[k] = v);
+        try {
+          const res = await fetch('/api/delivery-addresses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+          });
+          let data = null;
+          try { data = await res.json(); } catch (parseErr) { console.warn('JSON parse failed', parseErr); }
+          console.log('POST /api/delivery-addresses', res.status, data);
+          if (!res.ok || !(data && data.success)) {
+            const message = (data && data.message) || `Server responded with status ${res.status}`;
+            if (msg) msg.textContent = message;
+            console.error('Failed to save address', message, data);
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; }
+            return;
+          }
+          if (msg) msg.textContent = 'Saved';
+          form.reset();
+          loadAddresses();
+          setTimeout(() => { if (msg) msg.textContent = ''; closeModal(); if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; } }, 800);
+        } catch (e) {
+          console.error('Error saving address', e);
+          if (msg) msg.textContent = e.message || 'Error';
+          const submitBtn = form.querySelector('button[type="submit"]');
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; }
+        }
+      });
+    })();
+
+    // Robust delegated listener: if the direct binding fails (element replaced
+    // by other scripts), ensure clicks on #openAddAddressBtn still open modal.
+    document.addEventListener('click', function (ev) {
+      const btn = ev.target.closest ? ev.target.closest('#openAddAddressBtn') : null;
+      if (!btn) return;
+      const modal = document.getElementById('addAddressModal');
+      if (modal) {
+        modal.style.display = 'flex';
+        const first = modal.querySelector('input,select,textarea');
+        if (first) setTimeout(() => first.focus(), 120);
+      } else {
+        // fallback: if modal is not available, toggle inline fallback form
+        const inline = document.getElementById('inlineAddAddress');
+        if (inline) inline.style.display = inline.style.display === 'block' ? 'none' : 'block';
+      }
+    });
+
+    function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
     // 2. Loading State (Preserved)
     function setButtonLoading(btn, text) {

@@ -47,7 +47,7 @@ const Membership = {
              mp.free_delivery_threshold, mp.discount_threshold, mp.discount_percent
       FROM user_memberships um
       JOIN membership_plans mp ON um.plan_id = mp.id
-      WHERE um.user_id = ? AND um.status = 'ACTIVE'
+      WHERE um.user_id = ?
       ORDER BY um.start_date DESC LIMIT 1
     `;
     query(sql, [Number(userId)], (err, rows) => {
@@ -96,6 +96,9 @@ const Membership = {
         ? new Date(Date.now() + (plan.duration_days * 24 * 60 * 60 * 1000))
         : null;
 
+      // Determine stored status: free plans are 'FREE', paid plans are 'MEMBERSHIP_ACTIVE'
+      const statusToSet = (Number(plan.price) === 0) ? 'FREE' : 'MEMBERSHIP_ACTIVE';
+
       // Check if user already has a membership
       const checkSql = 'SELECT id FROM user_memberships WHERE user_id = ? LIMIT 1';
       query(checkSql, [Number(userId)], (checkErr, rows) => {
@@ -105,10 +108,10 @@ const Membership = {
           // Update existing
           const updateSql = `
             UPDATE user_memberships 
-            SET plan_id = ?, start_date = NOW(), end_date = ?, status = 'ACTIVE', updated_at = NOW()
+            SET plan_id = ?, start_date = NOW(), end_date = ?, status = ?, updated_at = NOW()
             WHERE user_id = ?
           `;
-          query(updateSql, [Number(planId), endDate, Number(userId)], (updateErr) => {
+          query(updateSql, [Number(planId), endDate, statusToSet, Number(userId)], (updateErr) => {
             if (updateErr) return cb(updateErr);
             Membership.getUserMembership(userId, cb);
           });
@@ -116,9 +119,9 @@ const Membership = {
           // Insert new
           const insertSql = `
             INSERT INTO user_memberships (user_id, plan_id, start_date, end_date, status, created_at)
-            VALUES (?, ?, NOW(), ?, 'ACTIVE', NOW())
+            VALUES (?, ?, NOW(), ?, ?, NOW())
           `;
-          query(insertSql, [Number(userId), Number(planId), endDate], (insertErr) => {
+          query(insertSql, [Number(userId), Number(planId), endDate, statusToSet], (insertErr) => {
             if (insertErr) return cb(insertErr);
             Membership.getUserMembership(userId, cb);
           });
@@ -149,10 +152,23 @@ const Membership = {
    */
   expireOldMemberships(cb) {
     cb = safeCb(cb);
+    // Revert expired paid memberships back to the Free plan and mark as FREE
     const sql = `
-      UPDATE user_memberships 
-      SET status = 'EXPIRED', updated_at = NOW()
-      WHERE status = 'ACTIVE' AND end_date IS NOT NULL AND end_date < NOW()
+      UPDATE user_memberships um
+      JOIN membership_plans mp_free ON mp_free.plan_name = 'Free'
+      SET um.plan_id = mp_free.id,
+          um.provider = 'system',
+          um.provider_subscription_id = NULL,
+          um.amount = mp_free.price,
+          um.period = mp_free.billing_period,
+          um.start_date = NOW(),
+          um.end_date = NULL,
+          um.status = 'FREE',
+          um.raw_response = NULL,
+          um.updated_at = NOW()
+      WHERE (um.status = 'MEMBERSHIP_ACTIVE' OR um.status = 'ACTIVE')
+        AND um.end_date IS NOT NULL
+        AND um.end_date <= NOW();
     `;
     query(sql, [], (err, result) => {
       if (err) return cb(err);

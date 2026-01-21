@@ -17,7 +17,13 @@ exports.list = (req, res, next) => {
 
 exports.create = (req, res, next) => {
   const userId = uid(req);
-  if (!userId) return res.redirect('/login');
+  if (!userId) {
+    if (req.xhr || (req.headers.accept || '').includes('application/json')) return res.status(401).json({ success: false, message: 'Not authenticated' });
+    return res.redirect('/login');
+  }
+
+  // Debug: log incoming payload and user id for troubleshooting
+  try { console.log('[DeliveryAddress.create] userId=', userId, 'body=', req.body); } catch (e) { /* ignore logging errors */ }
 
   const payload = {
     recipient_name: req.body.recipient_name || req.body.recipientName,
@@ -46,16 +52,20 @@ exports.create = (req, res, next) => {
 
   if (errors.length) {
     const msg = errors.join('; ');
+    try { console.warn('[DeliveryAddress.create] validation failed for user', userId, 'errors=', errors); } catch (e) {}
     if (req.xhr || (req.headers.accept || '').includes('application/json')) return res.status(400).json({ success: false, message: msg, errors });
     if (req.flash) req.flash('error', msg);
     return res.redirect('/cart/checkout');
   }
-
-  DeliveryAddress.createForUser(userId, payload, (err) => {
+  DeliveryAddress.createForUser(userId, payload, (err, created) => {
     if (err) {
+      try { console.error('[DeliveryAddress.create] DB error for user', userId, err && err.message); } catch (e) {}
       if (req.xhr || (req.headers.accept || '').includes('application/json')) return res.status(400).json({ success: false, message: err.message });
       if (req.flash) req.flash('error', err.message || 'Failed to save address');
       return res.redirect('/cart/checkout');
+    }
+    if (req.xhr || (req.headers.accept || '').includes('application/json')) {
+      return res.json({ success: true, address: created || null });
     }
     if (req.flash) req.flash('success', 'Address saved');
     res.redirect('/cart/checkout');

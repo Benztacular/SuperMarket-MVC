@@ -382,25 +382,25 @@ VALUES
 
 -- =========================
 -- TIER 2: STANDARD
--- Monthly: $7, Yearly: $60
+-- Monthly: $7, Yearly: $70
 -- =========================
 ('Standard (Monthly)', 2, 'MONTHLY', 7.00, 30,
  0, 0.00, 1.00,
  40.00, 30.00, 5.00),
 
-('Standard (Yearly)', 2, 'YEARLY', 60.00, 365,
+('Standard (Yearly)', 2, 'YEARLY', 70.00, 365,
  0, 0.00, 1.00,
  40.00, 30.00, 5.00),
 
 -- =========================
 -- TIER 3: FRESHPLUS
--- Monthly: $15, Yearly: $120
+-- Monthly: $15, Yearly: $150
 -- =========================
 ('FreshPlus (Monthly)', 3, 'MONTHLY', 15.00, 30,
  1, 5.00, 2.50,
  NULL, 0.00, 15.00),
 
-('FreshPlus (Yearly)', 3, 'YEARLY', 120.00, 365,
+('FreshPlus (Yearly)', 3, 'YEARLY', 150.00, 365,
  1, 5.00, 2.50,
  NULL, 0.00, 15.00);
 
@@ -413,18 +413,24 @@ CREATE TABLE user_memberships (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL UNIQUE,
   plan_id INT NOT NULL,
+  provider VARCHAR(20) DEFAULT 'system', -- e.g. 'paypal','stripe','nets','system'
+  provider_subscription_id VARCHAR(255) NULL,
+  amount DECIMAL(10,2) DEFAULT NULL,
+  period ENUM('MONTHLY','YEARLY') DEFAULT NULL,
   start_date DATETIME DEFAULT CURRENT_TIMESTAMP,
   end_date DATETIME NULL,
-  status ENUM('ACTIVE','EXPIRED','CANCELLED') DEFAULT 'ACTIVE',
+  status ENUM('FREE','MEMBERSHIP_ACTIVE','ACTIVE','EXPIRED','CANCELLED') DEFAULT 'FREE',
+  raw_response JSON NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (plan_id) REFERENCES membership_plans(id) ON DELETE RESTRICT
+  FOREIGN KEY (plan_id) REFERENCES membership_plans(id) ON DELETE RESTRICT,
+  INDEX idx_provider_sub_id (provider_subscription_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Give every existing user the Free plan by default (Free is tier 1, monthly)
-INSERT INTO user_memberships (user_id, plan_id, end_date, status)
-SELECT u.id, mp.id, NULL, 'ACTIVE'
+INSERT INTO user_memberships (user_id, plan_id, provider, provider_subscription_id, amount, period, end_date, status)
+SELECT u.id, mp.id, 'system', NULL, mp.price, mp.billing_period, NULL, 'ACTIVE'
 FROM users u
 JOIN membership_plans mp ON mp.plan_name = 'Free'
 LEFT JOIN user_memberships um ON um.user_id = u.id
