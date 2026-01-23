@@ -559,7 +559,7 @@
 
         <!-- RIGHT COLUMN: REVERTED SUMMARY -->
       <div class="confirm-summary">
-        <div class="summary-card" data-subtotal="<%= price(sum) %>" data-shipping="<%= Number(shippingFee || 0).toFixed(2) %>">
+        <div class="summary-card" data-subtotal="<%= price(sum) %>" data-shipping="<%= Number(shippingFee || 0).toFixed(2) %>" data-discount="<%= Number(discountAmount || 0).toFixed(2) %>">
           <h5>Order Details <i data-lucide="receipt" style="width: 18px; color: #94a3b8;"></i></h5>
           
           <div class="summary-items">
@@ -598,6 +598,26 @@
               <% } %>
             </span>
           </div>
+          <!-- Prominent Coupon Widget -->
+          <div class="coupon-widget" aria-live="polite">
+            <div class="coupon-top d-flex align-items-center justify-content-between">
+              <div class="coupon-badge">Promo</div>
+              <div class="coupon-hint small text-muted">Have a code? Apply it here</div>
+            </div>
+
+            <div class="coupon-input-row d-flex align-items-center">
+              <input id="couponCodeInput" class="coupon-input form-control" placeholder="Enter coupon code" aria-label="Coupon code" />
+              <button id="applyCouponBtn" class="coupon-apply-btn btn btn-custom-black">Apply</button>
+            </div>
+
+            <div id="couponMessage" class="coupon-message small mt-2" style="display:none"></div>
+
+            <div id="appliedCouponChip" class="coupon-chip d-flex align-items-center" style="display:none">
+              <div class="chip-code" id="appliedCouponCode">CODE</div>
+              <div class="chip-amount text-success" id="appliedCouponAmount">- $0.00</div>
+              <a href="#" id="removeCoupon" class="chip-remove" aria-label="Remove coupon">&times;</a>
+            </div>
+          </div>
           <% if (discountAmount && discountAmount > 0) { %>
           <div class="summary-row">
             <span>Membership Discount</span>
@@ -607,7 +627,7 @@
 
           <div class="summary-row total">
             <span>Total</span>
-            <span style="font-size: 1.5rem;">$<span id="totalCost"><%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %></span></span>
+            <span style="font-size: 1.5rem;">$<span id="totalCost"><%= Number((typeof totalWithShippingAdjusted !== 'undefined' ? totalWithShippingAdjusted : totalWithShipping) || (sum + (shippingFee || 0))).toFixed(2) %></span></span>
           </div>
 
           <div class="btn-actions">
@@ -694,6 +714,21 @@
   </div>
 
   <%- include('partials/footer') %>
+  <style>
+    /* Coupon widget styles */
+    .coupon-widget{ border:1px solid rgba(34,197,94,0.12); background:linear-gradient(90deg, rgba(240,255,244,1) 0%, rgba(255,255,255,1) 100%); padding:14px; border-radius:10px; margin-top:12px; box-shadow:0 6px 18px rgba(16,24,40,0.03); }
+    .coupon-top{ margin-bottom:8px; }
+    .coupon-badge{ background: linear-gradient(90deg,#10b981,#059669); color:white; padding:6px 10px; border-radius:999px; font-weight:600; font-size:0.8rem; }
+    .coupon-input-row{ gap:8px; }
+    .coupon-input{ padding:10px 12px; font-size:0.95rem; border-radius:8px; border:1px solid rgba(15,23,42,0.06); box-shadow:inset 0 1px 0 rgba(255,255,255,0.6); }
+    .coupon-apply-btn{ padding:8px 14px; border-radius:8px; margin-left:6px; background:#065f46; border-color:#065f46; color:#fff; }
+    .coupon-apply-btn[disabled]{ opacity:0.6; }
+    .coupon-message{ color:#b91c1c; }
+    .coupon-chip{ margin-top:8px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.15); padding:6px 10px; border-radius:999px; gap:8px; display:inline-flex; }
+    .chip-code{ font-weight:700; color:#064e3b; margin-right:8px; }
+    .chip-amount{ font-weight:600; margin-right:6px; }
+    .chip-remove{ color:#064e3b; font-weight:700; text-decoration:none; margin-left:8px; }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     lucide.createIcons();
@@ -779,13 +814,15 @@
       const totalCostEl = document.getElementById('totalCost');
       const summaryCard = document.querySelector('.summary-card');
       const subtotal = summaryCard ? parseFloat(summaryCard.dataset.subtotal || '0') : 0;
-      const discountAmount = <%= Number(discountAmount || 0).toFixed(2) %>;
+      const discountAmount = summaryCard ? parseFloat(summaryCard.dataset.discount || '0') : 0;
+      let couponDiscount = 0;
+      let appliedCoupon = null;
 
       function updateShipping(evt){
         const checked = document.querySelector('input[name="shipping_method"]:checked');
         const ship = checked ? parseFloat(checked.dataset.price || '0') : 0;
         if (shippingCostEl) shippingCostEl.textContent = ship.toFixed(2);
-        if (totalCostEl) totalCostEl.textContent = (subtotal + ship - discountAmount).toFixed(2);
+        if (totalCostEl) totalCostEl.textContent = (subtotal + ship - discountAmount - couponDiscount).toFixed(2);
 
         // toggle active card styling
         const allLabels = document.querySelectorAll('label.address-card input[name="shipping_method"]');
@@ -807,6 +844,76 @@
         }
       }
 
+      // Coupon apply/remove handlers
+      const couponInput = document.getElementById('couponCodeInput');
+      const applyCouponBtn = document.getElementById('applyCouponBtn');
+      const couponMessageEl = document.getElementById('couponMessage');
+      const appliedChip = document.getElementById('appliedCouponChip');
+      const appliedCodeEl = document.getElementById('appliedCouponCode');
+      const appliedAmountEl = document.getElementById('appliedCouponAmount');
+      const removeCouponLink = document.getElementById('removeCoupon');
+
+      if (applyCouponBtn && couponInput) {
+        applyCouponBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          const code = (couponInput.value || '').trim();
+          if (!code) { alert('Please enter a coupon code'); return; }
+          applyCouponBtn.disabled = true;
+          applyCouponBtn.textContent = 'Applying...';
+          fetch('/api/coupons/apply', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ code })
+          }).then(r => r.json()).then(json => {
+            applyCouponBtn.disabled = false;
+            if (!json || !json.success) {
+              applyCouponBtn.textContent = 'Apply';
+              const msg = (json && json.message) ? json.message : 'Failed to apply coupon';
+              if (json && typeof json.amountNeeded !== 'undefined') {
+                const short = Number(json.amountNeeded || 0).toFixed(2);
+                const shortMsg = msg + '. You need $' + short + ' more to use this coupon.';
+                if (couponMessageEl) { couponMessageEl.style.display = ''; couponMessageEl.textContent = shortMsg; couponMessageEl.style.color = '#c2410c'; }
+                else return alert(shortMsg);
+                return;
+              }
+              if (couponMessageEl) { couponMessageEl.style.display = ''; couponMessageEl.textContent = msg; couponMessageEl.style.color = '#b91c1c'; }
+              else return alert(msg);
+              return;
+            }
+            couponDiscount = Number(json.discount || 0);
+            appliedCoupon = json.coupon || null;
+            // show applied chip
+            if (appliedChip && appliedCodeEl && appliedAmountEl && appliedCoupon) {
+              appliedCodeEl.textContent = appliedCoupon.code || appliedCoupon.code || appliedCoupon.code;
+              appliedAmountEl.textContent = '- $' + Number(couponDiscount).toFixed(2);
+              appliedChip.style.display = '';
+            }
+            // hide any message and disable input
+            if (couponMessageEl) { couponMessageEl.style.display = 'none'; couponMessageEl.textContent = ''; }
+            if (couponInput) couponInput.disabled = true;
+            applyCouponBtn.textContent = 'Applied';
+            updateShipping();
+          }).catch(err => {
+            console.error('apply coupon err', err);
+            applyCouponBtn.disabled = false;
+            applyCouponBtn.textContent = 'Apply';
+            alert('Failed to apply coupon');
+          });
+        });
+      }
+
+      if (removeCouponLink) {
+        removeCouponLink.addEventListener('click', function (e) {
+          e.preventDefault();
+            fetch('/api/coupons/remove', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(r => r.json()).then(json => {
+            couponDiscount = 0; appliedCoupon = null;
+            if (appliedChip && appliedCodeEl && appliedAmountEl) { appliedChip.style.display = 'none'; appliedCodeEl.textContent = ''; appliedAmountEl.textContent = '- $0.00'; }
+            if (couponInput) { couponInput.disabled = false; couponInput.value = ''; }
+            if (applyCouponBtn) applyCouponBtn.textContent = 'Apply';
+            if (couponMessageEl) { couponMessageEl.style.display = 'none'; couponMessageEl.textContent = ''; }
+            updateShipping();
+          }).catch(err => { console.error('remove coupon err', err); couponDiscount = 0; appliedCoupon = null; updateShipping(); });
+        });
+      }
       if (shippingRadios.length){
         shippingRadios.forEach(r=> {
           r.addEventListener('change', updateShipping);

@@ -11,7 +11,7 @@
         <div class="flex items-center justify-center mb-6">
             <div id="billing-toggle" class="relative inline-flex items-center bg-white/30 rounded-full p-1">
                 <button type="button" data-period="month" class="billing-btn px-5 py-2 rounded-full text-sm font-semibold bg-emerald-100 text-emerald-900">Monthly</button>
-                <button type="button" data-period="year" class="billing-btn px-5 py-2 rounded-full text-sm font-semibold ml-1 text-emerald-700">Yearly</button>
+                <button type="button" data-period="year" class="billing-btn px-5 py-2 rounded-full text-sm font-semibold ml-1 text-emerald-700">Annually</button>
                 <div id="billing-bubble" class="absolute left-0 top-0 w-1/2 h-full rounded-full bg-emerald-700/10 pointer-events-none transition-all"></div>
             </div>
         </div>
@@ -21,8 +21,17 @@
 
         <% 
             // Build plan lookups for display
-            const pList = plans || [];
-            const find = (re, period) => pList.find(p => re.test(p.plan_name) && String(p.billing_period).toUpperCase() === String(period || '').toUpperCase());
+                        const pList = plans || [];
+                        // Find a plan by name regex and accept common period variants.
+                        const find = (re, period) => pList.find(p => {
+                                const nameOk = re.test(p.plan_name);
+                                const billing = String(p.billing_period || '').toUpperCase();
+                                const want = String(period || '').toUpperCase();
+                                const periodMatch = billing === want
+                                    || (want === 'YEARLY' && billing === 'ANNUALLY')
+                                    || (want === 'ANNUALLY' && billing === 'YEARLY');
+                                return nameOk && periodMatch;
+                        });
             const freePlan = pList.find(p=>/^\s*Free\s*$/i.test(p.plan_name)) || { id: 0, price: 0 };
             const standardMonth = find(/standard/i, 'MONTHLY');
             const standardYear = find(/standard/i, 'YEARLY');
@@ -43,7 +52,7 @@
                                  data-month-id="<%= freePlan.id || 0 %>" data-year-id="<%= freePlan.id || 0 %>">
                                 <span class="price-amount">S$<%= Number(freePlan.price || 0) %></span>
                                 <span class="price-old text-sm line-through text-red-600 ml-3"></span>
-                                <span class="text-base font-medium text-gray-500 price-unit">/mo</span>
+                                <span class="text-base font-medium text-gray-500 price-unit">/ month</span>
                             </div>
                             <ul class="mt-6 space-y-3 text-gray-600">
                                 <li>0.25× Linkpoints on every Order</li>
@@ -72,7 +81,7 @@
                                  data-month-id="<%= (standardMonth && standardMonth.id) || 0 %>" data-year-id="<%= (standardYear && standardYear.id) || 0 %>">
                                 <span class="price-amount">S$<%= Number((standardMonth && standardMonth.price) || 0) %></span>
                                 <span class="price-old text-sm line-through text-red-600 ml-3"></span>
-                                <span class="text-base font-medium text-gray-500 price-unit">/mo</span>
+                                <span class="text-base font-medium text-gray-500 price-unit">/ month</span>
                             </div>
                             <ul class="mt-6 space-y-3 text-gray-600">
                                 <li>Free delivery above S$40</li>
@@ -105,7 +114,7 @@
                                  data-month-id="<%= (freshMonth && freshMonth.id) || 0 %>" data-year-id="<%= (freshYear && freshYear.id) || 0 %>">
                                 <span class="price-amount">S$<%= Number((freshMonth && freshMonth.price) || 0) %></span>
                                 <span class="price-old text-sm line-through text-red-600 ml-3"></span>
-                                <span class="text-base font-medium text-emerald-200 price-unit">/mo</span>
+                                <span class="text-base font-medium text-emerald-200 price-unit">/ month</span>
                             </div>
                             <ul class="mt-6 space-y-3 text-emerald-100">
                                 <li>Unlimited Free Standard Delivery</li>
@@ -193,7 +202,7 @@
                     }
                 }
 
-                if (unitEl) unitEl.textContent = period === 'month' ? '/mo' : '/yr';
+                if (unitEl) unitEl.textContent = period === 'month' ? '/month' : '/year';
 
                 // update the closest form hidden input
                 const form = card.closest('form') || card.parentElement.querySelector('.plan-form') || card.parentElement.querySelector('form.plan-form');

@@ -353,35 +353,170 @@ const checkout = function (req, res, next) {
                   discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
                 }
 
-                const totalAmount = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
+                // handle applied coupon from session (re-validate server-side)
+                let couponDiscount = 0;
+                let appliedCoupon = (req.session && req.session.appliedCoupon) ? req.session.appliedCoupon : null;
 
-                conn.query('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, "Pending", NOW())', [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, totalAmount], (orderErr, orderRes) => {
-                  if (orderErr) return rollback('INSERT_ORDER_FAIL', orderErr);
-                  const orderId = orderRes.insertId;
+                function finalizeOrderWithCoupon(couponDiscountAmount, userCouponIdToMark) {
+                  const totalAmount = Number((itemsTotal + appliedShippingFee - discountAmount - (couponDiscountAmount || 0)).toFixed(2));
 
-                  const valuesSql = cartRows.map(() => '(?, ?, ?, ?, NOW())').join(',');
-                  const valuesParams = cartRows.flatMap(row => [orderId, row.product_id, Number(row.cart_qty), Number(row.price || 0)]);
+                  // include coupon fields in the orders table (coupon_id, coupon_code_snapshot, coupon_discount)
+                  const couponIdToStore = (appliedCoupon && appliedCoupon.coupon_id) ? appliedCoupon.coupon_id : null;
+                  const couponCodeSnapshot = (appliedCoupon && appliedCoupon.code) ? appliedCoupon.code : null;
 
-                  conn.query('INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ' + valuesSql, valuesParams, (itemsErr) => {
-                    if (itemsErr) return rollback('INSERT_ITEMS_FAIL', itemsErr);
+                  conn.query('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, "Pending", NOW())', [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, couponIdToStore, couponCodeSnapshot, (couponDiscountAmount || 0), totalAmount], (orderErr, orderRes) => {
+                    if (orderErr) {
+                      if (orderErr && orderErr.code === 'ER_BAD_FIELD_ERROR') {
+                        console.warn('OrderController.checkout: orders table missing coupon columns, retrying without coupon fields');
+                        return conn.query('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, "Pending", NOW())', [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, totalAmount], (o2Err, o2Res) => {
+                          if (o2Err) return rollback('INSERT_ORDER_FAIL', o2Err);
+                          const orderId = o2Res.insertId;
+                          // continue with same logic as successful insert
+                          const valuesSql = cartRows.map(() => '(?, ?, ?, ?, NOW())').join(',');
+                          const valuesParams = cartRows.flatMap(row => [orderId, row.product_id, Number(row.cart_qty), Number(row.price || 0)]);
 
-                    const stockPromises = cartRows.map(row => new Promise((resolve, reject) => {
-                      conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(row.cart_qty), row.product_id], (uErr) => (uErr ? reject(uErr) : resolve()));
-                    }));
+                          conn.query('INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ' + valuesSql, valuesParams, (itemsErr) => {
+                            if (itemsErr) return rollback('INSERT_ITEMS_FAIL', itemsErr);
+                            const stockPromises = cartRows.map(row => new Promise((resolve, reject) => {
+                              conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(row.cart_qty), row.product_id], (uErr) => (uErr ? reject(uErr) : resolve()));
+                            }));
 
-                    Promise.all(stockPromises).then(() => {
-                      conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (clearErr) => {
-                        if (clearErr) return rollback('CLEAR_CART_FAIL', clearErr);
-                        conn.commit((commitErr) => {
-                          if (commitErr) return rollback('COMMIT_FAIL', commitErr);
-                          release();
-                          const encodedAmount = encodeURIComponent(totalAmount || '');
-                          return res.redirect('/payment/success?orderId=' + orderId + '&method=card&amount=' + encodedAmount);
+                            Promise.all(stockPromises).then(() => {
+                              const markUserCoupon = userCouponIdToMark ? new Promise((resolve, reject) => {
+                                conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [userCouponIdToMark], (ucErr) => {
+                                  if (ucErr) { console.error('mark user_coupon used error', ucErr); return resolve(); }
+                                  return resolve();
+                                });
+                              }) : Promise.resolve();
+
+                              markUserCoupon.then(() => {
+                                // additionally mark global coupon as used (single-use) if applicable
+                                const markGlobal = (req.session && req.session.appliedCoupon && req.session.appliedCoupon.coupon_id && Number(req.session.appliedCoupon.is_global || 0)) ? new Promise((resolve) => {
+                                  conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [req.session.appliedCoupon.coupon_id], (cErr) => {
+                                    if (cErr) console.error('mark global coupon used error', cErr);
+                                    return resolve();
+                                  });
+                                }) : Promise.resolve();
+
+                                markGlobal.then(() => {
+                                  conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (clearErr) => {
+                                    if (clearErr) return rollback('CLEAR_CART_FAIL', clearErr);
+                                    conn.commit((commitErr) => {
+                                      if (commitErr) return rollback('COMMIT_FAIL', commitErr);
+                                      release();
+                                      const encodedAmount = encodeURIComponent(totalAmount || '');
+                                      return res.redirect('/payment/success?orderId=' + orderId + '&method=card&amount=' + encodedAmount);
+                                    });
+                                  });
+                                });
+                              }).catch((mErr) => {
+                                console.error('markUserCoupon error', mErr);
+                                return rollback('COUPON_MARK_FAIL', mErr);
+                              });
+                            }).catch((decErr) => rollback('DECREMENT_FAIL', decErr));
+                          });
                         });
-                      });
-                    }).catch((decErr) => rollback('DECREMENT_FAIL', decErr));
+                      }
+                      return rollback('INSERT_ORDER_FAIL', orderErr);
+                    }
+                    const orderId = orderRes.insertId;
+
+                    const valuesSql = cartRows.map(() => '(?, ?, ?, ?, NOW())').join(',');
+                    const valuesParams = cartRows.flatMap(row => [orderId, row.product_id, Number(row.cart_qty), Number(row.price || 0)]);
+
+                    conn.query('INSERT INTO order_items (order_id, product_id, quantity, price, createdAt) VALUES ' + valuesSql, valuesParams, (itemsErr) => {
+                      if (itemsErr) return rollback('INSERT_ITEMS_FAIL', itemsErr);
+
+                      const stockPromises = cartRows.map(row => new Promise((resolve, reject) => {
+                        conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(row.cart_qty), row.product_id], (uErr) => (uErr ? reject(uErr) : resolve()));
+                      }));
+
+                      Promise.all(stockPromises).then(() => {
+                        // mark user_coupon as used if applicable
+                        const markUserCoupon = userCouponIdToMark ? new Promise((resolve, reject) => {
+                          conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [userCouponIdToMark], (ucErr) => {
+                            if (ucErr) { console.error('mark user_coupon used error', ucErr); return resolve(); }
+                            return resolve();
+                          });
+                        }) : Promise.resolve();
+
+                        markUserCoupon.then(() => {
+                          // additionally mark global coupon as used (single-use) if applicable
+                          const markGlobal = (req.session && req.session.appliedCoupon && req.session.appliedCoupon.coupon_id && Number(req.session.appliedCoupon.is_global || 0)) ? new Promise((resolve) => {
+                            conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [req.session.appliedCoupon.coupon_id], (cErr) => {
+                              if (cErr) console.error('mark global coupon used error', cErr);
+                              return resolve();
+                            });
+                          }) : Promise.resolve();
+
+                          markGlobal.then(() => {
+                            conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (clearErr) => {
+                              if (clearErr) return rollback('CLEAR_CART_FAIL', clearErr);
+                              conn.commit((commitErr) => {
+                                if (commitErr) return rollback('COMMIT_FAIL', commitErr);
+                                release();
+                                const encodedAmount = encodeURIComponent(totalAmount || '');
+                                return res.redirect('/payment/success?orderId=' + orderId + '&method=card&amount=' + encodedAmount);
+                              });
+                            });
+                          });
+                        }).catch((mErr) => {
+                          console.error('markUserCoupon error', mErr);
+                          return rollback('COUPON_MARK_FAIL', mErr);
+                        });
+                      }).catch((decErr) => rollback('DECREMENT_FAIL', decErr));
+                    });
                   });
-                });
+                }
+
+                if (appliedCoupon && appliedCoupon.coupon_id) {
+                  // re-validate coupon from DB
+                  conn.query('SELECT * FROM coupons WHERE id = ? LIMIT 1', [appliedCoupon.coupon_id], (ccErr, ccRows = []) => {
+                    if (ccErr) { console.error('checkout - coupon lookup error', ccErr); appliedCoupon = null; return finalizeOrderWithCoupon(0, null); }
+                    if (!ccRows || !ccRows.length) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
+                    const couponRow = ccRows[0];
+                    // persist whether coupon is global/active to the session-appliedCoupon so later flows can mark usage
+                    try {
+                      if (req.session && req.session.appliedCoupon) {
+                        req.session.appliedCoupon.is_global = Number(couponRow.is_global || 0);
+                        req.session.appliedCoupon.is_active = (typeof couponRow.is_active !== 'undefined') ? Number(couponRow.is_active || 0) : 1;
+                      }
+                    } catch (e) { /* ignore session write errors */ }
+                    const now = new Date();
+                    if (couponRow.valid_from && new Date(couponRow.valid_from) > now) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
+                    if (couponRow.valid_until && new Date(couponRow.valid_until) < now) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
+
+                    // enforce min spend and user assignment if needed
+                    const requiredMin = Number(couponRow.min_spend || 0);
+                    if (requiredMin > 0 && itemsTotal < requiredMin) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
+
+                    if (!Number(couponRow.is_global)) {
+                      // ensure user coupon still assigned
+                      const userCouponId = appliedCoupon.user_coupon_id || null;
+                      if (!userCouponId) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
+                      conn.query('SELECT * FROM user_coupons WHERE id = ? AND user_id = ? AND status = "ASSIGNED" LIMIT 1', [userCouponId, userId], (uc2Err, uc2Rows = []) => {
+                        if (uc2Err) { console.error('checkout - user_coupons lookup error', uc2Err); return finalizeOrderWithCoupon(0, null); }
+                        if (!uc2Rows || !uc2Rows.length) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
+
+                        // calculate discount
+                        let cd = 0;
+                        if (couponRow.discount_type === 'PERCENTAGE') cd = Number((itemsTotal * (Number(couponRow.discount_value || 0) / 100)).toFixed(2));
+                        else cd = Number(couponRow.discount_value || 0);
+                        if (cd > itemsTotal) cd = itemsTotal;
+                        return finalizeOrderWithCoupon(cd, userCouponId);
+                      });
+                    } else {
+                      let cd = 0;
+                      if (couponRow.discount_type === 'PERCENTAGE') cd = Number((itemsTotal * (Number(couponRow.discount_value || 0) / 100)).toFixed(2));
+                      else cd = Number(couponRow.discount_value || 0);
+                      if (cd > itemsTotal) cd = itemsTotal;
+                      return finalizeOrderWithCoupon(cd, appliedCoupon.user_coupon_id || null);
+                    }
+                  });
+                } else {
+                  // no coupon applied
+                  finalizeOrderWithCoupon(0, null);
+                }
               });
             });
           }).catch((shipErr) => rollback('NO_SHIP_METHOD', shipErr));
@@ -392,6 +527,92 @@ const checkout = function (req, res, next) {
 };
 
 exports.checkout = checkout;
+
+// Apply coupon (AJAX)
+function applyCoupon(req, res) {
+  try {
+    const userId = req.session?.user?.id || req.session?.userId;
+    if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated' });
+    const code = (req.body && (req.body.code || req.body.coupon || req.body.coupon_code)) ? String(req.body.code || req.body.coupon || req.body.coupon_code).trim() : null;
+    if (!code) return res.json({ success: false, message: 'Coupon code required' });
+
+    // load coupon
+    db.query('SELECT * FROM coupons WHERE coupon_code = ? LIMIT 1', [code], (cErr, cRows = []) => {
+      if (cErr) { console.error('applyCoupon - coupon query error', cErr); return res.status(500).json({ success: false, message: 'Internal error' }); }
+      if (!cRows || !cRows.length) return res.json({ success: false, message: 'Invalid coupon code' });
+      const coupon = cRows[0];
+
+      const now = new Date();
+      if (coupon.valid_from && new Date(coupon.valid_from) > now) return res.json({ success: false, message: 'Coupon not active yet' });
+      if (coupon.valid_until && new Date(coupon.valid_until) < now) return res.json({ success: false, message: 'Coupon expired' });
+
+      // If coupon is not global, ensure user has assigned coupon
+      if (!Number(coupon.is_global)) {
+        db.query('SELECT * FROM user_coupons WHERE user_id = ? AND coupon_id = ? AND coupon_code = ? AND status = "ASSIGNED" LIMIT 1', [userId, coupon.id, coupon.coupon_code], (ucErr, ucRows = []) => {
+          if (ucErr) { console.error('applyCoupon - user_coupons query error', ucErr); return res.status(500).json({ success: false, message: 'Internal error' }); }
+          if (!ucRows || !ucRows.length) return res.json({ success: false, message: 'Coupon not assigned to this user' });
+          const userCoupon = ucRows[0];
+          return continueWithCartTotal(userCoupon.min_spend || coupon.min_spend, userCoupon.id);
+        });
+      } else {
+        // For global coupons, ensure this user hasn't used it before
+        db.query('SELECT * FROM user_coupons WHERE user_id = ? AND coupon_id = ? AND status = "USED" LIMIT 1', [userId, coupon.id], (usedErr, usedRows = []) => {
+          if (usedErr) { console.error('applyCoupon - user usage lookup error', usedErr); return res.status(500).json({ success: false, message: 'Internal error' }); }
+          if (usedRows && usedRows.length) return res.json({ success: false, message: 'Coupon already used by this user' });
+          return continueWithCartTotal(coupon.min_spend || 0, null);
+        });
+      }
+
+      function continueWithCartTotal(requiredMinSpend, userCouponId) {
+        // compute cart subtotal (respect selectedCartItemIds in session)
+        let cartSql = 'SELECT ci.quantity AS qty, p.price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ?';
+        const params = [userId];
+        const sel = req.session?.selectedCartItemIds;
+        if (Array.isArray(sel) && sel.length) { cartSql += ' AND ci.id IN (?)'; params.push(sel); }
+        db.query(cartSql, params, (cartErr, cartRows = []) => {
+          if (cartErr) { console.error('applyCoupon - cart query error', cartErr); return res.status(500).json({ success: false, message: 'Internal error' }); }
+          if (!cartRows || !cartRows.length) return res.json({ success: false, message: 'Your cart is empty' });
+          const itemsTotal = cartRows.reduce((s, r) => s + Number(r.price || 0) * Number(r.qty || r.quantity || 0), 0);
+          if (Number(requiredMinSpend || 0) > 0 && itemsTotal < Number(requiredMinSpend)) {
+            const shortfall = Number((Number(requiredMinSpend) - Number(itemsTotal)).toFixed(2));
+            return res.json({ success: false, message: `Minimum spend $${Number(requiredMinSpend).toFixed(2)} required to use this coupon`, amountNeeded: shortfall, minSpend: Number(requiredMinSpend) });
+          }
+
+          let discount = 0;
+          if (coupon.discount_type === 'PERCENTAGE') {
+            discount = Number((itemsTotal * (Number(coupon.discount_value || 0) / 100)).toFixed(2));
+          } else {
+            discount = Number(coupon.discount_value || 0);
+          }
+          if (discount > itemsTotal) discount = itemsTotal;
+
+          const newTotal = Number((itemsTotal - discount).toFixed(2));
+          // store applied coupon in session so final order placement can access it
+          try { if (req.session) req.session.appliedCoupon = { coupon_id: coupon.id, user_coupon_id: userCouponId, code: coupon.coupon_code, discount: discount, is_global: Number(coupon.is_global || 0), is_active: (typeof coupon.is_active !== 'undefined') ? Number(coupon.is_active || 0) : 1 }; } catch (e) { /* ignore session write errors */ }
+          return res.json({ success: true, discount: discount, subtotal: Number(itemsTotal.toFixed(2)), newTotal: newTotal, coupon: { id: coupon.id, code: coupon.coupon_code, type: coupon.discount_type, value: Number(coupon.discount_value) }, userCouponId: userCouponId });
+        });
+      }
+    });
+  } catch (err) {
+    console.error('applyCoupon error', err);
+    return res.status(500).json({ success: false, message: 'Internal error' });
+  }
+}
+
+exports.applyCoupon = applyCoupon;
+
+// Remove applied coupon from session (AJAX)
+function removeCoupon(req, res) {
+  try {
+    if (req.session) req.session.appliedCoupon = null;
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('removeCoupon error', err);
+    return res.status(500).json({ success: false, message: 'Internal error' });
+  }
+}
+
+exports.removeCoupon = removeCoupon;
 
 // showReceipt: load order and its items (joined to products) and render receipt.ejs
 function showReceipt(req, res) {
@@ -474,6 +695,8 @@ function showReceipt(req, res) {
               discountAmount,
               membershipName: membership.plan_name || 'Free',
               totalAmount: Number(order.totalAmount != null ? order.totalAmount : (itemsSubtotal + shippingFee - discountAmount)),
+              couponCode: order.coupon_code_snapshot || null,
+              couponDiscount: Number(order.coupon_discount || 0),
               deliveryAddress,
               shippingMethod,
               paymentMethod: order.payment_method || req.query?.method || detectedPaymentMethod || 'Card',
@@ -838,5 +1061,7 @@ module.exports = {
   details,
   paymentSuccess,
   adminList: exports.adminList,
-  adminDetails: exports.adminDetails
+  adminDetails: exports.adminDetails,
+  applyCoupon: exports.applyCoupon,
+  removeCoupon: exports.removeCoupon
 };

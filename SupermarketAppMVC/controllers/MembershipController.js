@@ -113,8 +113,11 @@ const MembershipController = {
       Membership.getPlanById(planId, (err, plan) => {
         if (err) return next(err);
         if (!plan) return res.redirect('/membership');
-        // Normalize period
-        const period = String(plan.billing_period || 'MONTHLY').toLowerCase();
+        // Normalize period: map common variants like 'annually'/'annual' to 'yearly'
+        const raw = String(plan.billing_period || 'MONTHLY').toLowerCase();
+        const up = String(plan.billing_period || '').toUpperCase();
+        const isYear = raw === 'yearly' || raw === 'year' || raw === 'annually' || raw === 'annual' || up.includes('YEAR') || up.includes('ANNUAL');
+        const period = isYear ? 'yearly' : 'monthly';
         return res.render('membership_payment', { plan: plan, period: period });
       });
     } catch (e) { return next(e); }
@@ -135,13 +138,18 @@ const MembershipController = {
         const returnUrl = `${req.protocol}://${req.get('host')}/membership/paypal/return?planId=${planId}`;
         const cancelUrl = `${req.protocol}://${req.get('host')}/membership`;
         const paypalService = require('../services/paypal');
-        const period = String(req.body.period || plan.billing_period || '').toLowerCase();
+        // Normalize period and treat common variants like 'annually' or 'annual' as yearly
+        const rawPeriod = String(req.body.period || plan.billing_period || '').toLowerCase();
+        const upBilling = String(plan.billing_period || '').toUpperCase();
+        const isYear = rawPeriod === 'yearly' || rawPeriod === 'year' || rawPeriod === 'annually' || rawPeriod === 'annual' || upBilling.includes('YEAR') || upBilling.includes('ANNUAL');
+        const isMonth = rawPeriod === 'monthly' || rawPeriod === 'month' || upBilling.includes('MONTH');
 
         // If this plan represents a recurring billing period, create a PayPal subscription
-        if (period === 'monthly' || period === 'yearly' || String(plan.billing_period || '').toUpperCase().includes('MONTH') || String(plan.billing_period || '').toUpperCase().includes('YEAR')) {
+        if (isMonth || isYear) {
           try {
             const customId = `u:${userId}|p:${planId}`;
-            const sub = await paypalService.createSubscription(amount.toFixed(2), plan.plan_name || 'Membership', (period === 'yearly' ? 'YEAR' : 'MONTH'), returnUrl, cancelUrl, customId);
+            const interval = isYear ? 'YEAR' : 'MONTH';
+            const sub = await paypalService.createSubscription(amount.toFixed(2), plan.plan_name || 'Membership', interval, returnUrl, cancelUrl, customId);
             const approve = (sub && sub.links && sub.links.find(l => l.rel === 'approve')) || null;
             if (approve && approve.href) return res.redirect(approve.href);
             return res.redirect('/membership');
@@ -190,7 +198,9 @@ const MembershipController = {
               Membership.getPlanById(resolvedPlanId, (gpErr, planObj) => {
                 Membership.setUserMembership(userId, resolvedPlanId, (err) => {
                   if (err) console.error('membership set after paypal subscription', err);
-                  const period = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+                  const rawP = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+                  const upP = (planObj && planObj.billing_period) ? String(planObj.billing_period).toUpperCase() : '';
+                  const period = (rawP === 'yearly' || rawP === 'year' || rawP === 'annually' || rawP === 'annual' || upP.includes('YEAR') || upP.includes('ANNUAL')) ? 'yearly' : 'monthly';
                   const amount = (planObj && planObj.price) ? planObj.price : 0;
                   return res.render('membership_success', { plan: planObj || {}, period: period, amount: amount, subscriptionId: subscriptionId });
                 });
@@ -216,9 +226,11 @@ const MembershipController = {
         Membership.getPlanById(planId, (gpErr, planObj) => {
           Membership.setUserMembership(userId, planId, (err, membership) => {
             if (err) console.error('membership set after paypal', err);
-            const period = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+            const rawP2 = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+            const upP2 = (planObj && planObj.billing_period) ? String(planObj.billing_period).toUpperCase() : '';
+            const period2 = (rawP2 === 'yearly' || rawP2 === 'year' || rawP2 === 'annually' || rawP2 === 'annual' || upP2.includes('YEAR') || upP2.includes('ANNUAL')) ? 'yearly' : 'monthly';
             const amount = (planObj && planObj.price) ? planObj.price : 0;
-            return res.render('membership_success', { plan: planObj || {}, period: period, amount: amount, subscriptionId: null });
+            return res.render('membership_success', { plan: planObj || {}, period: period2, amount: amount, subscriptionId: null });
           });
         });
       }).catch((ex) => { console.error('paypal capture error', ex); return res.redirect('/membership'); });
@@ -237,11 +249,14 @@ const MembershipController = {
         if (!plan) return res.redirect('/membership');
         const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || '');
         const amount = Math.round((Number(plan.price || 0) || 0) * 100);
-        const period = String(req.body.period || plan.billing_period || '').toLowerCase();
+        const rawPeriod = String(req.body.period || plan.billing_period || '').toLowerCase();
+        const upBilling = String(plan.billing_period || '').toUpperCase();
+        const isYear = rawPeriod === 'yearly' || rawPeriod === 'year' || rawPeriod === 'annually' || rawPeriod === 'annual' || upBilling.includes('YEAR') || upBilling.includes('ANNUAL');
+        const isMonth = rawPeriod === 'monthly' || rawPeriod === 'month' || upBilling.includes('MONTH');
 
-        if (period === 'monthly' || period === 'yearly' || String(plan.billing_period || '').toUpperCase().includes('MONTH') || String(plan.billing_period || '').toUpperCase().includes('YEAR')) {
+        if (isMonth || isYear) {
           // create subscription via Checkout
-          const interval = (period === 'yearly' ? 'year' : 'month');
+          const interval = (isYear ? 'year' : 'month');
           const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             mode: 'subscription',
@@ -295,9 +310,11 @@ const MembershipController = {
               Membership.getPlanById(resolvedPlan, (gpErr, planObj) => {
                 Membership.setUserMembership(resolvedUser, resolvedPlan, (err) => {
                   if (err) console.error('set membership after stripe sub', err);
-                  const period = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+                  const rawP3 = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+                  const upP3 = (planObj && planObj.billing_period) ? String(planObj.billing_period).toUpperCase() : '';
+                  const period3 = (rawP3 === 'yearly' || rawP3 === 'year' || rawP3 === 'annually' || rawP3 === 'annual' || upP3.includes('YEAR') || upP3.includes('ANNUAL')) ? 'yearly' : 'monthly';
                   const amount = (planObj && planObj.price) ? planObj.price : 0;
-                  return res.render('membership_success', { plan: planObj || {}, period: period, amount: amount, subscriptionId: sub && sub.id });
+                  return res.render('membership_success', { plan: planObj || {}, period: period3, amount: amount, subscriptionId: sub && sub.id });
                 });
               });
             }).catch((ex) => { console.error('stripe sub retrieve err', ex); return res.redirect('/membership'); });
@@ -306,9 +323,11 @@ const MembershipController = {
             Membership.getPlanById(planId, (gpErr, planObj) => {
               Membership.setUserMembership(userId, planId, (err) => {
                 if (err) console.error('set membership after stripe', err);
-                const period = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+                const rawP4 = (planObj && planObj.billing_period) ? String(planObj.billing_period).toLowerCase() : 'monthly';
+                const upP4 = (planObj && planObj.billing_period) ? String(planObj.billing_period).toUpperCase() : '';
+                const period4 = (rawP4 === 'yearly' || rawP4 === 'year' || rawP4 === 'annually' || rawP4 === 'annual' || upP4.includes('YEAR') || upP4.includes('ANNUAL')) ? 'yearly' : 'monthly';
                 const amount = (planObj && planObj.price) ? planObj.price : 0;
-                return res.render('membership_success', { plan: planObj || {}, period: period, amount: amount, subscriptionId: null });
+                return res.render('membership_success', { plan: planObj || {}, period: period4, amount: amount, subscriptionId: null });
               });
             });
           }

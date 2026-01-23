@@ -96,8 +96,8 @@ const Membership = {
         ? new Date(Date.now() + (plan.duration_days * 24 * 60 * 60 * 1000))
         : null;
 
-      // Determine stored status: free plans are 'FREE', paid plans are 'MEMBERSHIP_ACTIVE'
-      const statusToSet = (Number(plan.price) === 0) ? 'FREE' : 'MEMBERSHIP_ACTIVE';
+      // Determine stored status: free plans are 'FREE', paid plans are 'ACTIVE'
+      const statusToSet = (Number(plan.price) === 0) ? 'FREE' : 'ACTIVE';
 
       // Check if user already has a membership
       const checkSql = 'SELECT id FROM user_memberships WHERE user_id = ? LIMIT 1';
@@ -148,6 +148,25 @@ const Membership = {
   },
 
   /**
+   * Schedule cancellation at end_date (mark membership as CANCELLED but keep benefits
+   * until the configured end_date; expireOldMemberships will migrate to Free when end_date passes)
+   */
+  scheduleCancelUserMembership(userId, cb) {
+    cb = safeCb(cb);
+    const sql = `
+      UPDATE user_memberships
+      SET status = 'CANCELLED', updated_at = NOW()
+      WHERE user_id = ?
+        AND (status = 'MEMBERSHIP ACTIVE' OR status = 'ACTIVE')
+    `;
+    query(sql, [Number(userId)], (err, result) => {
+      if (err) return cb(err);
+      // Return the current membership row for feedback
+      Membership.getUserMembership(userId, cb);
+    });
+  },
+
+  /**
    * Check and expire memberships (for cron jobs)
    */
   expireOldMemberships(cb) {
@@ -156,7 +175,7 @@ const Membership = {
     const sql = `
       UPDATE user_memberships um
       JOIN membership_plans mp_free ON mp_free.plan_name = 'Free'
-      SET um.plan_id = mp_free.id,
+        SET um.plan_id = 1,
           um.provider = 'system',
           um.provider_subscription_id = NULL,
           um.amount = mp_free.price,
@@ -166,9 +185,9 @@ const Membership = {
           um.status = 'FREE',
           um.raw_response = NULL,
           um.updated_at = NOW()
-      WHERE (um.status = 'MEMBERSHIP_ACTIVE' OR um.status = 'ACTIVE')
-        AND um.end_date IS NOT NULL
-        AND um.end_date <= NOW();
+      WHERE um.end_date IS NOT NULL
+        AND um.end_date <= NOW()
+        AND (um.status = 'ACTIVE' OR um.status = 'CANCELLED');
     `;
     query(sql, [], (err, result) => {
       if (err) return cb(err);

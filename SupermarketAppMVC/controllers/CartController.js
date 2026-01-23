@@ -420,9 +420,15 @@ exports.confirmPayment = function (req, res) {
               discountAmount = Number((total * (discPercent / 100)).toFixed(2));
             }
 
-            const totalWithShipping = Number((total + appliedShippingFee - discountAmount).toFixed(2));
+            // apply coupon from session if present
+            const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
+            const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+            const totalWithShipping = Number((total + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
 
-            conn.query('INSERT INTO orders (user_id, shipping_method_id, shipping_fee, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, NOW())', [userId, shipRow.id, appliedShippingFee, totalWithShipping, 'Pending'], (oErr, oRes) => {
+            const couponIdToStore = appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null;
+            const couponCodeSnapshot = appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null;
+
+            conn.query('INSERT INTO orders (user_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())', [userId, shipRow.id, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, totalWithShipping, 'Pending'], (oErr, oRes) => {
               if (oErr) return rollbackFail('Failed to create order', oErr);
               const orderId = oRes.insertId;
               console.log('confirmPayment: created orderId =', orderId);
@@ -446,11 +452,35 @@ exports.confirmPayment = function (req, res) {
 
                   // finalize: clear cart, commit transaction, release connection and redirect
                   const finalize = () => {
-                    // after commit succeed, send shopper to payment success page
+                    // mark user_coupon as used if applicable, then redirect
                     const last4 = (req.body && (req.body.cardLast4 || req.body.card_last4 || req.body.last4)) || '';
                     const encodedLast4 = encodeURIComponent(last4 || '');
                     const encodedAmount = encodeURIComponent(totalWithShipping || '');
-                    return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
+
+                    if (appliedCoupon && appliedCoupon.user_coupon_id) {
+                      conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [appliedCoupon.user_coupon_id], (ucErr) => {
+                        if (ucErr) console.error('mark user_coupon used error', ucErr);
+                        // if a global coupon was applied instead, mark it consumed as well
+                        if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+                          conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [appliedCoupon.coupon_id], (cErr) => {
+                            if (cErr) console.error('mark global coupon used error', cErr);
+                            return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
+                          });
+                        } else {
+                          return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
+                        }
+                      });
+                    } else {
+                      // no user-specific coupon; if a global coupon applied, mark it consumed
+                      if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+                        conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [appliedCoupon.coupon_id], (cErr) => {
+                          if (cErr) console.error('mark global coupon used error', cErr);
+                          return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
+                        });
+                      } else {
+                        return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
+                      }
+                    }
                   };
 
                   if (itemsToDecrement.length === 0) {
@@ -578,12 +608,17 @@ exports.pay = function (req, res) {
           }
 
           const totalWithShipping = Number((total + shippingFee - discountAmount).toFixed(2));
+          // if a coupon is applied in session, reflect it on the payment page
+          const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
+          const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+          const totalWithShippingAdjusted = Number(Math.max(0, totalWithShipping - couponDiscount).toFixed(2));
 
           return res.render('pay', {
             items,
             cartItems: items,
             total,
             totalWithShipping,
+            totalWithShippingAdjusted,
             shippingFee,
             originalShippingFee,
             discountAmount,
@@ -594,6 +629,7 @@ exports.pay = function (req, res) {
             selectedAddressId,
             selectedAddress,
             membership,
+            appliedCoupon,
             paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
             paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
           });

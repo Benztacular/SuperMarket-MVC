@@ -373,12 +373,29 @@ function profilePage(req, res, next) {
       // merge session user + DB user for this view
       const viewUser = Object.assign({}, req.session.user || {}, profileUser || {});
 
-      res.render('profile', {
-        profileUser,
-        user: viewUser,
-        error: flashErrors,
-        success: flashSuccess
-      });
+      // Fetch membership info (if any) for this user
+      db.query(
+        `SELECT um.id as membership_id, um.plan_id, um.provider, um.amount, um.period, um.start_date, um.end_date, um.status,
+                mp.plan_name, mp.tier_level, mp.price as plan_price, mp.billing_period,
+                mp.free_standard_delivery, mp.priority_delivery_discount, mp.points_multiplier, mp.discount_percent
+         FROM user_memberships um
+         JOIN membership_plans mp ON um.plan_id = mp.id
+         WHERE um.user_id = ?
+         LIMIT 1`,
+        [uid],
+        (mErr, mRows) => {
+          if (mErr) return next(mErr);
+          const userMembership = (mRows && mRows[0]) || null;
+
+          res.render('profile', {
+            profileUser,
+            user: viewUser,
+            userMembership,
+            error: flashErrors,
+            success: flashSuccess
+          });
+        }
+      );
     }
   );
 }

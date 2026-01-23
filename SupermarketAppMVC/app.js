@@ -19,6 +19,7 @@ const ReviewController = require('./controllers/ReviewController');
 const DeliveryAddressController = require('./controllers/DeliveryAddressController');
 const WalletController = require('./controllers/WalletController');
 const MembershipController = require('./controllers/MembershipController');
+const MembershipModel = require('./models/Membership');
 const LoyaltyPointsController = require('./controllers/LoyaltyPointsController');
 const AdminController = require('./controllers/AdminController');
 const NetsController = require('./controllers/NetsController');
@@ -226,7 +227,10 @@ app.post('/cart/pay', requireUser, (req, res, next) => OrderController.checkout(
 app.post('/cart/checkout', requireUser, ensure(OrderController.checkout, 'OrderController.checkout'));
 app.post('/cart/clear', requireUser, CartController.clear);
 
-// Delivery addresses
+// Coupons: apply coupon via AJAX on checkout page
+app.post('/api/coupons/apply', requireUser, ensure(OrderController.applyCoupon, 'OrderController.applyCoupon'));
+app.post('/api/coupons/remove', requireUser, ensure(OrderController.removeCoupon, 'OrderController.removeCoupon'));
+
 app.get('/api/delivery-addresses', requireUser, ensure(DeliveryAddressController.list, 'DeliveryAddressController.list'));
 app.post('/delivery-addresses', requireUser, ensure(DeliveryAddressController.create, 'DeliveryAddressController.create'));
 // API endpoint to create delivery addresses (returns JSON)
@@ -296,6 +300,26 @@ app.get('/api/membership/plans', ensure(MembershipController.getPlans, 'Membersh
 app.get('/api/membership/current', requireUser, ensure(MembershipController.getCurrentMembership, 'MembershipController.getCurrentMembership'));
 app.post('/api/membership/upgrade', requireUser, ensure(MembershipController.upgradeMembership, 'MembershipController.upgradeMembership'));
 app.post('/api/membership/cancel', requireUser, ensure(MembershipController.cancelMembership, 'MembershipController.cancelMembership'));
+// Form-based cancel from profile page: schedule cancellation at end_date and redirect back to profile
+app.post('/profile/membership/cancel', requireUser, (req, res, next) => {
+  try {
+    const userId = (req.session && (req.session.userId || (req.session.user && (req.session.user.id || req.session.user.user_id)))) || null;
+    if (!userId) return res.redirect('/login');
+    // Mark membership as cancelled (effective at the configured end_date). The periodic
+    // expireOldMemberships job will switch the membership back to Free when end_date passes.
+    MembershipModel.scheduleCancelUserMembership(userId, (err, membership) => {
+      if (err) {
+        try { req.session.error_msg = 'Unable to schedule membership cancellation at this time.'; } catch (e) {}
+        return res.redirect('/profile#membership');
+      }
+      try {
+        // Keep user's session membership value unchanged until the period ends
+        req.session.success_msg = 'Cancellation scheduled: your membership will remain active until the period end.';
+      } catch (e) {}
+      return res.redirect('/profile#membership');
+    });
+  } catch (e) { return next(e); }
+});
 // Membership payment routes
 app.post('/membership/pay/paypal', requireUser, ensure(MembershipController.payWithPaypal, 'MembershipController.payWithPaypal'));
 app.get('/membership/paypal/return', requireUser, ensure(MembershipController.paypalReturn, 'MembershipController.paypalReturn'));
@@ -413,6 +437,25 @@ app.get('/401', (req, res) => {
 });
 
 /* ---------- errors & server ---------- */
+
+// Periodic job: expire old memberships (runs every minute)
+try {
+  (function scheduleMembershipExpiry(){
+    const runExpiry = () => {
+      try {
+        MembershipModel.expireOldMemberships((err, result) => {
+          if (err) return console.error('expireOldMemberships error', err);
+          try { if (result && result.affectedRows) console.log('Expired memberships reverted:', result.affectedRows); } catch(e){}
+        });
+      } catch (e) { console.error('expireOldMemberships run failed', e); }
+    };
+    // run now
+    runExpiry();
+    // schedule every minute
+    setInterval(runExpiry, 60 * 1000);
+  })();
+} catch (e) { console.error('Failed to schedule membership expiry job', e); }
+
 app.use((req, res) => res.status(404).send('Not found'));
 app.use((err, _req, res, _next) => {
   console.error(err);

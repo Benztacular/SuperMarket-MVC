@@ -172,11 +172,35 @@ async function captureOrder(req, res, next) {
 
               const totalWithShipping = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
 
+              // check for applied coupon in session
+              const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
+              const couponIdToStore = appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null;
+              const couponCodeSnapshot = appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null;
+              const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+
               conn.query(
-                'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())',
-                [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, totalWithShipping, 'Paid'],
+                'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())',
+                [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, totalWithShipping, 'Paid'],
                 (oErr, oRes) => {
-                  if (oErr) return conn.rollback(() => next(oErr));
+                  if (oErr) {
+                    if (oErr && oErr.code === 'ER_BAD_FIELD_ERROR') {
+                      console.warn('PayPal capture: orders table missing coupon columns, retrying without coupon fields');
+                      return conn.query('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, totalWithShipping, 'Paid'], (o2Err, o2Res) => {
+                        if (o2Err) return conn.rollback(() => next(o2Err));
+                        const orderId = o2Res.insertId;
+
+                        const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
+                        const placeholders = vals.map(() => '(?, ?, ?, ?)').join(',');
+                        const flat = vals.flat();
+                        conn.query(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ${placeholders}`, flat, (oiErr) => {
+                          if (oiErr) return conn.rollback(() => next(oiErr));
+                          // continue below as original
+                          continuePaypalAfterItems(orderId);
+                        });
+                      });
+                    }
+                    return conn.rollback(() => next(oErr));
+                  }
                   const orderId = oRes.insertId;
 
                   const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
@@ -184,7 +208,10 @@ async function captureOrder(req, res, next) {
                   const flat = vals.flat();
                   conn.query(`INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ${placeholders}`, flat, (oiErr) => {
                     if (oiErr) return conn.rollback(() => next(oiErr));
+                    continuePaypalAfterItems(orderId);
+                  });
 
+                  function continuePaypalAfterItems(orderId) {
                     const updates = cartRows.map(r => new Promise((resolve, reject) => {
                       conn.query('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(r.quantity), r.product_id], (uErr) => uErr ? reject(uErr) : resolve());
                     }));
@@ -206,18 +233,60 @@ async function captureOrder(req, res, next) {
                             [userId, orderId, orderID, captureId, payerEmail, amount, currency, paymentStatus, paymentTime], (ptErr) => {
                               if (ptErr) return conn.rollback(() => next(ptErr));
 
-                              conn.commit((cmErr) => {
-                                if (cmErr) return conn.rollback(() => next(cmErr));
-                                const txnId = (payments && payments.id) ? payments.id : orderID;
-                                const encodedTxn = encodeURIComponent(txnId || '');
-                                const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
-                                return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
-                              });
+                              // mark user coupon used if applicable
+                                  if (appliedCoupon && appliedCoupon.user_coupon_id) {
+                                    conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [appliedCoupon.user_coupon_id], (ucErr) => {
+                                      if (ucErr) console.error('mark user_coupon used error', ucErr);
+                                      // also record per-user usage for global coupons instead of deactivating the coupon
+                                      if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+                                        conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, used_at, status, min_spend) VALUES (?, ?, ?, NOW(), NOW(), "USED", ?) ', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || ''), Number(appliedCoupon.min_spend || 0)], (insErr) => {
+                                          if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
+                                          conn.commit((cmErr) => {
+                                            if (cmErr) return conn.rollback(() => next(cmErr));
+                                            const txnId = (payments && payments.id) ? payments.id : orderID;
+                                            const encodedTxn = encodeURIComponent(txnId || '');
+                                            const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                            return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                                          });
+                                        });
+                                      } else {
+                                        conn.commit((cmErr) => {
+                                          if (cmErr) return conn.rollback(() => next(cmErr));
+                                          const txnId = (payments && payments.id) ? payments.id : orderID;
+                                          const encodedTxn = encodeURIComponent(txnId || '');
+                                          const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                          return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                                        });
+                                      }
+                                    });
+                                  } else {
+                                    // no user_coupon; for global coupon record per-user usage
+                                    if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+                                      conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, used_at, status, min_spend) VALUES (?, ?, ?, NOW(), NOW(), "USED", ?)', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || ''), Number(appliedCoupon.min_spend || 0)], (insErr) => {
+                                        if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
+                                        conn.commit((cmErr) => {
+                                          if (cmErr) return conn.rollback(() => next(cmErr));
+                                          const txnId = (payments && payments.id) ? payments.id : orderID;
+                                          const encodedTxn = encodeURIComponent(txnId || '');
+                                          const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                          return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                                        });
+                                      });
+                                    } else {
+                                      conn.commit((cmErr) => {
+                                        if (cmErr) return conn.rollback(() => next(cmErr));
+                                        const txnId = (payments && payments.id) ? payments.id : orderID;
+                                        const encodedTxn = encodeURIComponent(txnId || '');
+                                        const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                        return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                                      });
+                                    }
+                                  }
                             });
                         });
                       })
                       .catch((decErr) => conn.rollback(() => next(decErr)));
-                  });
+                    }
                 }
               );
             });

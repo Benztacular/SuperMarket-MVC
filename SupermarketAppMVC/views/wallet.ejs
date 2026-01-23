@@ -492,12 +492,19 @@
                             
                             <!-- Action Button -->
                             <% if (!isFreshPlus) { %>
-                                <button onclick="window.location.href='/wallet/membership/upgrade'" class="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
-                                    <i class="ph-bold ph-arrow-up-right"></i>
-                                    <span>Upgrade to <%= isStandard ? 'FreshPlus' : 'Premium' %></span>
-                                </button>
+                                <% if (isFree) { %>
+                                    <button onclick="window.location.href='/membership'" class="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <i class="ph-bold ph-arrow-up-right"></i>
+                                        <span>Upgrade Membership</span>
+                                    </button>
+                                <% } else if (isStandard) { %>
+                                    <button onclick="window.location.href='/wallet/membership/upgrade'" class="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <i class="ph-bold ph-arrow-up-right"></i>
+                                        <span>Upgrade to FreshPlus</span>
+                                    </button>
+                                <% } %>
                             <% } else { %>
-                                <button onclick="window.location.href='/wallet/membership/manage'" class="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
+                                <button onclick="window.location.href='/profile#membership'" class="w-full py-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
                                     <i class="ph-bold ph-gear"></i>
                                     <span>Manage Membership</span>
                                 </button>

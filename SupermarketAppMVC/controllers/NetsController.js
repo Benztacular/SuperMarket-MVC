@@ -1,4 +1,4 @@
-const services = require('../services/nets');
+const services = require('../services/nets_server');
 const NetsTxn = require('../models/NetsTransaction');
 const Wallet = require('../models/Wallet');
 const axios = require('axios');
@@ -130,9 +130,20 @@ function createOrderFromCart(userId, txnRetrievalRef, options, callback) {
       const discPercent = Number(membership.discount_percent || 0);
       if (discPercent > 0 && itemsTotal >= discThresh) discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
 
-      const total = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
+      const appliedCoupon = (options && options.appliedCoupon) ? options.appliedCoupon : null;
+      const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+      const total = Number((itemsTotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
 
-      const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, total, 'Paid']);
+      // try to persist coupon fields if DB supports them, otherwise fallback
+      let orderRes;
+      try {
+        orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null, appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null, couponDiscount, total, 'Paid']);
+      } catch (insErr) {
+        if (insErr && insErr.code === 'ER_BAD_FIELD_ERROR') {
+          console.warn('[NETS] orders table missing coupon columns, retrying without coupon fields');
+          orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, total, 'Paid']);
+        } else throw insErr;
+      }
       const orderId = orderRes.insertId;
 
       if (cartRows.length) {
@@ -146,6 +157,19 @@ function createOrderFromCart(userId, txnRetrievalRef, options, callback) {
       }
 
       await q('INSERT INTO nets_transactions (user_id, order_id, merchant_txn_ref, nets_txn_id, amount, currency, payment_status, payment_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())', [userId, orderId, txnRetrievalRef, txnRetrievalRef, total, 'SGD', 'SUCCESS']);
+      // mark user coupon or global coupon as used if applicable
+      if (appliedCoupon && appliedCoupon.user_coupon_id) {
+        try {
+          await q('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [appliedCoupon.user_coupon_id]);
+        } catch (ucErr) { console.error('[NETS] mark user_coupon used error', ucErr); }
+      }
+      // For global coupons, record per-user usage rather than deactivating coupon globally
+      if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+        try {
+          await q('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, used_at, status, min_spend) VALUES (?, ?, ?, NOW(), NOW(), "USED", ?)', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || ''), Number(appliedCoupon.min_spend || 0)]);
+        } catch (insErr) { if (insErr && insErr.code !== 'ER_DUP_ENTRY') console.error('[NETS] mark global coupon used (insert user_coupons) error', insErr); }
+      }
+
       await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
 
       await commit();
@@ -265,7 +289,7 @@ exports.successPage = (req, res) => {
     }
 
     // Create new order (pass selected shipping method from session if present)
-    createOrderFromCart(userId, txn, { selectedShippingMethodId: req.session?.selectedShippingMethodId }, (err, orderId, totalAmount) => {
+    createOrderFromCart(userId, txn, { selectedShippingMethodId: req.session?.selectedShippingMethodId, appliedCoupon: req.session?.appliedCoupon }, (err, orderId, totalAmount) => {
       if (err) {
         console.error('[NETS] successPage - createOrderFromCart error', err);
         txnStatusMap.set(txn, 'success');

@@ -347,6 +347,13 @@
         </div>
         <% } %>
 
+        <% if (typeof couponDiscount !== 'undefined' && Number(couponDiscount) > 0) { %>
+        <div class="total-row">
+          <span>Coupon (<%= couponCode || 'Coupon' %>)</span>
+          <span class="font-mono">- $<%= Number(couponDiscount || 0).toFixed(2) %></span>
+        </div>
+        <% } %>
+
         <div class="grand-total">
           <span class="grand-total-label">Total</span>
           <span class="grand-total-value font-mono">$<%= (Number(typeof totalAmount !== 'undefined' ? totalAmount : (computedTotal + (typeof shippingFee !== 'undefined' ? shippingFee : 0)))).toFixed(2) %></span>

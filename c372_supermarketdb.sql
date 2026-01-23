@@ -148,6 +148,16 @@ CREATE TABLE orders (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Add coupon tracking fields to orders so receipts and payments
+-- can record which coupon was applied and the discount amount
+ALTER TABLE orders
+  ADD COLUMN coupon_id INT NULL AFTER shipping_fee,
+  ADD COLUMN coupon_code_snapshot VARCHAR(50) NULL AFTER coupon_id,
+  ADD COLUMN coupon_discount DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER coupon_code_snapshot;
+
+ALTER TABLE orders
+  ADD CONSTRAINT fk_orders_coupon FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE SET NULL;
+
 -- ============================================================
 -- ORDER ITEMS
 -- ============================================================
@@ -349,7 +359,7 @@ CREATE TABLE membership_plans (
 
   plan_name VARCHAR(50) NOT NULL,
   tier_level INT NOT NULL,                               -- 1=Free, 2=Standard, 3=FreshPlus
-  billing_period ENUM('MONTHLY','YEARLY') NOT NULL,      -- MONTHLY / YEARLY
+  billing_period ENUM('MONTHLY','ANNUALLY') NOT NULL,      -- MONTHLY / ANNUALLY
 
   price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   duration_days INT NULL,                                -- NULL for Free
@@ -382,13 +392,13 @@ VALUES
 
 -- =========================
 -- TIER 2: STANDARD
--- Monthly: $7, Yearly: $70
+-- Monthly: $7, AnNually: $70
 -- =========================
 ('Standard (Monthly)', 2, 'MONTHLY', 7.00, 30,
  0, 0.00, 1.00,
  40.00, 30.00, 5.00),
 
-('Standard (Yearly)', 2, 'YEARLY', 70.00, 365,
+('Standard (Annually)', 2, 'ANNUALLY', 70.00, 365,
  0, 0.00, 1.00,
  40.00, 30.00, 5.00),
 
@@ -400,7 +410,7 @@ VALUES
  1, 5.00, 2.50,
  NULL, 0.00, 15.00),
 
-('FreshPlus (Yearly)', 3, 'YEARLY', 150.00, 365,
+('FreshPlus (Annually)', 3, 'ANNUALLY', 150.00, 365,
  1, 5.00, 2.50,
  NULL, 0.00, 15.00);
 
@@ -416,7 +426,7 @@ CREATE TABLE user_memberships (
   provider VARCHAR(20) DEFAULT 'system', -- e.g. 'paypal','stripe','nets','system'
   provider_subscription_id VARCHAR(255) NULL,
   amount DECIMAL(10,2) DEFAULT NULL,
-  period ENUM('MONTHLY','YEARLY') DEFAULT NULL,
+  period ENUM('MONTHLY','ANNUALLY') DEFAULT NULL,
   start_date DATETIME DEFAULT CURRENT_TIMESTAMP,
   end_date DATETIME NULL,
   status ENUM('FREE','MEMBERSHIP_ACTIVE','ACTIVE','EXPIRED','CANCELLED') DEFAULT 'FREE',
@@ -430,7 +440,7 @@ CREATE TABLE user_memberships (
 
 -- Give every existing user the Free plan by default (Free is tier 1, monthly)
 INSERT INTO user_memberships (user_id, plan_id, provider, provider_subscription_id, amount, period, end_date, status)
-SELECT u.id, mp.id, 'system', NULL, mp.price, mp.billing_period, NULL, 'ACTIVE'
+SELECT u.id, mp.id, 'system', NULL, mp.price, mp.billing_period, NULL, 'FREE'
 FROM users u
 JOIN membership_plans mp ON mp.plan_name = 'Free'
 LEFT JOIN user_memberships um ON um.user_id = u.id
@@ -541,6 +551,57 @@ CREATE TABLE loyalty_redemptions (
   FOREIGN KEY (reward_id) REFERENCES loyalty_rewards(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ;
+
+-- ============================================================
+-- COUPONS TABLE (With Minimum Spend Requirement)
+-- ============================================================
+DROP TABLE IF EXISTS coupons;
+CREATE TABLE coupons (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  coupon_code VARCHAR(50) NOT NULL UNIQUE,           -- Unique coupon code (e.g., FRESH10)
+  description VARCHAR(255) NOT NULL,                  -- Description of the coupon
+  discount_type ENUM('PERCENTAGE', 'FIXED') NOT NULL, -- Discount type (percentage or fixed)
+  discount_value DECIMAL(10,2) NOT NULL,              -- Discount value (e.g., 10.00% or $5.00)
+  valid_from DATETIME DEFAULT CURRENT_TIMESTAMP,     -- Valid from (date the coupon becomes active)
+  valid_until DATETIME,                              -- Valid until (expiration date)
+  is_global TINYINT(1) DEFAULT 0,                    -- 1 if the coupon is global, 0 if it's user-specific
+  is_active TINYINT(1) DEFAULT 1,                    -- 1 if coupon is active/available, 0 if consumed (for global single-use)
+  used_at DATETIME NULL,
+  min_spend DECIMAL(10,2) DEFAULT 0.00,               -- Minimum spend requirement for the coupon
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,     -- Creation timestamp
+  updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP -- Update timestamp
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Insert sample coupons with minimum spend requirements
+INSERT INTO coupons (coupon_code, description, discount_type, discount_value, valid_until, is_global, min_spend)
+VALUES
+('FRESH10', '10% Off on Fresh Produce', 'PERCENTAGE', 10.00, '2026-12-31', 1, 50.00),  -- Global coupon with min spend $30
+('FIVE_OFF', '$5 Off on Orders Above $30', 'FIXED', 5.00, '2026-12-31', 1, 30.00);   -- Global coupon with min spend $30
+
+
+-- ============================================================
+-- USER COUPONS TABLE (Tracks User-Specific Coupons)
+-- ============================================================
+DROP TABLE IF EXISTS user_coupons;
+CREATE TABLE user_coupons (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,                              -- Foreign key to users table
+  coupon_id INT NOT NULL,                            -- Foreign key to coupons table
+  coupon_code VARCHAR(50) NOT NULL,                  -- Unique coupon code generated for the user
+  assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,    -- When the coupon was assigned to the user
+  used_at DATETIME,                                  -- When the coupon was used
+  status ENUM('ASSIGNED', 'USED', 'EXPIRED') DEFAULT 'ASSIGNED',  -- Status of the coupon
+  min_spend DECIMAL(10,2) DEFAULT 0.00,               -- Minimum spend requirement for the coupon
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Assign coupons to users with minimum spend information
+INSERT INTO user_coupons (user_id, coupon_id, coupon_code, status, min_spend)
+SELECT 1, 1, 'FRESH10', 'ASSIGNED', min_spend FROM coupons WHERE id = 1;
+
+INSERT INTO user_coupons (user_id, coupon_id, coupon_code, status, min_spend)
+SELECT 2, 2, 'FIVE_OFF', 'ASSIGNED', min_spend FROM coupons WHERE id = 2;
 
 
 SET FOREIGN_KEY_CHECKS = 1;

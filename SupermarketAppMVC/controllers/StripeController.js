@@ -63,7 +63,12 @@ async function createPaymentIntent(req, res, next) {
       }
 
       const itemsTotal = items.reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 0), 0);
-      const total = itemsTotal + shippingFee;
+
+      // account for coupon applied in session (if any)
+      const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
+      const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+
+      const total = Math.max(0, itemsTotal + shippingFee - couponDiscount);
       if (total <= 0) return res.status(400).json({ error: 'Invalid total' });
 
       // Create Stripe Payment Intent
@@ -143,10 +148,26 @@ async function confirmPayment(req, res, next) {
     const discPercent = Number(membership.discount_percent || 0);
     if (discPercent > 0 && itemsTotal >= discThresh) discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
 
-    const total = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
+    // apply coupon from session if present (session.appliedCoupon is set by OrderController.applyCoupon)
+    const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
+    const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
 
-    const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, total, 'Paid']);
-    const orderId = orderRes && orderRes.insertId;
+    const total = Number((itemsTotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
+
+    const couponIdToStore = appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null;
+    const couponCodeSnapshot = appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null;
+
+    let orderId;
+    try {
+      const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, total, 'Paid']);
+      orderId = orderRes && orderRes.insertId;
+    } catch (insertErr) {
+      if (insertErr && insertErr.code === 'ER_BAD_FIELD_ERROR') {
+        console.warn('Stripe order insert: coupon columns missing, retrying without coupon fields');
+        const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, total, 'Paid']);
+        orderId = orderRes && orderRes.insertId;
+      } else throw insertErr;
+    }
 
     const vals = cartRows.map(r => [orderId, r.product_id, r.quantity, Number(r.unit_price || 0)]);
     const placeholders = vals.map(() => '(?, ?, ?, ?)').join(',');
@@ -166,6 +187,19 @@ async function confirmPayment(req, res, next) {
       const stripeChargeId = paymentIntent.latest_charge || (paymentIntent.charges && paymentIntent.charges.data && paymentIntent.charges.data[0] && paymentIntent.charges.data[0].id) || null;
       await q('INSERT INTO stripe_transactions (user_id, order_id, stripe_txn_id, stripe_charge_id, payment_status, amount, currency, payment_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())', [userId, orderId, paymentIntent.id, stripeChargeId, 'success', amount, (paymentIntent.currency || 'sgd').toUpperCase()]);
     } catch (e) { console.error('stripe tx record error', e); }
+
+    // Mark user coupon as used if applicable
+    try {
+      if (appliedCoupon && appliedCoupon.user_coupon_id) {
+        await q('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [appliedCoupon.user_coupon_id]);
+      }
+      // For global coupons, record usage for this user (do not deactivate coupon globally)
+      if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+        try {
+          await q('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, used_at, status, min_spend) VALUES (?, ?, ?, NOW(), NOW(), "USED", ?)', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || ''), Number(appliedCoupon.min_spend || 0)]);
+        } catch (cErr) { console.error('mark global coupon used (insert user_coupons) error', cErr); }
+      }
+    } catch (e) { console.error('mark user_coupon used error', e); }
 
     await commit();
 

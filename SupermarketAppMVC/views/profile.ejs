@@ -436,6 +436,23 @@
       .content-card.addresses-active .addresses-body { margin-left: 0; max-width: 100%; padding-left: 0.75rem; }
       .content-card.addresses-active .addresses-header .fab-add-address { position: absolute; right: 1rem; }
     }
+
+    /* Membership tier styles (match wallet.ejs colorways) */
+    .membership-card { border-radius: 1rem; overflow: hidden; position: relative; }
+    .membership-inner { padding: 28px; color: #fff; }
+
+    /* Free: slate gradient (neutral) */
+    .membership-free .membership-inner { background: linear-gradient(135deg,#475569 0%, #64748b 50%, #334155 100%); }
+
+    /* Standard: blue / indigo gradient */
+    .membership-standard .membership-inner { background: linear-gradient(135deg,#2563eb 0%, #6366f1 50%, #1d4ed8 100%); }
+
+    /* Premium / FreshPlus: amber / yellow gradient */
+    .membership-premium .membership-inner { background: linear-gradient(135deg,#d97706 0%, #f59e0b 50%, #b45309 100%); }
+
+    /* Buttons inside membership cards */
+    .btn-membership-action{ display:inline-block; width:100%; padding:12px; border-radius:10px; background:rgba(255,255,255,0.12); color:#fff; border:1px solid rgba(255,255,255,0.14); font-weight:700; text-align:center; text-decoration:none; }
+    .btn-membership-action.outline{ background:transparent; border:2px solid rgba(255,255,255,0.14); }
   </style>
 </head>
 <body>
@@ -517,7 +534,7 @@
         <div class="card-header-styled">
           <div class="header-title">
             <div class="icon-box"><i data-lucide="sliders" width="20"></i></div>
-            <span class="header-text">Profile Settings</span>
+            <span class="header-text">Profile Management</span>
           </div>
         </div>
 
@@ -584,7 +601,82 @@
               <div class="text-muted">Loading addresses...</div>
             </div>
 
-            <div class="text-muted small mb-4">Use the + button to add a new address.</div>
+            
+          </div>
+        </div>
+
+        <!-- Membership Tab -->
+        <div class="tab-section" data-tab="membership" style="display:none;">
+          <div class="membership-header d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0">Membership</h6>
+          </div>
+
+          <div class="membership-body p-3">
+            <% const tier = Number(userMembership && userMembership.tier_level ? userMembership.tier_level : (userMembership ? 1 : 0)); %>
+            <% const tierClass = tier === 3 ? 'membership-premium' : tier === 2 ? 'membership-standard' : 'membership-free'; %>
+            <% if (userMembership && tier > 0) { %>
+              <div class="membership-card mb-3 <%= tierClass %>">
+                <div class="membership-inner">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+                    <div>
+                      <div style="font-size:12px; text-transform:uppercase; opacity:0.85; letter-spacing:1px;">Membership</div>
+                      <h2 style="margin:6px 0 0 0; font-size:28px; font-weight:700;"><%= userMembership.plan_name %></h2>
+                      <div style="opacity:0.9; font-size:13px; margin-top:6px;">Status: <strong><%= (userMembership.status || 'ACTIVE') %></strong></div>
+                      <% if (userMembership.start_date) { %>
+                        <div style="font-size:12px; opacity:0.85; margin-top:6px;">Started: <%= new Date(userMembership.start_date).toLocaleDateString() %></div>
+                      <% } %>
+                      <% if (userMembership.end_date) { %>
+                        <div style="font-size:12px; opacity:0.85;">Ends: <%= new Date(userMembership.end_date).toLocaleDateString() %></div>
+                      <% } %>
+                    </div>
+                    <% const memPriceRaw = (userMembership && (userMembership.amount != null ? userMembership.amount : userMembership.plan_price)); %>
+                    <% const memPrice = isFinite(Number(memPriceRaw)) ? Number(memPriceRaw) : 0; %>
+                    <% const rawPeriod = (userMembership && (userMembership.period || userMembership.billing_period)) ? String(userMembership.period || userMembership.billing_period) : 'MONTHLY'; %>
+                    <% const up = rawPeriod.toUpperCase(); %>
+                    <% const memPeriod = (up === 'YEARLY' || up === 'ANNUALLY') ? 'Annually' : 'Monthly'; %>
+                    <div style="text-align:right;">
+                      <div style="font-size:20px; font-weight:700;">$<%= memPrice.toFixed(2) %></div>
+                      <div style="font-size:13px; opacity:0.9; margin-top:6px;"><%= memPeriod %></div>
+                    </div>
+                  </div>
+
+                  <div style="margin-top:18px; display:flex; gap:18px; align-items:flex-start;">
+                    <div style="flex:1">
+                      <ul style="list-style:none; padding:0; margin:0; color: #eef3fb;">
+                        <% if (userMembership.free_standard_delivery) { %>
+                          <li style="margin-bottom:8px; display:flex; gap:8px; align-items:center;"><i data-lucide="check-circle" width="16" style="color:#dff3e0;"></i><span>Free standard delivery</span></li>
+                        <% } %>
+                        <% if (userMembership.points_multiplier) { %>
+                          <li style="margin-bottom:8px; display:flex; gap:8px; align-items:center;"><i data-lucide="check-circle" width="16" style="color:#dff3e0;"></i><span>Points multiplier: <%= userMembership.points_multiplier %>x</span></li>
+                        <% } %>
+                        <% if (userMembership.discount_percent) { %>
+                          <li style="margin-bottom:8px; display:flex; gap:8px; align-items:center;"><i data-lucide="check-circle" width="16" style="color:#dff3e0;"></i><span>Discount: <%= userMembership.discount_percent %>%</span></li>
+                        <% } %>
+                      </ul>
+                    </div>
+                    <div style="width:220px;">
+                      <% if (tier === 2) { %>
+                        <form method="POST" action="/profile/membership/cancel" style="margin-bottom:8px;"><button class="btn-membership-action outline" type="submit">Cancel Membership</button></form>
+                        <a href="/membership?upgrade=1" class="btn-membership-action" style="display:inline-block;">Upgrade to Premium</a>
+                      <% } else if (tier === 3) { %>
+                        <form method="POST" action="/profile/membership/cancel"><button class="btn-membership-action outline" type="submit">Cancel Membership</button></form>
+                      <% } else { %>
+                        <a href="/membership" class="btn-membership-action">Get Membership</a>
+                      <% } %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% } else { %>
+              <div class="membership-card mb-3 membership-free">
+                <div class="membership-inner" style="text-align:center;">
+                  <div style="font-size:12px; text-transform:uppercase; opacity:0.85; letter-spacing:1px;">Membership</div>
+                  <h2 style="margin:8px 0 6px 0; font-size:34px; font-weight:800;">Free</h2>
+                  <div style="max-width:720px; margin:8px auto 18px; color: rgba(238,243,251,0.9);">You are currently on the Free plan. Upgrade to get perks like free delivery, higher points multiplier, and exclusive discounts.</div>
+                  <a href="/membership" class="btn-membership-action">Upgrade to Premium</a>
+                </div>
+              </div>
+            <% } %>
           </div>
         </div>
 
@@ -774,6 +866,35 @@
     setupCharCount('contactInput', 'contactCount', 10);
 
     // Avatar bubble buttons: activate and update hash
+
+    function showTabSection(target) {
+      try {
+        const card = document.querySelector('.content-card');
+        const sections = document.querySelectorAll('.tab-section');
+        sections.forEach(s => {
+          if (s.dataset && s.dataset.tab === target) s.style.display = 'block';
+          else s.style.display = 'none';
+        });
+        if (card) {
+          if (target === 'addresses') {
+            card.classList.add('addresses-active');
+            if (typeof loadAddresses === 'function') try { loadAddresses(); } catch (e) { console.warn('loadAddresses failed', e); }
+          } else {
+            card.classList.remove('addresses-active');
+          }
+        }
+
+        // Hide the Security & Access section when viewing addresses or membership
+        try {
+          const securitySection = document.querySelector('.security-section');
+          if (securitySection) {
+            if (target === 'addresses' || target === 'membership') securitySection.style.display = 'none';
+            else securitySection.style.display = 'block';
+          }
+        } catch (e) { /* ignore DOM errors */ }
+      } catch (e) { console.warn('showTabSection error', e); }
+    }
+
     (function(){
       const bubbles = document.querySelectorAll('.avatar-bubble');
       if(!bubbles || bubbles.length===0) return;
@@ -841,11 +962,43 @@
               <div class="address-contact">${escapeHtml(a.contact_number || '')}</div>
             </div>
             <div class="address-actions">
-              ${a.is_default ? '<span class="badge bg-success">Default</span>' : `<form method="POST" action="/delivery-addresses/${a.id}/default" style="display:inline;"><button class="btn btn-outline-secondary btn-sm">Set default</button></form>`}
+              ${a.is_default ? '<span class="badge bg-success">Default</span>' : `<button class="btn btn-outline-secondary btn-sm set-default-btn" data-id="${a.id}">Set default</button>`}
             </div>
           `;
           container.appendChild(el);
         });
+
+        // Attach click handlers to Set default buttons to perform AJAX POST
+        try {
+          const btns = container.querySelectorAll('.set-default-btn');
+          btns.forEach(btn => {
+            if (btn.__hasHandler) return; // avoid duplicate
+            btn.__hasHandler = true;
+            btn.addEventListener('click', async function (ev) {
+              ev.preventDefault();
+              const id = this.dataset.id;
+              if (!id) return;
+              const origText = this.textContent;
+              this.disabled = true;
+              this.textContent = 'Setting...';
+              try {
+                const res = await fetch(`/delivery-addresses/${encodeURIComponent(id)}/default`, {
+                  method: 'POST',
+                  credentials: 'same-origin',
+                  headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) throw new Error('Request failed');
+                // Refresh the addresses list to reflect the new default
+                if (typeof loadAddresses === 'function') await loadAddresses();
+              } catch (e) {
+                console.warn('Set default failed', e);
+                this.disabled = false;
+                this.textContent = origText;
+                alert('Unable to set default address. Please try again.');
+              }
+            });
+          });
+        } catch (e) { console.warn('attach set-default handlers failed', e); }
       } catch (e) {
         container.innerHTML = '<div class="text-danger">Unable to load addresses.</div>';
       }

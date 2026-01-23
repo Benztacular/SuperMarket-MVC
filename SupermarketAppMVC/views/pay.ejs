@@ -384,16 +384,23 @@
           </div>
           <% } %>
 
+          <% if (typeof appliedCoupon !== 'undefined' && appliedCoupon && Number(appliedCoupon.discount || 0) > 0) { %>
+          <div class="summary-row">
+            <span>Coupon (<%= appliedCoupon.code || appliedCoupon.coupon_code || appliedCoupon.code_snapshot || '' %>)</span>
+            <span class="text-success fw-bold">- $<%= Number(appliedCoupon.discount || 0).toFixed(2) %></span>
+          </div>
+          <% } %>
+
           <div class="summary-row total">
             <span>Total</span>
-            <span style="font-size: 1.5rem;">$<span id="totalCost"><%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %></span></span>
+            <span style="font-size: 1.5rem;">$<span id="totalCost"><%= Number((typeof totalWithShippingAdjusted !== 'undefined' ? totalWithShippingAdjusted : totalWithShipping) || (sum + (shippingFee || 0))).toFixed(2) %></span></span>
           </div>
 
           <div class="btn-actions"></div>
 
           <div style="margin-top:12px;">
             <form id="nets-qr-form" action="/nets-qr" method="POST" style="margin-bottom:12px;">
-              <input type="hidden" name="cartTotal" value="<%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %>">
+              <input type="hidden" name="cartTotal" value="<%= Number(totalWithShippingAdjusted || totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %>">
               <button type="submit" class="nets-qr-btn" style="width:100%; height:44px; padding:8px 12px; border-radius:10px; background:#f6c200; border:1px solid rgba(0,0,0,0.06); font-weight:700; display:flex; align-items:center; justify-content:center;">
                 <img src="/images/netsLogo.png" alt="Nets QR" style="height:24px; width:auto; display:block;">
               </button>
@@ -511,7 +518,7 @@
         balanceEl.textContent = '$...';
         payNowBtn.disabled = true;
         const bal = await fetchBalance();
-        const total = Number('<%= Number(totalWithShipping || (sum + (shippingFee || 0))).toFixed(2) %>');
+        const total = Number('<%= Number((typeof totalWithShippingAdjusted !== 'undefined' ? totalWithShippingAdjusted : totalWithShipping) || (sum + (shippingFee || 0))).toFixed(2) %>');
         if (bal == null) {
           balanceEl.textContent = 'Unavailable';
           payNowBtn.disabled = true;

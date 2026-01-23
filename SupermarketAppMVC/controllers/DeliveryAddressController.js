@@ -40,13 +40,14 @@ exports.create = (req, res, next) => {
   const errors = [];
   const contactRe = /^\d{8}$/;
   const blockRe = /^(?:\d{3}[A-Za-z]?|[A-Za-z]{3})$/;
-  const unitRe = /^#?\d{2}-\d{2}$/;
+  // Accept formats like "12-34" or "#03-213" (allow 2-3 digits after dash)
+  const unitRe = /^#?\d{2}-\d{2,3}$/;
   const postalRe = /^\d{6}$/;
   if (!payload.recipient_name || String(payload.recipient_name).trim().length < 1) errors.push('Recipient name is required');
   if (!contactRe.test(String(payload.contact_number || '').replace(/\s+/g, ''))) errors.push('Contact number must be exactly 8 digits');
   if (!blockRe.test(String(payload.block_number || '').trim())) errors.push('Block number must be 3 digits optionally followed by 1 letter, or 3 letters');
   if (!payload.street_name || String(payload.street_name).trim().length < 1) errors.push('Street name is required');
-  if (!unitRe.test(String(payload.unit_number || '').trim())) errors.push('Unit number must follow format 12-34 (dash required)');
+  if (!unitRe.test(String(payload.unit_number || '').trim())) errors.push('Unit number must follow format 12-34 or 03-213 (dash required)');
   if (!postalRe.test(String(payload.postal_code || '').replace(/\s+/g, ''))) errors.push('Postal code must be exactly 6 digits');
   if (String(payload.country || '').trim() !== 'Singapore') errors.push('Country must be Singapore');
 
@@ -102,3 +103,6 @@ exports.select = (req, res, next) => {
     res.redirect('/cart/checkout');
   });
 };
+
+
+
