@@ -201,9 +201,26 @@ module.exports = {
     function nextQuery(err) {
       if (err) return next(err);
       if (i >= queries.length) {
-        // render dashboard with sidebar and header
-        return res.render('adminDashboard', { stats, user: req.session.user || null });
-      }
+          // After basic counts, compute revenue and recent orders for real data on dashboard
+          db.query('SELECT COALESCE(SUM(totalAmount),0) AS revenue FROM orders', (revErr, revRows = []) => {
+            if (revErr) console.error('adminDashboard - revenue query error', revErr);
+            stats.revenue = Number((revRows && revRows[0] && revRows[0].revenue) || 0);
+
+            const recentSql = `
+              SELECT o.id, o.totalAmount, o.status, o.orderDate, u.username
+              FROM orders o
+              LEFT JOIN users u ON u.id = o.user_id
+              ORDER BY o.createdAt DESC
+              LIMIT 6
+            `;
+            db.query(recentSql, (roErr, roRows = []) => {
+              if (roErr) console.error('adminDashboard - recent orders query error', roErr);
+              const recentOrders = (roRows || []).map(r => ({ id: r.id, totalAmount: Number(r.totalAmount || 0), status: r.status || '', orderDate: r.orderDate || null, username: r.username || '' }));
+              return res.render('adminDashboard', { stats, recentOrders, user: req.session.user || null });
+            });
+          });
+          return;
+        }
       const q = queries[i++];
       db.query(q.sql, (qErr, rows) => {
         if (qErr) return nextQuery(qErr);

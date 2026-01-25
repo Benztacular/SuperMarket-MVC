@@ -888,8 +888,14 @@
                     <i data-lucide="alert-triangle"></i>
                     <div>
                       <strong>Confirmation Required</strong>
-                      <p style="margin: 8px 0 0 0;">This will credit <strong>$<%= Number(refund.amount || 0).toFixed(2) %></strong> to the customer's wallet.</p>
+                      <p style="margin: 8px 0 0 0;">This will credit the customer. You may adjust the approved amount below for a partial refund.</p>
                     </div>
+                  </div>
+
+                  <div class="mb-3">
+                    <label for="approve_amount_<%= refund.id %>" class="form-label" style="font-weight: 600;">Amount to Refund (SGD)</label>
+                    <input type="number" step="0.01" min="0.01" max="<%= Number(refund.orderTotal || 0).toFixed(2) %>" class="form-control" id="approve_amount_<%= refund.id %>" name="amount" value="<%= Number(refund.amount || refund.orderTotal || 0).toFixed(2) %>" required>
+                    <div class="form-text">Max refundable for this order: $<%= Number(refund.orderTotal || 0).toFixed(2) %>. Server will validate against previously processed refunds.</div>
                   </div>
 
                   <div class="mb-3">

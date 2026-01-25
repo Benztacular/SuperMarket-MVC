@@ -112,23 +112,129 @@ const LoyaltyPointsController = {
                   return res.status(500).json({ success: false, error: 'Failed to record points transaction' });
                 }
 
-                // Commit
-                conn.commit((cErr) => {
-                  if (cErr) {
-                    conn.rollback(() => {});
-                    return res.status(500).json({ success: false, error: 'Commit failed' });
+                // Handle reward type specific actions
+                const rewardType = (reward.reward_type || '').toString().toUpperCase();
+                
+                if (rewardType === 'WALLET_CREDIT') {
+                  // Automatically add wallet credit
+                  const creditAmount = Number(reward.wallet_credit || 0);
+                  if (creditAmount > 0) {
+                    // Get wallet ID
+                    conn.query('SELECT id FROM user_wallets WHERE user_id = ? LIMIT 1', [userId], (wErr, wRows = []) => {
+                      if (wErr || !wRows.length) {
+                        conn.rollback(() => {});
+                        return res.status(500).json({ success: false, error: 'Wallet not found' });
+                      }
+                      const walletId = wRows[0].id;
+                      
+                      // Add balance
+                      conn.query('UPDATE user_wallets SET balance = balance + ?, updatedAt = NOW() WHERE id = ?', [creditAmount, walletId], (uErr) => {
+                        if (uErr) {
+                          conn.rollback(() => {});
+                          return res.status(500).json({ success: false, error: 'Failed to update wallet' });
+                        }
+                        
+                        // Record transaction
+                        const wtSql = `INSERT INTO wallet_transactions (wallet_id, user_id, type, amount, reference_type, reference_id, description, createdAt) VALUES (?, ?, 'TOP_UP', ?, 'LOYALTY_REWARD', ?, ?, NOW())`;
+                        conn.query(wtSql, [walletId, userId, creditAmount, String(redemption.redemptionId), `Loyalty Reward: ${reward.title}`], (wtErr) => {
+                          if (wtErr) {
+                            conn.rollback(() => {});
+                            return res.status(500).json({ success: false, error: 'Failed to record wallet transaction' });
+                          }
+                          
+                          // Commit
+                          conn.commit((cErr) => {
+                            if (cErr) {
+                              conn.rollback(() => {});
+                              return res.status(500).json({ success: false, error: 'Commit failed' });
+                            }
+                            const newPoints = currentPoints - cost;
+                            return res.json({ success: true, redemptionId: redemption.redemptionId, pointsSpent: cost, points: newPoints, newPoints: newPoints, message: `Reward claimed! $${creditAmount.toFixed(2)} added to your wallet.` });
+                          });
+                        });
+                      });
+                    });
+                  } else {
+                    conn.commit((cErr) => {
+                      if (cErr) { conn.rollback(() => {}); return res.status(500).json({ success: false, error: 'Commit failed' }); }
+                      const newPoints = currentPoints - cost;
+                      return res.json({ success: true, redemptionId: redemption.redemptionId, pointsSpent: cost, points: newPoints, newPoints: newPoints, message: 'Reward claimed successfully!' });
+                    });
+                  }
+                } else if (rewardType === 'DISCOUNT' || rewardType === 'FREE_DELIVERY_VOUCHER') {
+                  // Generate unique coupon code
+                  const prefix = rewardType === 'FREE_DELIVERY_VOUCHER' ? 'FREESHIP' : 'DISCOUNT';
+                  const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+                  const couponCode = `${prefix}-${randomPart}`;
+                  
+                  // Calculate expiration
+                  const validDays = Number(reward.valid_days || 30);
+                  const expiresAt = new Date(Date.now() + validDays * 24 * 60 * 60 * 1000);
+                  
+                  // Determine coupon parameters
+                  let discountType = 'FIXED';
+                  let discountValue = 0;
+                  let minSpend = Number(reward.min_spend || 0);
+                  
+                  if (rewardType === 'FREE_DELIVERY_VOUCHER') {
+                    // Free delivery coupon: represents 100% off shipping
+                    discountType = 'PERCENTAGE';
+                    discountValue = 100.00;
+                    minSpend = 0;
+                  } else {
+                    // Discount coupon
+                    if (reward.discount_percent && Number(reward.discount_percent) > 0) {
+                      discountType = 'PERCENTAGE';
+                      discountValue = Number(reward.discount_percent);
+                    } else {
+                      discountType = 'FIXED';
+                      discountValue = Number(reward.discount_amount || 0);
+                    }
                   }
                   
-                  const newPoints = currentPoints - cost;
-                  return res.json({ 
-                    success: true, 
-                    redemptionId: redemption.redemptionId,
-                    pointsSpent: cost,
-                    points: newPoints,
-                    newPoints: newPoints,
-                    message: 'Reward claimed successfully!'
+                  // Insert into coupons table
+                  const isFreeDelivery = (rewardType === 'FREE_DELIVERY_VOUCHER') ? 1 : 0;
+                  const couponSql = `
+                    INSERT INTO coupons (coupon_code, description, discount_type, discount_value, valid_from, valid_until, is_global, is_active, min_spend, max_uses_per_user, total_usage_limit, current_total_uses, is_free_delivery)
+                    VALUES (?, ?, ?, ?, NOW(), ?, 0, 1, ?, 1, 1, 0, ?)
+                  `;
+                  const couponDesc = rewardType === 'FREE_DELIVERY_VOUCHER' ? `Free Delivery Voucher (${reward.title})` : reward.title || 'Discount Coupon';
+                  
+                  conn.query(couponSql, [couponCode, couponDesc, discountType, discountValue, expiresAt, minSpend, isFreeDelivery], (cInsErr, cResult) => {
+                    if (cInsErr) {
+                      conn.rollback(() => {});
+                      return res.status(500).json({ success: false, error: 'Failed to create coupon' });
+                    }
+                    
+                    const couponId = cResult.insertId;
+                    
+                    // Link coupon to user in user_coupons
+                    const ucSql = `INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, status) VALUES (?, ?, ?, NOW(), 0, 'ASSIGNED')`;
+                    conn.query(ucSql, [userId, couponId, couponCode], (ucErr) => {
+                      if (ucErr) {
+                        conn.rollback(() => {});
+                        return res.status(500).json({ success: false, error: 'Failed to assign coupon to user' });
+                      }
+                      
+                      // Commit
+                      conn.commit((cErr) => {
+                        if (cErr) {
+                          conn.rollback(() => {});
+                          return res.status(500).json({ success: false, error: 'Commit failed' });
+                        }
+                        const newPoints = currentPoints - cost;
+                        return res.json({ success: true, redemptionId: redemption.redemptionId, pointsSpent: cost, points: newPoints, newPoints: newPoints, couponCode: couponCode, message: `Reward claimed! Your code: ${couponCode}` });
+                      });
+                    });
                   });
-                });
+                } else {
+                  // Unknown reward type, just commit
+                  conn.commit((cErr) => {
+                    if (cErr) { conn.rollback(() => {}); return res.status(500).json({ success: false, error: 'Commit failed' }); }
+                    const newPoints = currentPoints - cost;
+                    return res.json({ success: true, redemptionId: redemption.redemptionId, pointsSpent: cost, points: newPoints, newPoints: newPoints, message: 'Reward claimed successfully!' });
+                  });
+                }
               });
             });
           });

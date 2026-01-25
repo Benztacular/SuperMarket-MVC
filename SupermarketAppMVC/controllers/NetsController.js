@@ -1,4 +1,4 @@
-const services = require('../services/nets_server');
+const services = require('../services/nets');
 const NetsTxn = require('../models/NetsTransaction');
 const Wallet = require('../models/Wallet');
 const axios = require('axios');
@@ -132,15 +132,16 @@ function createOrderFromCart(userId, txnRetrievalRef, options, callback) {
 
       const appliedCoupon = (options && options.appliedCoupon) ? options.appliedCoupon : null;
       const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
-      const total = Number((itemsTotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
+      const subtotal = Number(itemsTotal.toFixed(2));
+      const total = Number((subtotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
 
       // try to persist coupon fields if DB supports them, otherwise fallback
       let orderRes;
       try {
-        orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null, appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null, couponDiscount, total, 'Paid']);
+        orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, subtotal, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null, appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null, couponDiscount, subtotal, total, 'Paid']);
       } catch (insErr) {
         if (insErr && insErr.code === 'ER_BAD_FIELD_ERROR') {
-          console.warn('[NETS] orders table missing coupon columns, retrying without coupon fields');
+          console.warn('[NETS] orders table missing coupon/subtotal columns, retrying without coupon fields');
           orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, total, 'Paid']);
         } else throw insErr;
       }
@@ -160,14 +161,43 @@ function createOrderFromCart(userId, txnRetrievalRef, options, callback) {
       // mark user coupon or global coupon as used if applicable
       if (appliedCoupon && appliedCoupon.user_coupon_id) {
         try {
-          await q('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [appliedCoupon.user_coupon_id]);
+          const rows = await q('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ?', [appliedCoupon.user_coupon_id]);
+          const uc = Array.isArray(rows) && rows.length ? rows[0] : null;
+          const timesUsed = Number(uc?.times_used || 0) + 1;
+          const maxUses = Number(uc?.max_uses_per_user || 1);
+          const newStatus = (maxUses && timesUsed >= maxUses) ? 'EXHAUSTED' : 'ACTIVE';
+          const firstUsed = uc?.first_used_at ? ', first_used_at = first_used_at' : ', first_used_at = NOW()';
+          await q(`UPDATE user_coupons SET times_used = ?, status = ?, last_used_at = NOW()${firstUsed} WHERE id = ?`, [timesUsed, newStatus, appliedCoupon.user_coupon_id]);
+          // also increment master coupon usage counter when coupon_id exists
+          try {
+            if (appliedCoupon.coupon_id) {
+              await q('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id]);
+            }
+          } catch (incErr) { console.error('[NETS] increment coupons.current_total_uses error', incErr); }
         } catch (ucErr) { console.error('[NETS] mark user_coupon used error', ucErr); }
       }
       // For global coupons, record per-user usage rather than deactivating coupon globally
       if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
         try {
-          await q('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, used_at, status, min_spend) VALUES (?, ?, ?, NOW(), NOW(), "USED", ?)', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || ''), Number(appliedCoupon.min_spend || 0)]);
-        } catch (insErr) { if (insErr && insErr.code !== 'ER_DUP_ENTRY') console.error('[NETS] mark global coupon used (insert user_coupons) error', insErr); }
+          // Insert a per-user row for this global coupon, or increment times_used if it already exists
+          await q('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || '')]);
+          // increment global usage counter
+          await q('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id]);
+
+          // Ensure the per-user status reflects max_uses_per_user (mark EXHAUSTED when reached)
+          try {
+            const [[ucRow]] = await q('SELECT uc.id, uc.times_used, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.user_id = ? AND uc.coupon_id = ? LIMIT 1', [userId, appliedCoupon.coupon_id]);
+            if (ucRow) {
+              const times = Number(ucRow.times_used || 0);
+              const maxU = Number(ucRow.max_uses_per_user || 1);
+              if (maxU && times >= maxU) {
+                await q('UPDATE user_coupons SET status = ? WHERE id = ?', ['EXHAUSTED', ucRow.id]);
+              }
+            }
+          } catch (stErr) { console.error('[NETS] verify/update user_coupons status error', stErr); }
+        } catch (insErr) {
+          if (insErr && insErr.code !== 'ER_DUP_ENTRY') console.error('[NETS] mark global coupon used (insert user_coupons) error', insErr);
+        }
       }
 
       await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
@@ -279,12 +309,13 @@ exports.successPage = (req, res) => {
       return res.redirect('/payment/success?method=netsqr&txn=' + encodeURIComponent(txn));
     }
 
-    if (checkRows && checkRows.length > 0 && checkRows[0].order_id) {
+      if (checkRows && checkRows.length > 0 && checkRows[0].order_id) {
       // Order already created, just redirect
       const orderId = checkRows[0].order_id;
       console.log('[NETS] successPage - order already exists', orderId);
       txnStatusMap.set(txn, 'success');
       notifyClients(txn, { success: true, redirect: `/payment/success?orderId=${orderId}&method=netsqr&txn=${encodeURIComponent(txn)}` });
+      try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
       return res.redirect(`/payment/success?orderId=${orderId}&method=netsqr&txn=${encodeURIComponent(txn)}`);
     }
 
@@ -301,6 +332,7 @@ exports.successPage = (req, res) => {
       const redirectUrl = `/payment/success?orderId=${orderId}&method=netsqr&txn=${encodeURIComponent(txn)}&amount=${encodeURIComponent(totalAmount)}`;
       notifyClients(txn, { success: true, redirect: redirectUrl });
       NetsTxn.markStatus({ netsTxnId: txn, status: 'SUCCESS', rawResponse: req.query });
+      try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
       return res.redirect(redirectUrl);
     });
   });
@@ -591,7 +623,7 @@ exports.ssePollingStatus = async (req, res) => {
                       res.end();
                     } else {
                       // Create new order (use session-selected shipping method if available)
-                      createOrderFromCart(userId, txnRetrievalRef, { selectedShippingMethodId: req.session?.selectedShippingMethodId }, (err, orderId, totalAmount) => {
+                      createOrderFromCart(userId, txnRetrievalRef, { selectedShippingMethodId: req.session?.selectedShippingMethodId, appliedCoupon: req.session?.appliedCoupon }, (err, orderId, totalAmount) => {
                         if (err) {
                           console.error('[NETS] ssePollingStatus - createOrderFromCart error', err);
                           res.write(`data: ${JSON.stringify({ success: true, error: err.message, redirect: `/payment/success?method=netsqr&txn=${encodeURIComponent(txnRetrievalRef)}` })}\n\n`);

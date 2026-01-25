@@ -423,12 +423,13 @@ exports.confirmPayment = function (req, res) {
             // apply coupon from session if present
             const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
             const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
-            const totalWithShipping = Number((total + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
+            const subtotal = Number(total.toFixed(2));
+            const totalWithShipping = Number((subtotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
 
             const couponIdToStore = appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null;
             const couponCodeSnapshot = appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null;
 
-            conn.query('INSERT INTO orders (user_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())', [userId, shipRow.id, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, totalWithShipping, 'Pending'], (oErr, oRes) => {
+            conn.query('INSERT INTO orders (user_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, subtotal, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())', [userId, shipRow.id, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, subtotal, totalWithShipping, 'Pending'], (oErr, oRes) => {
               if (oErr) return rollbackFail('Failed to create order', oErr);
               const orderId = oRes.insertId;
               console.log('confirmPayment: created orderId =', orderId);
@@ -458,26 +459,39 @@ exports.confirmPayment = function (req, res) {
                     const encodedAmount = encodeURIComponent(totalWithShipping || '');
 
                     if (appliedCoupon && appliedCoupon.user_coupon_id) {
-                      conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [appliedCoupon.user_coupon_id], (ucErr) => {
-                        if (ucErr) console.error('mark user_coupon used error', ucErr);
-                        // if a global coupon was applied instead, mark it consumed as well
-                        if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
-                          conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [appliedCoupon.coupon_id], (cErr) => {
-                            if (cErr) console.error('mark global coupon used error', cErr);
+                      conn.query('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ?', [appliedCoupon.user_coupon_id], (selErr, selRows) => {
+                        if (selErr) console.error('select user_coupon error', selErr);
+                        const uc = selRows && selRows[0];
+                        const timesUsed = Number(uc?.times_used || 0) + 1;
+                        const maxUses = Number(uc?.max_uses_per_user || 1);
+                        const newStatus = (maxUses && timesUsed >= maxUses) ? 'EXHAUSTED' : 'ACTIVE';
+                        const firstUsed = uc?.first_used_at ? ', first_used_at = first_used_at' : ', first_used_at = NOW()';
+                        conn.query(`UPDATE user_coupons SET times_used = ?, status = ?, last_used_at = NOW()${firstUsed} WHERE id = ?`, [timesUsed, newStatus, appliedCoupon.user_coupon_id], (ucErr) => {
+                          if (ucErr) console.error('mark user_coupon used error', ucErr);
+                          if (appliedCoupon.coupon_id) conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id], () => {});
+                          // if a global coupon was applied instead, record it
+                          if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+                            conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || '')], (cErr) => {
+                              if (cErr) console.error('mark global coupon used error', cErr);
+                              try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
+                              return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
+                            });
+                          } else {
+                            try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
                             return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
-                          });
-                        } else {
-                          return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
-                        }
+                          }
+                        });
                       });
                     } else {
-                      // no user-specific coupon; if a global coupon applied, mark it consumed
+                      // no user-specific coupon; if a global coupon applied, record it
                       if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
                         conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [appliedCoupon.coupon_id], (cErr) => {
                           if (cErr) console.error('mark global coupon used error', cErr);
+                          try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
                           return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
                         });
                       } else {
+                        try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
                         return res.redirect(`/payment/success?orderId=${orderId}&method=card&last4=${encodedLast4}&amount=${encodedAmount}`);
                       }
                     }
@@ -608,30 +622,94 @@ exports.pay = function (req, res) {
           }
 
           const totalWithShipping = Number((total + shippingFee - discountAmount).toFixed(2));
-          // if a coupon is applied in session, reflect it on the payment page
-          const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
-          const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
-          const totalWithShippingAdjusted = Number(Math.max(0, totalWithShipping - couponDiscount).toFixed(2));
 
-          return res.render('pay', {
-            items,
-            cartItems: items,
-            total,
-            totalWithShipping,
-            totalWithShippingAdjusted,
-            shippingFee,
-            originalShippingFee,
-            discountAmount,
-            shippingMethods,
-            selectedShippingMethodId,
-            selectedShippingMethod,
-            addresses,
-            selectedAddressId,
-            selectedAddress,
-            membership,
-            appliedCoupon,
-            paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
-            paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+          // Validate any session-stored coupon before showing it on the payment page.
+          const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
+
+          const renderWith = (couponToUse) => {
+            const couponDiscount = Number((couponToUse && Number(couponToUse.discount || 0)) || 0);
+            const totalWithShippingAdjusted = Number(Math.max(0, totalWithShipping - couponDiscount).toFixed(2));
+            return res.render('pay', {
+              items,
+              cartItems: items,
+              total,
+              totalWithShipping,
+              totalWithShippingAdjusted,
+              shippingFee,
+              originalShippingFee,
+              discountAmount,
+              shippingMethods,
+              selectedShippingMethodId,
+              selectedShippingMethod,
+              addresses,
+              selectedAddressId,
+              selectedAddress,
+              membership,
+              appliedCoupon: couponToUse,
+              paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+              paypalCurrency: process.env.PAYPAL_CURRENCY || 'SGD'
+            });
+          };
+
+          if (!appliedCoupon) return renderWith(null);
+
+          // Ensure coupon still exists and is valid; otherwise clear it from session.
+          db.query('SELECT id, is_active, valid_from, valid_until, max_uses_per_user, total_usage_limit, current_total_uses FROM coupons WHERE id = ? LIMIT 1', [appliedCoupon.coupon_id], (ccErr, ccRows = []) => {
+            if (ccErr || !ccRows || !ccRows.length) {
+              try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
+              return renderWith(null);
+            }
+            const couponRow = ccRows[0];
+            const now = new Date();
+            if (Number(couponRow.is_active || 0) === 0 || (couponRow.valid_from && new Date(couponRow.valid_from) > now) || (couponRow.valid_until && new Date(couponRow.valid_until) < now)) {
+              try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
+              return renderWith(null);
+            }
+
+            // If this coupon code already appears on an existing order for this user, treat it as used and clear.
+            const codeToCheck = appliedCoupon.code || appliedCoupon.coupon_code || appliedCoupon.code_snapshot || null;
+            if (codeToCheck) {
+              db.query('SELECT COUNT(1) AS cnt FROM orders WHERE user_id = ? AND coupon_code_snapshot = ? LIMIT 1', [userId, codeToCheck], (ordErr, ordRows = []) => {
+                if (!ordErr && ordRows && ordRows[0] && Number(ordRows[0].cnt || 0) > 0) {
+                  try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
+                  return renderWith(null);
+                }
+
+                // proceed with existing user_coupon checks below
+                proceedCouponUsageChecks();
+              });
+            } else {
+              proceedCouponUsageChecks();
+            }
+
+            function proceedCouponUsageChecks() {
+
+              // If this coupon is tied to a user_coupon record, verify usage count
+              if (appliedCoupon.user_coupon_id) {
+                // Read times_used and authoritative max_uses_per_user from DB (join coupons)
+                db.query('SELECT uc.times_used, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ? LIMIT 1', [appliedCoupon.user_coupon_id], (ucErr, ucRows = []) => {
+                  if (ucErr) {
+                    console.error('coupon user lookup error', ucErr);
+                    return renderWith(appliedCoupon);
+                  }
+                  const uc = ucRows && ucRows[0] ? ucRows[0] : null;
+                  const timesUsed = uc ? Number(uc.times_used || 0) : 0;
+                  const maxUses = Number((uc && uc.max_uses_per_user) || couponRow.max_uses_per_user || 1);
+                  if (maxUses && timesUsed >= Number(maxUses)) {
+                    try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
+                    return renderWith(null);
+                  }
+                  return renderWith(appliedCoupon);
+                });
+              } else {
+                // global coupon — ensure total usage limit not exceeded
+                if (couponRow.total_usage_limit && Number(couponRow.current_total_uses || 0) >= Number(couponRow.total_usage_limit)) {
+                  try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
+                  return renderWith(null);
+                }
+                return renderWith(appliedCoupon);
+              }
+            }
           });
         });
       });

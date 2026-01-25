@@ -178,7 +178,33 @@ function orderHistory(req, res) {
   orderListByUser(user.id, (err, rows) => {
     if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load orders' }); }
     const orders = rows || [];
-    return res.json({ orders });
+    if (!orders.length) return res.json({ orders });
+
+    // attach totalRefunded per order so the frontend can surface partial/full refunds
+    const orderIds = orders.map(o => o.id || o.orderId).filter(Boolean);
+    if (!orderIds.length) return res.json({ orders });
+
+    db.query('SELECT order_id, COALESCE(SUM(amount),0) AS totalRefunded FROM refunds WHERE order_id IN (?) AND status = ? GROUP BY order_id', [orderIds, 'SUCCESS'], (rErr, rRows = []) => {
+      if (rErr) { console.error('orderHistory - refund aggregation error', rErr); return res.json({ orders }); }
+      const byId = (rRows || []).reduce((acc, rr) => { acc[rr.order_id] = Number(rr.totalRefunded || 0); return acc; }, {});
+      const enriched = orders.map(o => {
+        const id = o.id || o.orderId;
+        const refunded = Number(byId[id] || 0);
+        const totalAmt = Number(o.totalAmount || o.total || o.amount || 0);
+        const origStatus = (o.status || '').toString().trim();
+        const sLower = origStatus.toLowerCase();
+
+        // Normalize statuses for user-facing list so client-side filters work:
+        // - fully refunded => 'Cancelled' (only when refunded amount >= order total)
+        // - 'Partially Refunded' => 'Delivered' (per new mapping)
+        let normalizedStatus = origStatus;
+        if (refunded >= totalAmt && totalAmt > 0) normalizedStatus = 'Cancelled';
+        else if (sLower === 'partially refunded') normalizedStatus = 'Delivered';
+
+        return { ...o, totalRefunded: refunded, status: normalizedStatus };
+      });
+      return res.json({ orders: enriched });
+    });
   });
 }
 
@@ -216,10 +242,34 @@ function adminOrdersPage(req, res) {
     return;
   }
 
-  // fallback direct query
-  db.query('SELECT id AS orderId, user_id AS userId, totalAmount, status, createdAt FROM orders ORDER BY id DESC', [], (err, rows) => {
+  // include total refunded amount per order so the admin UI can show partial/full refunds
+  db.query(`SELECT o.id AS orderId, o.user_id AS userId, o.totalAmount, o.status, o.createdAt,
+    (SELECT COALESCE(SUM(r.amount),0) FROM refunds r WHERE r.order_id = o.id AND r.status = 'SUCCESS') AS totalRefunded
+    FROM orders o ORDER BY o.id DESC`, [], (err, rows) => {
     if (err) { console.error(err); return res.status(500).send('Failed to load orders'); }
-    return res.render('adminOrders', { orders: rows || [] });
+    // Normalize historic status values to match current business rules for UI filtering:
+    // - Fully refunded (totalRefunded >= totalAmount) => treat as 'Cancelled'
+    // - Explicit 'Refunded' status (legacy) => treat as 'Cancelled'
+    // - 'Partially Refunded' => treat as 'Delivered' (per new mapping)
+    const normalized = (rows || []).map(r => {
+      const copy = Object.assign({}, r);
+      const totalAmt = Number(copy.totalAmount || 0);
+      const refunded = Number(copy.totalRefunded || 0);
+      const s = (copy.status || '').toString().trim();
+      const sLower = s.toLowerCase();
+
+      if (refunded >= totalAmt && totalAmt > 0) {
+        copy.status = 'Cancelled';
+      } else if (sLower === 'refunded') {
+        copy.status = 'Cancelled';
+      } else if (sLower === 'partially refunded') {
+        copy.status = 'Delivered';
+      }
+
+      return copy;
+    });
+
+    return res.render('adminOrders', { orders: normalized });
   });
 }
 
@@ -346,16 +396,30 @@ const checkout = function (req, res, next) {
                   appliedShippingFee = Math.max(0, originalShippingFee - Number(membership.priority_delivery_discount));
                 }
 
+                // handle applied coupon from session (re-validate server-side)
+                let couponDiscount = 0;
+                let appliedCoupon = (req.session && req.session.appliedCoupon) ? req.session.appliedCoupon : null;
+                
+                // Check if the applied coupon is a free delivery voucher
+                if (appliedCoupon && appliedCoupon.coupon_id) {
+                  conn.query('SELECT is_free_delivery FROM coupons WHERE id = ? LIMIT 1', [appliedCoupon.coupon_id], (fdErr, fdRows = []) => {
+                    const isFreeDelivery = (!fdErr && fdRows && fdRows[0] && Number(fdRows[0].is_free_delivery || 0)) === 1;
+                    if (isFreeDelivery) {
+                      appliedShippingFee = 0; // Free delivery voucher overrides all shipping fees
+                    }
+                    continueMembershipDiscounts();
+                  });
+                } else {
+                  continueMembershipDiscounts();
+                }
+
+                function continueMembershipDiscounts() {
                 let discountAmount = 0;
                 const discThresh = Number(membership.discount_threshold || 0);
                 const discPercent = Number(membership.discount_percent || 0);
                 if (discPercent > 0 && itemsTotal >= discThresh) {
                   discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
                 }
-
-                // handle applied coupon from session (re-validate server-side)
-                let couponDiscount = 0;
-                let appliedCoupon = (req.session && req.session.appliedCoupon) ? req.session.appliedCoupon : null;
 
                 function finalizeOrderWithCoupon(couponDiscountAmount, userCouponIdToMark) {
                   const totalAmount = Number((itemsTotal + appliedShippingFee - discountAmount - (couponDiscountAmount || 0)).toFixed(2));
@@ -383,18 +447,45 @@ const checkout = function (req, res, next) {
 
                             Promise.all(stockPromises).then(() => {
                               const markUserCoupon = userCouponIdToMark ? new Promise((resolve, reject) => {
-                                conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [userCouponIdToMark], (ucErr) => {
-                                  if (ucErr) { console.error('mark user_coupon used error', ucErr); return resolve(); }
-                                  return resolve();
+                                conn.query('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ?', [userCouponIdToMark], (selErr, selRows) => {
+                                  if (selErr) { console.error('select user_coupon error', selErr); return resolve(); }
+                                  const uc = selRows && selRows[0];
+                                  const timesUsed = Number(uc?.times_used || 0) + 1;
+                                  const maxUses = Number(uc?.max_uses_per_user || 1);
+                                  const newStatus = (maxUses && timesUsed >= maxUses) ? 'EXHAUSTED' : 'ACTIVE';
+                                  const firstUsed = uc?.first_used_at ? ', first_used_at = first_used_at' : ', first_used_at = NOW()';
+                                  conn.query(`UPDATE user_coupons SET times_used = ?, status = ?, last_used_at = NOW()${firstUsed} WHERE id = ?`, [timesUsed, newStatus, userCouponIdToMark], (ucErr) => {
+                                    if (ucErr) { console.error('mark user_coupon used error', ucErr); return resolve(); }
+                                    if (appliedCoupon && appliedCoupon.coupon_id) {
+                                      conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id], () => resolve());
+                                    } else resolve();
+                                  });
                                 });
                               }) : Promise.resolve();
 
                               markUserCoupon.then(() => {
                                 // additionally mark global coupon as used (single-use) if applicable
                                 const markGlobal = (req.session && req.session.appliedCoupon && req.session.appliedCoupon.coupon_id && Number(req.session.appliedCoupon.is_global || 0)) ? new Promise((resolve) => {
-                                  conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [req.session.appliedCoupon.coupon_id], (cErr) => {
-                                    if (cErr) console.error('mark global coupon used error', cErr);
-                                    return resolve();
+                                  const ac = req.session.appliedCoupon;
+                                  conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, ac.coupon_id, (ac.code || '')], (insErr) => {
+                                    if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
+                                    if (ac && ac.coupon_id) {
+                                      conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [ac.coupon_id], (upErr) => {
+                                        if (upErr) console.error('order increment coupons.current_total_uses error', upErr);
+                                        conn.query('SELECT uc.id, uc.times_used, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.user_id = ? AND uc.coupon_id = ? LIMIT 1', [userId, ac.coupon_id], (sErr, sRows = []) => {
+                                          if (sErr) console.error('order select user_coupons after insert error', sErr);
+                                          const ucRow = sRows && sRows[0];
+                                          if (ucRow) {
+                                            const times = Number(ucRow.times_used || 0);
+                                            const maxU = Number(ucRow.max_uses_per_user || 1);
+                                            if (maxU && times >= maxU) {
+                                              conn.query('UPDATE user_coupons SET status = ? WHERE id = ?', ['EXHAUSTED', ucRow.id], (stErr) => { if (stErr) console.error('order set EXHAUSTED error', stErr); });
+                                            }
+                                          }
+                                          return resolve();
+                                        });
+                                      });
+                                    } else return resolve();
                                   });
                                 }) : Promise.resolve();
 
@@ -404,6 +495,7 @@ const checkout = function (req, res, next) {
                                     conn.commit((commitErr) => {
                                       if (commitErr) return rollback('COMMIT_FAIL', commitErr);
                                       release();
+                                      try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
                                       const encodedAmount = encodeURIComponent(totalAmount || '');
                                       return res.redirect('/payment/success?orderId=' + orderId + '&method=card&amount=' + encodedAmount);
                                     });
@@ -434,20 +526,47 @@ const checkout = function (req, res, next) {
                       Promise.all(stockPromises).then(() => {
                         // mark user_coupon as used if applicable
                         const markUserCoupon = userCouponIdToMark ? new Promise((resolve, reject) => {
-                          conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [userCouponIdToMark], (ucErr) => {
-                            if (ucErr) { console.error('mark user_coupon used error', ucErr); return resolve(); }
-                            return resolve();
+                          conn.query('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ?', [userCouponIdToMark], (selErr, selRows) => {
+                            if (selErr) { console.error('select user_coupon error', selErr); return resolve(); }
+                            const uc = selRows && selRows[0];
+                            const timesUsed = Number(uc?.times_used || 0) + 1;
+                            const maxUses = Number(uc?.max_uses_per_user || 1);
+                            const newStatus = (maxUses && timesUsed >= maxUses) ? 'EXHAUSTED' : 'ACTIVE';
+                            const firstUsed = uc?.first_used_at ? ', first_used_at = first_used_at' : ', first_used_at = NOW()';
+                            conn.query(`UPDATE user_coupons SET times_used = ?, status = ?, last_used_at = NOW()${firstUsed} WHERE id = ?`, [timesUsed, newStatus, userCouponIdToMark], (ucErr) => {
+                              if (ucErr) { console.error('mark user_coupon used error', ucErr); return resolve(); }
+                              if (appliedCoupon && appliedCoupon.coupon_id) {
+                                conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id], () => resolve());
+                              } else resolve();
+                            });
                           });
                         }) : Promise.resolve();
 
                         markUserCoupon.then(() => {
                           // additionally mark global coupon as used (single-use) if applicable
-                          const markGlobal = (req.session && req.session.appliedCoupon && req.session.appliedCoupon.coupon_id && Number(req.session.appliedCoupon.is_global || 0)) ? new Promise((resolve) => {
-                            conn.query('UPDATE coupons SET is_active = 0, used_at = NOW() WHERE id = ? AND is_active = 1', [req.session.appliedCoupon.coupon_id], (cErr) => {
-                              if (cErr) console.error('mark global coupon used error', cErr);
-                              return resolve();
-                            });
-                          }) : Promise.resolve();
+                                const markGlobal = (req.session && req.session.appliedCoupon && req.session.appliedCoupon.coupon_id && Number(req.session.appliedCoupon.is_global || 0)) ? new Promise((resolve) => {
+                                  const ac = req.session.appliedCoupon;
+                                  conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, ac.coupon_id, (ac.code || '')], (insErr) => {
+                                    if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
+                                    if (ac && ac.coupon_id) {
+                                      conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [ac.coupon_id], (upErr) => {
+                                        if (upErr) console.error('order increment coupons.current_total_uses error', upErr);
+                                        conn.query('SELECT uc.id, uc.times_used, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.user_id = ? AND uc.coupon_id = ? LIMIT 1', [userId, ac.coupon_id], (sErr, sRows = []) => {
+                                          if (sErr) console.error('order select user_coupons after insert error', sErr);
+                                          const ucRow = sRows && sRows[0];
+                                          if (ucRow) {
+                                            const times = Number(ucRow.times_used || 0);
+                                            const maxU = Number(ucRow.max_uses_per_user || 1);
+                                            if (maxU && times >= maxU) {
+                                              conn.query('UPDATE user_coupons SET status = ? WHERE id = ?', ['EXHAUSTED', ucRow.id], (stErr) => { if (stErr) console.error('order set EXHAUSTED error', stErr); });
+                                            }
+                                          }
+                                          return resolve();
+                                        });
+                                      });
+                                    } else return resolve();
+                                  });
+                                }) : Promise.resolve();
 
                           markGlobal.then(() => {
                             conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (clearErr) => {
@@ -455,6 +574,7 @@ const checkout = function (req, res, next) {
                               conn.commit((commitErr) => {
                                 if (commitErr) return rollback('COMMIT_FAIL', commitErr);
                                 release();
+                                try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
                                 const encodedAmount = encodeURIComponent(totalAmount || '');
                                 return res.redirect('/payment/success?orderId=' + orderId + '&method=card&amount=' + encodedAmount);
                               });
@@ -468,6 +588,7 @@ const checkout = function (req, res, next) {
                     });
                   });
                 }
+                } // end continueMembershipDiscounts
 
                 if (appliedCoupon && appliedCoupon.coupon_id) {
                   // re-validate coupon from DB
@@ -494,7 +615,8 @@ const checkout = function (req, res, next) {
                       // ensure user coupon still assigned
                       const userCouponId = appliedCoupon.user_coupon_id || null;
                       if (!userCouponId) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
-                      conn.query('SELECT * FROM user_coupons WHERE id = ? AND user_id = ? AND status = "ASSIGNED" LIMIT 1', [userCouponId, userId], (uc2Err, uc2Rows = []) => {
+                      // Accept coupons that are ASSIGNED or already ACTIVE (legacy/status differences)
+                      conn.query('SELECT * FROM user_coupons WHERE id = ? AND user_id = ? AND status IN ("ASSIGNED","ACTIVE") LIMIT 1', [userCouponId, userId], (uc2Err, uc2Rows = []) => {
                         if (uc2Err) { console.error('checkout - user_coupons lookup error', uc2Err); return finalizeOrderWithCoupon(0, null); }
                         if (!uc2Rows || !uc2Rows.length) { try { if (req.session) req.session.appliedCoupon = null; } catch(e){}; return finalizeOrderWithCoupon(0, null); }
 
@@ -548,22 +670,33 @@ function applyCoupon(req, res) {
 
       // If coupon is not global, ensure user has assigned coupon
       if (!Number(coupon.is_global)) {
-        db.query('SELECT * FROM user_coupons WHERE user_id = ? AND coupon_id = ? AND coupon_code = ? AND status = "ASSIGNED" LIMIT 1', [userId, coupon.id, coupon.coupon_code], (ucErr, ucRows = []) => {
+        db.query('SELECT * FROM user_coupons WHERE user_id = ? AND coupon_id = ? AND coupon_code = ? AND status IN ("ASSIGNED", "ACTIVE") LIMIT 1', [userId, coupon.id, coupon.coupon_code], (ucErr, ucRows = []) => {
           if (ucErr) { console.error('applyCoupon - user_coupons query error', ucErr); return res.status(500).json({ success: false, message: 'Internal error' }); }
           if (!ucRows || !ucRows.length) return res.json({ success: false, message: 'Coupon not assigned to this user' });
           const userCoupon = ucRows[0];
-          return continueWithCartTotal(userCoupon.min_spend || coupon.min_spend, userCoupon.id);
+          // check if user has reached max usage limit
+          const timesUsed = Number(userCoupon.times_used || 0);
+          const maxUses = Number(coupon.max_uses_per_user || 1);
+          if (timesUsed >= maxUses) return res.json({ success: false, message: 'Coupon usage limit reached' });
+          return continueWithCartTotal(coupon.min_spend || 0, userCoupon.id, coupon, maxUses);
         });
       } else {
-        // For global coupons, ensure this user hasn't used it before
-        db.query('SELECT * FROM user_coupons WHERE user_id = ? AND coupon_id = ? AND status = "USED" LIMIT 1', [userId, coupon.id], (usedErr, usedRows = []) => {
+        // For global coupons, check usage limits
+        db.query('SELECT * FROM user_coupons WHERE user_id = ? AND coupon_id = ? LIMIT 1', [userId, coupon.id], (usedErr, usedRows = []) => {
           if (usedErr) { console.error('applyCoupon - user usage lookup error', usedErr); return res.status(500).json({ success: false, message: 'Internal error' }); }
-          if (usedRows && usedRows.length) return res.json({ success: false, message: 'Coupon already used by this user' });
-          return continueWithCartTotal(coupon.min_spend || 0, null);
+          const userCoupon = usedRows && usedRows[0];
+          const timesUsed = Number(userCoupon?.times_used || 0);
+          const maxUses = Number(coupon.max_uses_per_user || 1);
+          if (timesUsed >= maxUses) return res.json({ success: false, message: 'Coupon usage limit reached' });
+          // check total usage limit if set
+          if (coupon.total_usage_limit && Number(coupon.current_total_uses || 0) >= Number(coupon.total_usage_limit)) {
+            return res.json({ success: false, message: 'Coupon usage limit reached' });
+          }
+          return continueWithCartTotal(coupon.min_spend || 0, userCoupon?.id || null, coupon, maxUses);
         });
       }
 
-      function continueWithCartTotal(requiredMinSpend, userCouponId) {
+      function continueWithCartTotal(requiredMinSpend, userCouponId, coupon, maxUses) {
         // compute cart subtotal (respect selectedCartItemIds in session)
         let cartSql = 'SELECT ci.quantity AS qty, p.price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ?';
         const params = [userId];
@@ -588,7 +721,7 @@ function applyCoupon(req, res) {
 
           const newTotal = Number((itemsTotal - discount).toFixed(2));
           // store applied coupon in session so final order placement can access it
-          try { if (req.session) req.session.appliedCoupon = { coupon_id: coupon.id, user_coupon_id: userCouponId, code: coupon.coupon_code, discount: discount, is_global: Number(coupon.is_global || 0), is_active: (typeof coupon.is_active !== 'undefined') ? Number(coupon.is_active || 0) : 1 }; } catch (e) { /* ignore session write errors */ }
+          try { if (req.session) req.session.appliedCoupon = { coupon_id: coupon.id, user_coupon_id: userCouponId, code: coupon.coupon_code, discount: discount, is_global: Number(coupon.is_global || 0), is_active: (typeof coupon.is_active !== 'undefined') ? Number(coupon.is_active || 0) : 1, max_uses_per_user: maxUses, min_spend: Number(requiredMinSpend || 0) }; } catch (e) { /* ignore session write errors */ }
           return res.json({ success: true, discount: discount, subtotal: Number(itemsTotal.toFixed(2)), newTotal: newTotal, coupon: { id: coupon.id, code: coupon.coupon_code, type: coupon.discount_type, value: Number(coupon.discount_value) }, userCouponId: userCouponId });
         });
       }
@@ -740,51 +873,9 @@ function showReceipt(req, res) {
 
 // history: list all orders for current user and render orderHistory.ejs
 function history(req, res) {
-  const sessionUser = req.session?.user;
-  const userId = sessionUser?.id || req.session?.userId;
-  if (!userId) return res.redirect('/login');
-
-  db.query('SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC', [userId], (err, rows = []) => {
-    if (err) { console.error(err); return res.status(500).send('Failed to load orders'); }
-
-    const orders = rows || [];
-    const orderIds = orders.map(o => o.id).filter(Boolean);
-    if (!orderIds.length) {
-      return res.render('orderHistory', {
-        orders,
-        pageTitle: 'Current Orders',
-        showDelivered: false,
-        user: sessionUser,
-        isAdmin: sessionUser?.role === 'admin'
-      });
-    }
-
-    const itemsSql = `
-      SELECT oi.order_id, oi.quantity AS qty, oi.price, p.productName, p.image
-      FROM order_items oi
-      LEFT JOIN products p ON p.id = oi.product_id
-      WHERE oi.order_id IN (?)
-    `;
-    db.query(itemsSql, [orderIds], (iErr, itemRows = []) => {
-      if (iErr) { console.error(iErr); /* fall back to rendering without items */ }
-      const itemsByOrder = (itemRows || []).reduce((acc, r) => {
-        const id = r.order_id;
-        acc[id] = acc[id] || [];
-        acc[id].push({ name: r.productName || r.product_name || '', qty: r.qty || r.quantity || 0, price: Number(r.price || 0), image: r.image || r.product_image || '' });
-        return acc;
-      }, {});
-
-      orders.forEach(o => { o.items = itemsByOrder[o.id] || []; });
-
-      return res.render('orderHistory', {
-        orders,
-        pageTitle: 'Current Orders',
-        showDelivered: false,
-        user: sessionUser,
-        isAdmin: sessionUser?.role === 'admin'
-      });
-    });
-  });
+  // Reuse the more feature-complete orderHistoryPage implementation so
+  // both `/orders` and `/orderHistory` routes include refund data.
+  return orderHistoryPage(req, res);
 }
 
 function orderHistoryPage(req, res) {
@@ -808,7 +899,7 @@ function orderHistoryPage(req, res) {
     }
 
     const itemsSql = `
-      SELECT oi.order_id, oi.quantity AS qty, oi.price, p.productName
+      SELECT oi.order_id, oi.quantity AS qty, oi.price, p.productName, p.image
       FROM order_items oi
       LEFT JOIN products p ON p.id = oi.product_id
       WHERE oi.order_id IN (?)
@@ -818,7 +909,7 @@ function orderHistoryPage(req, res) {
       const itemsByOrder = (itemRows || []).reduce((acc, r) => {
         const id = r.order_id;
         acc[id] = acc[id] || [];
-        acc[id].push({ name: r.productName || r.product_name || '', qty: r.qty || r.quantity || 0, price: Number(r.price || 0) });
+        acc[id].push({ name: r.productName || r.product_name || '', qty: r.qty || r.quantity || 0, price: Number(r.price || 0), image: r.image || r.product_image || '' });
         return acc;
       }, {});
 
@@ -837,17 +928,36 @@ function orderHistoryPage(req, res) {
           return acc;
         }, {});
 
-        orders.forEach(o => { 
-          o.items = itemsByOrder[o.id] || [];
-          o.refund = refundsByOrder[o.id] || null;
-        });
+        // Also aggregate total refunded amounts per order (successful refunds)
+        db.query('SELECT order_id, COALESCE(SUM(amount),0) AS totalRefunded FROM refunds WHERE order_id IN (?) AND status = ? GROUP BY order_id', [orderIds, 'SUCCESS'], (aggErr, aggRows = []) => {
+          if (aggErr) { console.error('Error loading refund aggregates:', aggErr); }
+          const refundedByOrder = (aggRows || []).reduce((acc, r) => { acc[r.order_id] = Number(r.totalRefunded || 0); return acc; }, {});
 
-        return res.render('orderHistory', {
-          orders,
-          pageTitle: 'Order History',
-          showDelivered: true,
-          user: sessionUser,
-          isAdmin: sessionUser?.role === 'admin'
+          orders.forEach(o => {
+            const totalAmt = Number(o.totalAmount || o.total || o.amount || 0);
+            const refunded = Number(refundedByOrder[o.id] || 0);
+            o.items = itemsByOrder[o.id] || [];
+            o.refund = refundsByOrder[o.id] || null;
+            o.totalRefunded = refunded;
+
+            // Normalize statuses to support UI filters and the requested business rules
+            const s = (o.status || '').toString().trim();
+            const sLower = s.toLowerCase();
+            // Only mark Cancelled when the total refunded amount covers the order total
+            if (refunded >= totalAmt && totalAmt > 0) {
+              o.status = 'Cancelled';
+            } else if (sLower === 'partially refunded') {
+              o.status = 'Delivered';
+            }
+          });
+
+          return res.render('orderHistory', {
+            orders,
+            pageTitle: 'Order History',
+            showDelivered: true,
+            user: sessionUser,
+            isAdmin: sessionUser?.role === 'admin'
+          });
         });
       });
     });
@@ -905,7 +1015,30 @@ exports.adminList = (req, res, next) => {
   `;
   db.query(sql, (err, rows) => {
     if (err) return next(err);
-    res.render('adminOrders', { orders: rows || [] });
+    // Normalize: if any refund row exists for an order, treat it as Cancelled for listing
+    const orderIds = (rows || []).map(r => r.orderId).filter(Boolean);
+    if (!orderIds.length) return res.render('adminOrders', { orders: rows || [] });
+
+    db.query('SELECT order_id, COALESCE(SUM(amount),0) AS totalRefunded, COUNT(*) AS refundCount FROM refunds WHERE order_id IN (?) GROUP BY order_id', [orderIds], (rfErr, rfRows = []) => {
+      if (rfErr) { console.error('adminList - refund aggregation error', rfErr); return res.render('adminOrders', { orders: rows || [] }); }
+      const refundsById = (rfRows || []).reduce((acc, rr) => { acc[rr.order_id] = rr; return acc; }, {});
+      const normalized = (rows || []).map(r => {
+        const copy = Object.assign({}, r);
+        const agg = refundsById[copy.orderId] || null;
+        const refunded = agg ? Number(agg.totalRefunded || 0) : 0;
+        const refundCount = agg ? Number(agg.refundCount || 0) : 0;
+        const totalAmt = Number(copy.totalAmount || 0);
+
+        if (refunded >= totalAmt && totalAmt > 0) {
+          copy.status = 'Cancelled';
+        } else if ((copy.status || '').toString().toLowerCase() === 'partially refunded') {
+          copy.status = 'Delivered';
+        }
+        return copy;
+      });
+
+      return res.render('adminOrders', { orders: normalized });
+    });
   });
 };
 
@@ -965,7 +1098,12 @@ function paymentSuccess(req, res) {
       date: opts.date || (new Date()).toLocaleString(),
       paymentMethod: opts.paymentMethod || (method === 'paypal' ? 'PayPal' : (method === 'card' ? 'Card' : method)),
       maskedCard: opts.maskedCard || (last4 ? ('**** ' + String(last4).slice(-4)) : null),
-      amount: opts.amount || amount || null,
+      amount: opts.amount || null,  // ONLY use database amount, ignore query string
+      subtotal: opts.subtotal || null,
+      membershipDiscount: opts.membershipDiscount || 0,
+      shippingFee: opts.shippingFee || null,
+      couponDiscount: opts.couponDiscount || 0,
+      couponCode: opts.couponCode || null,
       orderId: opts.orderId || orderId || null
     });
   };
@@ -982,7 +1120,12 @@ function paymentSuccess(req, res) {
         date: merged.date || (new Date()).toLocaleString(),
         paymentMethod: merged.paymentMethod || (method === 'paypal' ? 'PayPal' : (method === 'card' ? 'Card' : method)),
         maskedCard: merged.maskedCard || (last4 ? ('**** ' + String(last4).slice(-4)) : null),
-        amount: merged.amount || amount || null,
+        amount: merged.amount || null,  // ONLY use database amount, ignore query string
+        subtotal: merged.subtotal || null,
+        membershipDiscount: merged.membershipDiscount || 0,
+        shippingFee: merged.shippingFee || null,
+        couponDiscount: merged.couponDiscount || 0,
+        couponCode: merged.couponCode || null,
         orderId: merged.orderId || orderId || null,
         pointsEarned: merged.pointsEarned || 0
       });
@@ -991,7 +1134,7 @@ function paymentSuccess(req, res) {
 
   if (!orderId) return renderPage();
 
-  // load order to confirm ownership and get createdAt / total
+  // load order to confirm ownership and get createdAt / total / coupon details
   db.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId], (err, rows) => {
     if (err) { console.error('paymentSuccess - db error', err); return res.status(500).send('Failed to load order'); }
     const order = rows && rows[0];
@@ -1003,7 +1146,35 @@ function paymentSuccess(req, res) {
 
     const opts = {};
     opts.amount = opts.amount || order.totalAmount;
+    opts.subtotal = order.subtotal || 0;
+    opts.shippingFee = order.shipping_fee || 0;
+    opts.couponDiscount = order.coupon_discount || 0;
+    opts.couponCode = order.coupon_code_snapshot || null;
     opts.date = new Date(order.createdAt || order.orderDate || Date.now()).toLocaleString();
+
+    // compute membership discount: use stored subtotal when available, otherwise sum order_items
+    function computeMembershipDiscount(cb) {
+      const subtotalFromOrder = Number(order.subtotal || 0);
+      const proceed = (itemsSubtotal) => {
+        Membership.getUserMembership(sessionUser?.id || req.session?.userId, (mErr, membership) => {
+          if (mErr) console.error('membership lookup for paymentSuccess failed', mErr);
+          if (!membership) membership = { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 };
+          const discPercent = Number(membership.discount_percent || 0);
+          const discThresh = Number(membership.discount_threshold || 0);
+          let discountAmount = 0;
+          if (discPercent > 0 && itemsSubtotal >= discThresh) discountAmount = Number((itemsSubtotal * (discPercent / 100)).toFixed(2));
+          return cb(null, discountAmount, membership);
+        });
+      };
+
+      if (subtotalFromOrder > 0) return proceed(subtotalFromOrder);
+      // fallback: sum order_items
+      db.query('SELECT SUM(price * quantity) AS subtotal FROM order_items WHERE order_id = ?', [orderId], (sErr, sRows = []) => {
+        if (sErr) { console.error('failed to compute order items subtotal', sErr); return proceed(0); }
+        const sum = Number(sRows && sRows[0] && sRows[0].subtotal) || 0;
+        return proceed(sum);
+      });
+    }
 
     // Award loyalty points synchronously (callback) to avoid race with rendering
     const awardPointsAndThen = (cb) => {
@@ -1029,9 +1200,12 @@ function paymentSuccess(req, res) {
           opts.transactionId = pRows[0].paypal_order_id || txn || '';
           if (pRows[0].payment_time) opts.date = new Date(pRows[0].payment_time).toLocaleString();
         }
-        // Award points then render
-        awardPointsAndThen(function(points) {
-          return renderPageWithPoints({ transactionId: opts.transactionId, date: opts.date, paymentMethod: 'PayPal', maskedCard: null, amount: opts.amount, orderId: orderId });
+        // compute membership discount, then award points and render
+        computeMembershipDiscount((mErr, membershipDiscount) => {
+          opts.membershipDiscount = membershipDiscount || 0;
+          awardPointsAndThen(function(points) {
+            return renderPageWithPoints({ transactionId: opts.transactionId, date: opts.date, paymentMethod: 'PayPal', maskedCard: null, amount: opts.amount, subtotal: opts.subtotal, membershipDiscount: opts.membershipDiscount, shippingFee: opts.shippingFee, couponDiscount: opts.couponDiscount, couponCode: opts.couponCode, orderId: orderId });
+          });
         });
       });
       return;
@@ -1040,9 +1214,12 @@ function paymentSuccess(req, res) {
     // card or other (use last4 if provided)
     opts.transactionId = txn || null;
     opts.maskedCard = last4 ? ('**** ' + String(last4).slice(-4)) : null;
-    // Award points then render for non-PayPal methods
-    awardPointsAndThen(function(points) {
-      return renderPageWithPoints({ transactionId: opts.transactionId, date: opts.date, paymentMethod: method === 'card' ? 'Card' : method, maskedCard: opts.maskedCard, amount: opts.amount, orderId: orderId });
+    // compute membership discount, then award points and render for non-PayPal methods
+    computeMembershipDiscount((mErr, membershipDiscount) => {
+      opts.membershipDiscount = membershipDiscount || 0;
+      awardPointsAndThen(function(points) {
+        return renderPageWithPoints({ transactionId: opts.transactionId, date: opts.date, paymentMethod: method === 'card' ? 'Card' : method, maskedCard: opts.maskedCard, amount: opts.amount, subtotal: opts.subtotal, membershipDiscount: opts.membershipDiscount, shippingFee: opts.shippingFee, couponDiscount: opts.couponDiscount, couponCode: opts.couponCode, orderId: orderId });
+      });
     });
   });
 }

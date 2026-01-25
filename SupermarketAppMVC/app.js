@@ -333,6 +333,15 @@ app.get('/api/loyalty/rewards', requireUser, ensure(LoyaltyPointsController.getR
 app.post('/api/loyalty/redeem', requireUser, ensure(LoyaltyPointsController.redeemReward, 'LoyaltyPointsController.redeemReward'));
 app.get('/api/loyalty/redemptions', requireUser, ensure(LoyaltyPointsController.getUserRedemptions, 'LoyaltyPointsController.getUserRedemptions'));
 
+// User coupons: fetch coupons linked to user and available global coupons
+app.get('/api/user/coupons', requireUser, (req, res, next) => {
+  try {
+    const handler = require('./controllers/WalletController').userCoupons;
+    if (typeof handler === 'function') return handler(req, res, next);
+    return res.status(501).json({ success: false, message: 'Not implemented' });
+  } catch (e) { return next(e); }
+});
+
 app.post('/cart/pay/wallet', requireUser, ensure(WalletController.pay, 'WalletController.pay'));
 
 // Refunds (User)

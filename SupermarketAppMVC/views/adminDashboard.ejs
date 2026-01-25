@@ -1,58 +1,258 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Admin Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-      body { background: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; }
-      .admin-layout { display:flex; gap:20px; padding:24px; max-width:1200px; margin: 0 auto; }
-      .admin-main { flex:1; }
-    </style>
-  </head>
-  <body>
-    <%- include('partials/header') %>
+<%- include('partials/header') %>
 
-    <div class="admin-layout">
-      <%- include('partials/sidebar', { user: user }) %>
+<style>
+    :root {
+        --primary: #4f46e5;
+        --secondary: #64748b;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --bg-light: #f8fafc;
+        --card-bg: #ffffff;
+    }
 
-      <main class="admin-main">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-          <h1 class="h4 fw-bold">Dashboard</h1>
+    body {
+        background-color: var(--bg-light);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    .dashboard-container {
+        display: flex;
+        min-height: 100vh;
+    }
+
+    /* Content Area */
+    .main-content {
+        flex: 1;
+        padding: 2rem;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #e2e8f0;
+        transition: transform 0.2s;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+    }
+
+    .stat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+
+    .stat-value {
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .stat-label {
+        color: var(--secondary);
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    /* Content Grid (Tables & Charts) */
+    .content-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1.5rem;
+    }
+
+    .card {
+        background: var(--card-bg);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        padding: 1.5rem;
+    }
+
+    .card-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    /* Responsive Table */
+    .table-container {
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th {
+        text-align: left;
+        padding: 0.75rem;
+        border-bottom: 2px solid #f1f5f9;
+        color: var(--secondary);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    td {
+        padding: 1rem 0.75rem;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.875rem;
+    }
+
+    .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .status-completed { background: #dcfce7; color: #166534; }
+    .status-pending { background: #fef9c3; color: #854d0e; }
+
+    @media (max-width: 1024px) {
+        .content-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<div class="dashboard-container">
+    <%- include('partials/sidebar', { user: user }) %>
+
+    <main class="main-content">
+        <header style="margin-bottom: 2rem;">
+            <h1 style="font-size: 1.5rem; font-weight: 700; color: #1e293b;">Dashboard Overview</h1>
+            <p style="color: var(--secondary);">Welcome back, <%= user.name || 'Admin' %>. Here's what's happening today.</p>
+        </header>
+
+        <!-- Key Metrics -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Total Users</span>
+                    <div class="stat-icon" style="background: #e0e7ff; color: #4338ca;">👤</div>
+                </div>
+                <div class="stat-value"><%= stats.users || 0 %></div>
+                <div style="font-size: 0.75rem; color: var(--success); margin-top: 0.5rem;">↑ 12% from last month</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Active Products</span>
+                    <div class="stat-icon" style="background: #fef3c7; color: #b45309;">📦</div>
+                </div>
+                <div class="stat-value"><%= stats.products || 0 %></div>
+                <div style="font-size: 0.75rem; color: var(--secondary); margin-top: 0.5rem;">5 categories active</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Total Orders</span>
+                    <div class="stat-icon" style="background: #dcfce7; color: #15803d;">🛒</div>
+                </div>
+                <div class="stat-value"><%= stats.orders || 0 %></div>
+                <div style="font-size: 0.75rem; color: var(--success); margin-top: 0.5rem;">+24 new today</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Revenue</span>
+                    <div class="stat-icon" style="background: #fee2e2; color: #b91c1c;">💰</div>
+                </div>
+                <div class="stat-value">$<%= Number(stats.revenue || 0).toFixed(2) %></div>
+                <div style="font-size: 0.75rem; color: var(--danger); margin-top: 0.5rem;">↓ 2% vs targets</div>
+            </div>
         </div>
 
-        <div class="row g-3">
-          <div class="col-md-4">
-            <div class="card p-3 shadow-sm">
-              <div class="small text-muted">Users</div>
-              <div class="h3 fw-bold"><%= stats.users || 0 %></div>
+        <div class="content-grid">
+            <!-- Recent Orders Table -->
+            <div class="card">
+                <div class="card-title">
+                    Recent Orders
+                    <a href="/admin/orders" style="font-size: 0.75rem; color: var(--primary); text-decoration: none;">View All</a>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Customer</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                                                <% if (recentOrders && recentOrders.length) { %>
+                                                    <% recentOrders.forEach(function(o) { %>
+                                                        <tr>
+                                                                <td>#ORD-<%= o.id %></td>
+                                                                <td><%= o.username || 'Customer' %></td>
+                                                                <td>$<%= Number(o.totalAmount || 0).toFixed(2) %></td>
+                                                                <td>
+                                                                        <% const st = (o.status || '').toString().toLowerCase(); %>
+                                                                        <span class="status-badge <%= st === 'pending' ? 'status-pending' : 'status-completed' %>"><%= o.status || 'Unknown' %></span>
+                                                                </td>
+                                                        </tr>
+                                                    <% }); %>
+                                                <% } else { %>
+                                                    <tr>
+                                                        <td colspan="4" class="text-muted">No recent orders</td>
+                                                    </tr>
+                                                <% } %>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card p-3 shadow-sm">
-              <div class="small text-muted">Products</div>
-              <div class="h3 fw-bold"><%= stats.products || 0 %></div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card p-3 shadow-sm">
-              <div class="small text-muted">Orders</div>
-              <div class="h3 fw-bold"><%= stats.orders || 0 %></div>
-            </div>
-          </div>
-        </div>
 
-        <div class="mt-4">
-          <div class="card p-3 shadow-sm">
-            <h6 class="fw-bold">Welcome</h6>
-            <p class="mb-0">This is the admin landing page. Use the sidebar to manage users, products, and orders.</p>
-          </div>
+            <!-- System Activity / Quick Actions -->
+            <div class="card">
+                <div class="card-title">Quick Actions</div>
+                <div style="display: grid; gap: 0.75rem;">
+                    <a href="/admin/products/new" style="display: block; padding: 1rem; border: 1px dashed #cbd5e1; border-radius: 8px; text-decoration: none; color: #1e293b; text-align: center; font-weight: 500;">
+                        + Add New Product
+                    </a>
+                    <a href="/admin/users/export" style="display: block; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 8px; text-decoration: none; color: #1e293b; text-align: center; font-weight: 500;">
+                        📥 Export User List
+                    </a>
+                    <div style="margin-top: 1rem;">
+                        <h4 style="font-size: 0.875rem; margin-bottom: 0.5rem; color: var(--secondary);">System Status</h4>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                            <span style="width: 8px; height: 8px; background: var(--success); border-radius: 50%;"></span>
+                            Server Online
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </main>
-    </div>
+    </main>
+</div>
 
-    <script>lucide.createIcons();</script>
-  </body>
-</html>
+<%- include('partials/footer') %>

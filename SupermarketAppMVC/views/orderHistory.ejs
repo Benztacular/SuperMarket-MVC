@@ -280,9 +280,11 @@
                                                     const orderDate = order && (order.date || order.createdAt || order.created || order.orderDate) ? (order.date || order.createdAt || order.created || order.orderDate) : '';
                                                 %>
                                                 <div class="card-premium order-card" 
-                                                         data-status="<%= (order && order.status) ? order.status : '' %>" 
+                                                         data-status="<%= (order && order.status) ? String(order.status).trim() : '' %>" 
                                                          data-id="<%= orderIdStr %>"
-                                                         data-search-terms="<%= searchTerms %>">
+                                                         data-search-terms="<%= searchTerms %>"
+                                                         data-refunded="<%= Number(order.totalRefunded || 0) %>"
+                                                         data-total="<%= totalVal %>">
                             
                                                         <!-- Card Header -->
                                                         <div class="p-4 cursor-pointer" onclick="toggleDetails('<%= orderIdStr %>')" style="cursor: pointer;">
@@ -303,14 +305,23 @@
                                                 if(order.status === 'Delivered') badgeClass = 'bg-success bg-opacity-10 text-success';
                                                 else if(order.status === 'Shipped') badgeClass = 'bg-warning bg-opacity-10 text-warning-emphasis';
                                                 else if(order.status === 'Cancelled') badgeClass = 'bg-danger bg-opacity-10 text-danger';
+                                                else if(order.status === 'Partially Refunded') badgeClass = 'bg-info bg-opacity-10 text-info';
                                                 else if(order.status === 'Refunded') badgeClass = 'bg-info bg-opacity-10 text-info';
                                                 %>
                                                 
                                                 <span class="badge rounded-pill fw-bold px-3 py-1 <%= badgeClass %>">
                                                     <%= order.status %>
                                                 </span>
-
-                                                <% if (order.refund && order.refund.status === 'PENDING') { %>
+                                                <% // If refunds exist, surface a partial/full refund indicator even if order.status was updated to 'Delivered' per business rules %>
+                                                <% if ((order && typeof order.totalRefunded !== 'undefined') && Number(order.totalRefunded) > 0 && Number(order.totalRefunded) < Number(totalVal || 0)) { %>
+                                                    <span class="badge rounded-pill fw-bold px-3 py-1 bg-info bg-opacity-10 text-info">
+                                                        Partially Refunded
+                                                    </span>
+                                                <% } else if ((order && typeof order.totalRefunded !== 'undefined') && Number(order.totalRefunded) >= Number(totalVal || 0)) { %>
+                                                    <span class="badge rounded-pill fw-bold px-3 py-1 bg-danger bg-opacity-10 text-danger">
+                                                        Refunded
+                                                    </span>
+                                                <% } else if (order.refund && order.refund.status === 'PENDING') { %>
                                                     <span class="badge rounded-pill fw-bold px-3 py-1 bg-warning bg-opacity-10 text-warning">
                                                         <i data-lucide="clock" style="width: 12px; height: 12px;"></i> Refund Pending
                                                     </span>
@@ -433,35 +444,34 @@
                                                             View Invoice
                                                         </a>
 
-                                                        <!-- Refund Button Logic -->
-                                                        <% 
-                                                        const eligibleForRefund = ['Pending', 'Paid', 'Delivered'].includes(order.status);
-                                                        const hasRefund = order.refund && order.refund.id;
-                                                        %>
-                                                        
-                                                        <% if (hasRefund) { %>
-                                                            <% 
-                                                            let refundBadgeClass = 'bg-warning';
-                                                            let refundText = order.refund.status;
-                                                            if (order.refund.status === 'SUCCESS') {
-                                                                refundBadgeClass = 'bg-success';
-                                                                refundText = 'Refunded';
-                                                            } else if (order.refund.status === 'DENIED') {
-                                                                refundBadgeClass = 'bg-danger';
-                                                            } else if (order.refund.status === 'APPROVED') {
-                                                                refundBadgeClass = 'bg-info';
-                                                            }
-                                                            %>
-                                                            <div class="d-grid">
-                                                                <button type="button" class="btn <%= refundBadgeClass %> text-white rounded-pill fw-bold btn-sm py-2 w-100"
-                                                                    data-refund-status="<%= order.refund.status %>"
-                                                                    data-refund-amount="<%= order.refund.amount %>"
-                                                                    data-refund-note="<%= encodeURIComponent(order.refund.admin_note || '') %>"
-                                                                    onclick="(function(btn){ const status = btn.dataset.refundStatus || ''; const amount = btn.dataset.refundAmount || ''; const adminNote = decodeURIComponent(btn.dataset.refundNote || ''); showRefundStatus(status, amount, adminNote); })(this)">
-                                                                    <i data-lucide="info"></i> Refund: <%= refundText %>
-                                                                </button>
-                                                            </div>
-                                                        <% } else if (eligibleForRefund) { %>
+                                                                                                                <!-- Refund Button Logic -->
+                                                                                                                <% 
+                                                                                                                    const eligibleForRefund = ['Pending', 'Paid', 'Delivered'].includes(order.status);
+                                                                                                                    const totRefund = (typeof order.totalRefunded !== 'undefined') ? Number(order.totalRefunded || 0) : 0;
+                                                                                                                    const hasRefundRow = order.refund && order.refund.id;
+                                                                                                                    // If a refund row exists in SQL or totalRefunded > 0, show refund badge/button
+                                                                                                                    if (hasRefundRow || totRefund > 0) {
+                                                                                                                        const shownAmount = (totRefund > 0) ? totRefund : (order.refund && order.refund.amount ? Number(order.refund.amount) : Number(totalVal || 0));
+                                                                                                                        if (shownAmount >= Number(totalVal || 0) && Number(totalVal || 0) > 0) { %>
+                                                                                                                            <div class="d-grid">
+                                                                                                                                <button type="button" class="btn bg-success text-white rounded-pill fw-bold btn-sm py-2 w-100" disabled title="Refunded">
+                                                                                                                                    <i data-lucide="check-circle"></i> Refunded: $<%= shownAmount.toFixed(2) %>
+                                                                                                                                </button>
+                                                                                                                            </div>
+                                                                                                                        <% } else { %>
+                                                                                                                            <div class="d-grid">
+                                                                                                                                <button type="button" class="btn btn-info text-white rounded-pill fw-bold btn-sm py-2 w-100" disabled title="Partially Refunded">
+                                                                                                                                    <i data-lucide="info"></i> Partially Refunded: $<%= shownAmount.toFixed(2) %>
+                                                                                                                                </button>
+                                                                                                                            </div>
+                                                                                                                        <% }
+                                                                                                                    } else if (order.refund && order.refund.status === 'PENDING') { %>
+                                                                                                                        <div class="d-grid">
+                                                                                                                            <button type="button" class="btn btn-warning text-white rounded-pill fw-bold btn-sm py-2 w-100" disabled title="Refund Pending">
+                                                                                                                                <i data-lucide="clock"></i> Refund Pending
+                                                                                                                            </button>
+                                                                                                                        </div>
+                                                                                                                    <% } else if (eligibleForRefund) { %>
                                                             <div class="d-grid">
                                                                 <a href="/orders/<%= orderIdStr %>/refund" class="btn btn-outline-danger rounded-pill fw-bold btn-sm py-2 w-100">
                                                                     <i data-lucide=""></i> Request Refund
@@ -523,6 +533,8 @@
                 var w = el.getAttribute('data-width') || '';
                 el.style.width = w;
             });
+            // Apply filters on load so Cancelled/Refunded states are reflected immediately
+            try { applyFilters(); } catch(e) { console.error('applyFilters init error', e); }
         });
 
         // Expand/Collapse Details
@@ -574,17 +586,27 @@
             const cards = document.querySelectorAll('.order-card');
             let hasVisible = false;
 
-            cards.forEach(card => {
-                    const status = (card.dataset.status || '').toString().toLowerCase();
+                    cards.forEach(card => {
+                    const rawStatus = (card.dataset.status || '').toString().toLowerCase();
+                    // Treat fully 'Refunded' orders as 'Cancelled' for filter/tab selection only
+                    const status = (rawStatus === 'refunded') ? 'cancelled' : rawStatus;
                     const terms = (card.dataset.searchTerms || '').toString().toLowerCase();
                     const filterNorm = (currentFilter || '').toString().toLowerCase();
-                
+                    const refunded = Number(card.dataset.refunded || 0);
+                    const totalAmt = Number(card.dataset.total || 0);
+
                     let matchesFilter = false;
                     if (filterNorm === 'all' || !filterNorm) {
                         matchesFilter = true;
                     } else if (filterNorm === 'processing') {
                         // treat 'processing' as including paid/payment statuses
                         matchesFilter = status.includes('process') || status.includes('paid') || status.includes('payment');
+                    } else if (filterNorm === 'cancelled') {
+                        // treat orders as cancelled only when status is cancelled
+                        matchesFilter = (status === 'cancelled');
+                    } else if (filterNorm === 'delivered') {
+                        // include delivered OR partially refunded orders (partial refunds considered delivered)
+                        matchesFilter = (status === 'delivered') || (refunded > 0 && refunded < totalAmt);
                     } else {
                         matchesFilter = status === filterNorm;
                     }

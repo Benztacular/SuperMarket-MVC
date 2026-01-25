@@ -128,6 +128,42 @@
                     <% } %>
                 </div>
             </div>
+            
+            <% if (typeof subtotal !== 'undefined' && subtotal !== null) { %>
+            <div class="h-px bg-white/10 my-3"></div>
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-400 text-sm">Subtotal</span>
+                <span class="text-sm text-gray-200 font-mono">$<%= Number(subtotal || 0).toFixed(2) %></span>
+            </div>
+            <% } %>
+            
+            <% if (typeof shippingFee !== 'undefined' && shippingFee !== null) { %>
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-400 text-sm">Shipping</span>
+                <span class="text-sm text-gray-200 font-mono">
+                    <% if (Number(shippingFee) === 0) { %>
+                        <span class="text-green-400">Free</span>
+                    <% } else { %>
+                        $<%= Number(shippingFee || 0).toFixed(2) %>
+                    <% } %>
+                </span>
+            </div>
+            <% } %>
+
+            <% if (typeof membershipDiscount !== 'undefined' && Number(membershipDiscount) > 0) { %>
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-400 text-sm">Membership Discount</span>
+                <span class="text-sm text-green-400 font-mono">- $<%= Number(membershipDiscount || 0).toFixed(2) %></span>
+            </div>
+            <% } %>
+            
+            <% if (typeof couponDiscount !== 'undefined' && Number(couponDiscount) > 0) { %>
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-gray-400 text-sm">Coupon<% if (couponCode) { %> (<%= couponCode %>)<% } %></span>
+                <span class="text-sm text-green-400 font-mono">- $<%= Number(couponDiscount || 0).toFixed(2) %></span>
+            </div>
+            <% } %>
+            
             <div class="h-px bg-white/10 my-3"></div>
             <div class="flex justify-between items-center mb-3">
                 <span class="text-gray-400 text-sm">Points Earned</span>

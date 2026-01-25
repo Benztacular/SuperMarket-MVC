@@ -351,10 +351,16 @@
 
                         <!-- Action button -->
                         <div class="mt-4">
-                            <button onclick="toggleModal('rewardsModal')" class="w-full py-3 <%= loyaltyTierGradient %> text-white rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
-                                <i class="ph-fill ph-gift"></i>
-                                <span>View Rewards</span>
-                            </button>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button onclick="toggleModal('rewardsModal')" class="w-full py-3 <%= loyaltyTierGradient %> text-white rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <i class="ph-fill ph-gift"></i>
+                                    <span>View Rewards</span>
+                                </button>
+                                <button onclick="toggleCouponsModal()" class="w-full py-3 bg-white rounded-xl font-bold text-sm border border-slate-200 hover:shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <i class="ph-fill ph-ticket text-slate-700"></i>
+                                    <span>View Coupons</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -516,7 +522,7 @@
                     <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6">
                          <div class="flex items-center justify-between mb-2">
                              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wide">Spending</h3>
-                             <span class="text-xs font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-md">+12%</span>
+                             <span id="spendingChangePct" class="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md">+0%</span>
                          </div>
                          <div class="h-32">
                              <canvas id="spendingChart"></canvas>
@@ -713,6 +719,23 @@
         </div>
     </div>
 
+    <!-- Coupons Modal Overlay -->
+    <div id="couponsModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg transform scale-95 modal-content overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="bg-white p-6 flex justify-between items-center border-b border-slate-100">
+                <div>
+                    <h3 class="text-xl font-bold text-slate-900">My Coupons</h3>
+                    <p class="text-xs text-slate-500 mt-1">All coupons linked to your account and available global coupons</p>
+                </div>
+                <button onclick="toggleCouponsModal()" class="text-slate-400 hover:text-slate-700 bg-white p-2 rounded-full shadow-sm"><i class="ph-bold ph-x"></i></button>
+            </div>
+
+            <div id="couponsContainer" class="p-4 overflow-y-auto space-y-4" style="max-height:70vh">
+                <p id="couponsLoading" class="text-sm text-slate-500 text-center">Loading coupons...</p>
+            </div>
+        </div>
+    </div>
+
     <script type="application/json" id="tx-data"><%- JSON.stringify(transactions || []) %></script>
         <!-- Wallet Transactions Modal -->
         <div id="walletTransactionsModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
@@ -903,10 +926,44 @@
                 if (String(tx.type || '').toUpperCase() === 'PAYMENT') dataPoints[idx] += Math.abs(amt);
             });
 
+            // compute this week and previous week sums for percent change
+            let thisWeekSum = dataPoints.reduce((s, v) => s + Number(v || 0), 0);
+            let prevWeekSum = 0;
+            txs.forEach(tx => {
+                const created = new Date(tx.createdAt || tx.created_at || tx.created_at);
+                if (isNaN(created)) return;
+                const diffDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+                // previous week = days 7..13 ago
+                if (diffDays >= 7 && diffDays < 14) {
+                    const amt = Number(tx.amount || 0) || 0;
+                    if (String(tx.type || '').toUpperCase() === 'PAYMENT') prevWeekSum += Math.abs(amt);
+                }
+            });
+
+            // compute percent change vs previous week
+            let pct = 0;
+            if (prevWeekSum === 0) {
+                pct = thisWeekSum === 0 ? 0 : 100;
+            } else {
+                pct = ((thisWeekSum - prevWeekSum) / Math.abs(prevWeekSum)) * 100;
+            }
+            const pctRounded = Math.round(pct);
+            const pctEl = document.getElementById('spendingChangePct');
+            if (pctEl) {
+                const sign = pctRounded > 0 ? '+' : '';
+                pctEl.textContent = sign + pctRounded + '%';
+                pctEl.classList.remove('text-red-500','bg-red-50','text-green-600','bg-green-50');
+                if (pctRounded < 0) pctEl.classList.add('text-red-500','bg-red-50'); else pctEl.classList.add('text-green-600','bg-green-50');
+            }
+
             const ctx = document.getElementById('spendingChart').getContext('2d');
             const gradient = ctx.createLinearGradient(0, 0, 0, 150);
             gradient.addColorStop(0, 'rgba(34, 197, 94, 0.35)');
             gradient.addColorStop(1, 'rgba(34, 197, 94, 0.02)');
+
+            // determine a sensible suggested max for Y axis (20% headroom)
+            const maxVal = Math.max.apply(null, dataPoints.concat([1]));
+            const suggestedMax = Math.ceil(maxVal * 1.2 * 100) / 100;
 
             new Chart(ctx, {
                 type: 'line',
@@ -936,7 +993,17 @@
                     animation: { duration: 900, easing: 'easeOutQuart' },
                     scales: {
                         x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                        y: { display: true, grid: { display: false }, beginAtZero: true }
+                        y: {
+                            display: true,
+                            grid: { display: false },
+                            beginAtZero: true,
+                            suggestedMax: suggestedMax,
+                            ticks: {
+                                color: '#94a3b8',
+                                // format ticks as dollar amounts
+                                callback: function(value) { return '$' + Number(value).toFixed(2); }
+                            }
+                        }
                     }
                 }
             });
@@ -1057,6 +1124,129 @@
                 el.style.width = Math.max(0, Math.min(100, v)) + '%';
             });
         });
+    </script>
+
+    <script>
+        // Coupons modal helpers
+        function toggleCouponsModal(){
+            const modal = document.getElementById('couponsModal');
+            if(!modal) return;
+            const open = !modal.classList.contains('hidden');
+            if(!open){
+                modal.classList.remove('hidden');
+                requestAnimationFrame(()=>{ modal.classList.remove('opacity-0'); if(typeof fetchUserCoupons === 'function') fetchUserCoupons(); });
+            } else {
+                modal.classList.add('opacity-0'); setTimeout(()=> modal.classList.add('hidden'), 300);
+            }
+        }
+
+        function closeCouponsModal(){ toggleCouponsModal(); }
+
+        function toggleCouponsModal(){
+            const modal = document.getElementById('couponsModal');
+            if(!modal) return;
+            if(modal.classList.contains('hidden')){
+                modal.classList.remove('hidden');
+                requestAnimationFrame(()=>{ modal.classList.remove('opacity-0'); fetchUserCoupons(); });
+            } else {
+                modal.classList.add('opacity-0'); setTimeout(()=> modal.classList.add('hidden'), 300);
+            }
+        }
+
+        async function fetchUserCoupons(){
+            const container = document.getElementById('couponsContainer');
+            const loading = document.getElementById('couponsLoading');
+            if(loading) loading.textContent = 'Loading coupons...';
+            try{
+                const resp = await fetch('/api/user/coupons', { credentials: 'same-origin' });
+                if(!resp.ok) throw new Error('Failed to load');
+                const payload = await resp.json();
+                if(!payload || !payload.success) throw new Error(payload && payload.message ? payload.message : 'No data');
+
+                // merge user-specific first, then global excluding duplicates
+                const userList = payload.userCoupons || [];
+                let globalList = payload.globalCoupons || [];
+                const seen = new Set();
+                const merged = [];
+                userList.forEach(c => { if(c.coupon_code){ seen.add(String(c.coupon_code)); merged.push(c); } else { merged.push(c); } });
+
+                // If server didn't return explicit globalCoupons, fall back to payload.coupons
+                if((!globalList || globalList.length === 0) && Array.isArray(payload.coupons) && payload.coupons.length){
+                    try{
+                        globalList = payload.coupons.filter(pc => Number(pc.is_global || pc.isGlobal || 0) === 1);
+                    }catch(e){ globalList = [] }
+                }
+
+                globalList.forEach(c => { const code = c.coupon_code || c.c_coupon_code || c.code || c.couponCode; if(code && !seen.has(String(code))){ merged.push(Object.assign({}, c, { coupon_code: code })); seen.add(String(code)); } });
+
+                renderCoupons(merged);
+            }catch(err){
+                console.error('fetchUserCoupons', err);
+                if(loading) loading.textContent = 'Unable to load coupons.';
+                if(container) container.innerHTML = '<p class="text-sm text-slate-500 text-center">Unable to load coupons.</p>';
+            }
+        }
+
+        function renderCoupons(coupons){
+            const container = document.getElementById('couponsContainer');
+            if(!container) return;
+            container.innerHTML = '';
+            if(!coupons || !coupons.length){
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center">You have no coupons.</p>';
+                return;
+            }
+
+            // split available vs redeemed
+            const available = []; const redeemed = [];
+            coupons.forEach(c => {
+                const used = Number(c.times_used || 0) > 0 || String(c.user_status || '').toLowerCase() === 'exhausted' || String(c.user_status || '').toLowerCase() === 'used' || String(c.user_status || '').toLowerCase() === 'redeemed';
+                if(used) redeemed.push(c); else available.push(c);
+            });
+
+            // render available first
+            available.forEach(c => container.appendChild(makeCouponCard(c, false)));
+            // separator if both exist
+            if(available.length && redeemed.length){
+                const sep = document.createElement('div'); sep.className = 'text-xs text-slate-400 text-center py-2'; sep.textContent = 'Redeemed / Expired'; container.appendChild(sep);
+            }
+            redeemed.forEach(c => container.appendChild(makeCouponCard(c, true)));
+        }
+
+        function makeCouponCard(c, isRedeemed){
+            const wrap = document.createElement('div');
+            wrap.className = 'flex items-center justify-between gap-4 p-4 border rounded-2xl';
+            if(isRedeemed) wrap.className += ' bg-slate-50 text-slate-400 border-slate-100'; else wrap.className += ' bg-white border-slate-100';
+
+            const left = document.createElement('div'); left.className = 'flex-1';
+            const titleWrap = document.createElement('div'); titleWrap.className = 'flex items-center gap-2';
+            const title = document.createElement('div'); title.className = 'font-bold text-sm'; title.textContent = c.description || c.coupon_code || 'Coupon';
+            titleWrap.appendChild(title);
+            // show global badge if applicable
+            if(Number(c.is_global || 0) === 1){
+                const g = document.createElement('div'); g.className = 'text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full'; g.textContent = 'Global';
+                titleWrap.appendChild(g);
+            }
+            const code = document.createElement('div'); code.className = 'text-xs text-slate-600 mt-1'; code.textContent = c.coupon_code || c.code || '';
+            const meta = document.createElement('div'); meta.className = 'text-[11px] text-slate-400 mt-1';
+            meta.textContent = (c.is_free_delivery ? 'Free Delivery' : (c.discount_type ? (c.discount_type === 'PERCENTAGE' ? (c.discount_value + '% off') : ('$' + Number(c.discount_value||0).toFixed(2) + ' off')) : '')) + (c.min_spend ? (' • Min spend $' + Number(c.min_spend).toFixed(2)) : '');
+
+            left.appendChild(titleWrap); left.appendChild(code); left.appendChild(meta);
+
+            const right = document.createElement('div'); right.className = 'flex flex-col items-end gap-2';
+            const copyBtn = document.createElement('button'); copyBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold border'; copyBtn.textContent = 'Copy';
+            copyBtn.onclick = async function(){ try { await navigator.clipboard.writeText(c.coupon_code || ''); copyBtn.textContent = 'Copied'; setTimeout(()=> copyBtn.textContent = 'Copy', 1500); } catch(e){ alert('Copy failed'); } };
+            if(isRedeemed){ copyBtn.disabled = true; copyBtn.className += ' bg-slate-100 text-slate-400 cursor-not-allowed border-slate-100'; }
+            else { copyBtn.className += ' bg-fresh-50 text-fresh-700 border-fresh-200'; }
+
+            const redeemBadge = document.createElement('div'); redeemBadge.className = 'text-xs font-bold px-2 py-1 rounded-full';
+            if(isRedeemed){ redeemBadge.textContent = 'Redeemed'; redeemBadge.className += ' bg-slate-200 text-slate-500'; }
+            else { redeemBadge.textContent = c.user_status && String(c.user_status).toUpperCase() !== 'GLOBAL' ? (String(c.user_status).toUpperCase()) : 'Available'; redeemBadge.className += ' bg-fresh-50 text-fresh-700'; }
+
+            right.appendChild(copyBtn); right.appendChild(redeemBadge);
+
+            wrap.appendChild(left); wrap.appendChild(right);
+            return wrap;
+        }
     </script>
 
     <script>

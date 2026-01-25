@@ -531,6 +531,13 @@
                 <%= existingRefund.status %>
               </span>
             </p>
+            <% // Show partial refunded amount if available and less than full order total %>
+            <% const totRefund = typeof totalRefunded !== 'undefined' ? Number(totalRefunded) : (existingRefund && existingRefund.amount ? Number(existingRefund.amount) : 0); %>
+            <% if (totRefund > 0 && totRefund < Number(order.totalAmount || 0)) { %>
+              <p class="mb-1 mt-2"><strong>Partial Refunded:</strong> $<%= totRefund.toFixed(2) %></p>
+            <% } else if (totRefund >= Number(order.totalAmount || 0) && Number(order.totalAmount || 0) > 0) { %>
+              <p class="mb-1 mt-2"><strong>Refunded Amount:</strong> $<%= totRefund.toFixed(2) %></p>
+            <% } %>
             <% if (existingRefund.admin_note) { %>
               <p class="mb-0 mt-2"><strong>Admin Note:</strong> <%= existingRefund.admin_note %></p>
             <% } %>
@@ -632,32 +639,9 @@
             
             <div class="amount-input-wrapper">
               <span class="currency-symbol">$</span>
-              <input 
-                type="number" 
-                class="form-control amount-input" 
-                id="amount" 
-                name="amount" 
-                step="0.01" 
-                min="0.01" 
-                max="<%= Number(order.totalAmount || 0) %>"
-                value="<%= Number(order.totalAmount || 0) %>"
-                required
-              >
-            </div>
-            
-            <div class="amount-slider">
-              <input 
-                type="range" 
-                id="amountSlider" 
-                min="0.01" 
-                max="<%= Number(order.totalAmount || 0) %>" 
-                step="0.01" 
-                value="<%= Number(order.totalAmount || 0) %>"
-              >
-              <div class="amount-limits">
-                <span>$0.01</span>
-                <span>Max: $<%= Number(order.totalAmount || 0).toFixed(2) %></span>
-              </div>
+              <!-- Always refund full paid amount: submit hidden field, show readonly display -->
+              <input type="hidden" name="amount" id="amount" value="<%= Number(order.totalAmount || 0).toFixed(2) %>">
+              <input type="text" class="form-control amount-input" value="$<%= Number(order.totalAmount || 0).toFixed(2) %>" disabled aria-disabled="true">
             </div>
           </div>
 
@@ -772,19 +756,7 @@
   <script>
     lucide.createIcons();
     
-    // Sync amount input with slider
-    const amountInput = document.getElementById('amount');
-    const amountSlider = document.getElementById('amountSlider');
-    
-    if (amountInput && amountSlider) {
-      amountSlider.addEventListener('input', function() {
-        amountInput.value = parseFloat(this.value).toFixed(2);
-      });
-      
-      amountInput.addEventListener('input', function() {
-        amountSlider.value = this.value;
-      });
-    }
+    // Amount is fixed to full order total; no slider sync required
     
     // Character counter
     const reasonTextarea = document.getElementById('additional_details');

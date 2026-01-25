@@ -3,6 +3,7 @@ const db = require('../db');
 const paypalService = require('../services/paypal');
 const stripeService = require('../services/stripe');
 const Product = require('../models/Product');
+const netsService = require('../services/nets');
 
 function uid(req) {
   const u = req.session?.user;
@@ -58,11 +59,16 @@ exports.requestPage = (req, res) => {
         if (itemErr) console.error('RefundController.requestPage - items error', itemErr);
         console.log('RefundController.requestPage - items count:', (items && items.length) || 0);
 
-        console.log('RefundController.requestPage - rendering refund page for order:', order.id);
-        res.render('refund', {
-          order,
-          items: items || [],
-          existingRefund
+        // Also compute total refunded for this order to surface partial refunds
+        Refund.getTotalRefundedForOrder(orderId, (totErr, totalRefunded) => {
+          if (totErr) console.error('RefundController.requestPage - totalRefunded error', totErr);
+          console.log('RefundController.requestPage - rendering refund page for order:', order.id, 'totalRefunded:', totalRefunded);
+          res.render('refund', {
+            order,
+            items: items || [],
+            existingRefund,
+            totalRefunded: Number(totalRefunded || 0)
+          });
         });
       });
     });
@@ -294,8 +300,47 @@ exports.adminApproveRefund = async (req, res) => {
 
     console.log('RefundController.adminApproveRefund - processing refund for method:', refund.method);
 
-    // Process refund based on payment method
-    if (refund.method === 'Stripe') {
+    // allow admin to override approved amount for partial refunds
+    const adminAmountRaw = req.body && req.body.amount;
+    let adminAmount = (typeof adminAmountRaw !== 'undefined' && adminAmountRaw !== null) ? parseFloat(String(adminAmountRaw).trim()) : NaN;
+    if (isNaN(adminAmount) || adminAmount <= 0) adminAmount = Number(refund.amount || 0);
+
+    // Ensure adminAmount does not exceed remaining refundable amount
+    Refund.getTotalRefundedForOrder(refund.order_id, (totalErr, totalRefundedSoFar) => {
+      if (totalErr) {
+        console.error('RefundController.adminApproveRefund - failed to compute previous refunds', totalErr);
+        if (req.flash) req.flash('error', 'Failed to validate refund amount');
+        return res.redirect('/admin/refunds');
+      }
+
+      const orderTotal = Number(refund.orderTotal || 0);
+      const remaining = Math.max(0, orderTotal - Number(totalRefundedSoFar || 0));
+      if (adminAmount > remaining) {
+        if (req.flash) req.flash('error', `Approved amount exceeds remaining refundable amount ($${remaining.toFixed(2)}).`);
+        return res.redirect('/admin/refunds');
+      }
+
+      // If admin changed the amount, persist it on the refund row
+      const amountToProcess = Number(adminAmount || refund.amount || 0);
+      if (Number(refund.amount) !== amountToProcess) {
+        Refund.updateAmount(refundId, amountToProcess, (updErr) => {
+          if (updErr) console.error('RefundController.adminApproveRefund - failed to update refund amount', updErr);
+          // update local object for subsequent processing
+          refund.amount = amountToProcess;
+          continueProcessingWithAmount(refund, refundId, adminNote, req, res);
+        });
+      } else {
+        // no change
+        refund.amount = amountToProcess;
+        continueProcessingWithAmount(refund, refundId, adminNote, req, res);
+      }
+    });
+    return;
+
+    
+    async function continueProcessingWithAmount(refund, refundId, adminNote, req, res) {
+        // Process refund based on payment method
+        if (refund.method === 'Stripe') {
       // Process Stripe refund through gateway
       try {
         // Get Stripe transaction details
@@ -342,7 +387,7 @@ exports.adminApproveRefund = async (req, res) => {
                   if (pErr) console.error('RefundController.adminApproveRefund - failed to restore product stock', pErr);
 
                   // Update order status regardless of stock restore result
-                  db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                  updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
                     if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
 
                     if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to Stripe payment method.`);
@@ -351,7 +396,7 @@ exports.adminApproveRefund = async (req, res) => {
                 });
               } catch (ex) {
                 console.error('RefundController.adminApproveRefund - exception restoring stock', ex);
-                db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
                   if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
                   if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to Stripe payment method.`);
                   return res.redirect('/admin/refunds');
@@ -369,7 +414,7 @@ exports.adminApproveRefund = async (req, res) => {
         if (req.flash) req.flash('error', 'Failed to process Stripe refund');
         return res.redirect('/admin/refunds');
       }
-    } else if (refund.method === 'PayPal') {
+      } else if (refund.method === 'PayPal') {
       // Process PayPal refund through gateway
       try {
         // Get PayPal transaction details
@@ -416,7 +461,7 @@ exports.adminApproveRefund = async (req, res) => {
                   if (pErr) console.error('RefundController.adminApproveRefund - failed to restore product stock', pErr);
 
                   // Update order status regardless of stock restore result
-                  db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                  updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
                     if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
 
                     if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to PayPal account.`);
@@ -425,7 +470,7 @@ exports.adminApproveRefund = async (req, res) => {
                 });
               } catch (ex) {
                 console.error('RefundController.adminApproveRefund - exception restoring stock', ex);
-                db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+                updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
                   if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
                   if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded to PayPal account.`);
                   return res.redirect('/admin/refunds');
@@ -443,14 +488,54 @@ exports.adminApproveRefund = async (req, res) => {
         if (req.flash) req.flash('error', 'Failed to process PayPal refund');
         return res.redirect('/admin/refunds');
       }
-    } else if (refund.method === 'NETS QR') {
-      // NETS refunds would require NETS API integration
-      // For now, fallback to wallet credit
-      console.log('RefundController.adminApproveRefund - NETS refunds not yet implemented, crediting to wallet');
-      processWalletRefund(refund, refundId, adminNote, req, res);
-    } else {
-      // Wallet or unknown method - credit to wallet
-      processWalletRefund(refund, refundId, adminNote, req, res);
+      } else if (refund.method === 'NETS QR') {
+      // Attempt NETS refund through NETS API
+      try {
+        console.log('RefundController.adminApproveRefund - attempting NETS refund for order:', refund.order_id, 'amount:', refund.amount);
+        const netsResult = await netsService.refundNetsTransaction(refund.order_id, Number(refund.amount));
+        if (netsResult && netsResult.success) {
+          const gatewayRef = netsResult.gatewayRef || `nets_refund_${refundId}_${Date.now()}`;
+          Refund.updateStatus(refundId, 'SUCCESS', adminNote, gatewayRef, (refundUpdateErr) => {
+            if (refundUpdateErr) {
+              console.error('RefundController.adminApproveRefund - failed to update refund after NETS success', refundUpdateErr);
+              if (req.flash) req.flash('error', 'Refund processed but failed to update internal status');
+              return res.redirect('/admin/refunds');
+            }
+
+            // Restore stock and update order status
+            try {
+              Product.increaseStockForOrder(refund.order_id, (pErr) => {
+                if (pErr) console.error('RefundController.adminApproveRefund - failed to restore stock after NETS refund', pErr);
+                // Update order status based on total refunded
+                updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
+                  if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
+                  if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded via NETS.`);
+                  return res.redirect('/admin/refunds');
+                });
+              });
+            } catch (ex) {
+              console.error('RefundController.adminApproveRefund - exception restoring stock after NETS', ex);
+              updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
+                if (orderErr) console.error('RefundController.adminApproveRefund - order update error', orderErr);
+                if (req.flash) req.flash('success', `Refund approved. $${Number(refund.amount).toFixed(2)} refunded via NETS.`);
+                return res.redirect('/admin/refunds');
+              });
+            }
+          });
+        } else {
+          console.error('RefundController.adminApproveRefund - NETS refund failed or returned negative response', netsResult && netsResult.error ? netsResult.error : netsResult);
+          if (req.flash) req.flash('error', 'Failed to process NETS refund: ' + (netsResult && netsResult.error && netsResult.error.message ? netsResult.error.message : 'Unknown error'));
+          return res.redirect('/admin/refunds');
+        }
+      } catch (ex) {
+        console.error('RefundController.adminApproveRefund - exception while processing NETS refund', ex);
+        if (req.flash) req.flash('error', 'Failed to process NETS refund');
+        return res.redirect('/admin/refunds');
+      }
+      } else {
+        // Wallet or unknown method - credit to wallet
+        processWalletRefund(refund, refundId, adminNote, req, res);
+      }
     }
   });
 };
@@ -499,24 +584,45 @@ function processWalletRefund(refund, refundId, adminNote, req, res) {
           try {
             Product.increaseStockForOrder(refund.order_id, (pErr, pRes) => {
               if (pErr) console.error('RefundController.processWalletRefund - failed to restore product stock', pErr);
+                // Update order status based on total refunded (partial vs full)
+                updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
+                  if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
 
-              // Update order status regardless of stock restore result
-              db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
-                if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
-
-                if (req.flash) req.flash('success', `Refund approved. $${refundAmount.toFixed(2)} credited to user wallet.`);
-                return res.redirect('/admin/refunds');
-              });
+                  if (req.flash) req.flash('success', `Refund approved. $${refundAmount.toFixed(2)} credited to user wallet.`);
+                  return res.redirect('/admin/refunds');
+                });
             });
           } catch (ex) {
             console.error('RefundController.processWalletRefund - exception restoring stock', ex);
-            db.query('UPDATE orders SET status = ? WHERE id = ?', ['Refunded', refund.order_id], (orderErr) => {
+            updateOrderStatusAfterRefund(refund.order_id, (orderErr) => {
               if (orderErr) console.error('RefundController.processWalletRefund - order update error', orderErr);
               if (req.flash) req.flash('success', `Refund approved. $${refundAmount.toFixed(2)} credited to user wallet.`);
               return res.redirect('/admin/refunds');
             });
           }
         });
+      });
+    });
+  });
+
+  // Helper: set order status to 'Partially Refunded' or 'Refunded' based on total refunded
+  // NOTE: updateOrderStatusAfterRefund is defined at module scope below so other refund flows can reuse it.
+}
+
+// Helper: set order status to 'Partially Refunded' or 'Refunded' based on total refunded
+function updateOrderStatusAfterRefund(orderId, cb) {
+  Refund.getTotalRefundedForOrder(orderId, (err, totalRefunded) => {
+    if (err) { console.error('updateOrderStatusAfterRefund - error fetching total refunded', err); return cb(err); }
+    db.query('SELECT totalAmount FROM orders WHERE id = ? LIMIT 1', [orderId], (oErr, oRows = []) => {
+      if (oErr) { console.error('updateOrderStatusAfterRefund - error loading order', oErr); return cb(oErr); }
+      const orderTotal = Number(oRows && oRows[0] && oRows[0].totalAmount) || 0;
+      // Business rule:
+      // - If fully refunded (totalRefunded >= orderTotal) => mark as 'Cancelled'
+      // - If partially refunded => consider as 'Delivered' for user-facing bubble
+      const newStatus = (Number(totalRefunded || 0) >= orderTotal) ? 'Cancelled' : 'Delivered';
+      db.query('UPDATE orders SET status = ? WHERE id = ?', [newStatus, orderId], (uErr) => {
+        if (uErr) { console.error('updateOrderStatusAfterRefund - failed to update order status', uErr); return cb(uErr); }
+        return cb(null);
       });
     });
   });

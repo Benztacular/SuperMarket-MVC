@@ -119,6 +119,11 @@ class Refund {
     db.query(sql, [status, adminNote, gatewayRef, id], callback);
   }
 
+  static updateAmount(id, amount, callback) {
+    const sql = 'UPDATE refunds SET amount = ?, updatedAt = NOW() WHERE id = ?';
+    db.query(sql, [amount, id], callback);
+  }
+
   static getTotalRefundedForOrder(orderId, callback) {
     const sql = `
       SELECT COALESCE(SUM(amount), 0) as totalRefunded

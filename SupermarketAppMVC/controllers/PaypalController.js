@@ -8,6 +8,11 @@ function uid(req) {
   return (req.session?.userId) || (u && (u.id || u.user_id || u.userId)) || null;
 }
 
+function sendSuccessRedirect(req, res, redirectUrl) {
+  try { if (req.session) req.session.appliedCoupon = null; } catch (e) {}
+  return res.json({ success: true, redirect: redirectUrl });
+}
+
 async function createOrder(req, res, next) {
   try {
     const userId = uid(req);
@@ -30,16 +35,16 @@ async function createOrder(req, res, next) {
       const selectedShippingMethodId = req.session?.selectedShippingMethodId || null;
       const pickShipping = () => new Promise((resolve, reject) => {
         if (!selectedShippingMethodId) {
-          return db.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
+          return db.query('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
             if (sErr) return reject(sErr);
             if (!sRows.length) return reject(new Error('NO_SHIP_METHOD'));
             return resolve(sRows[0]);
           });
         }
-        db.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
+        db.query('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
           if (sErr) return reject(sErr);
           if (sRows.length) return resolve(sRows[0]);
-          db.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
+          db.query('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
             if (fErr) return reject(fErr);
             if (!fRows.length) return reject(new Error('NO_SHIP_METHOD'));
             return resolve(fRows[0]);
@@ -48,11 +53,12 @@ async function createOrder(req, res, next) {
       });
 
       let shippingFee = 0;
+      let shipRow = null;
       try {
-        const ship = await pickShipping();
-        shippingFee = Number(ship.price || 0);
-        if (!req.session.selectedShippingMethodId && ship.id) {
-          req.session.selectedShippingMethodId = ship.id;
+        shipRow = await pickShipping();
+        shippingFee = Number(shipRow.price || 0);
+        if (!req.session.selectedShippingMethodId && shipRow.id) {
+          req.session.selectedShippingMethodId = shipRow.id;
         }
       } catch (shipErr) {
         console.error('createOrder shipping error', shipErr);
@@ -60,7 +66,27 @@ async function createOrder(req, res, next) {
       }
 
       const itemsTotal = items.reduce((s, it) => s + Number(it.price || 0) * Number(it.quantity || 0), 0);
-      const total = itemsTotal + shippingFee;
+
+      // apply membership perks
+      const membership = await new Promise((resolve) => Membership.getUserMembership(userId, (e, m) => resolve(m || { plan_name: 'Free', free_standard_delivery: false, free_delivery_threshold: 80, discount_threshold: 0, discount_percent: 0, priority_delivery_discount: 0 })));
+      let appliedShippingFee = Number(shippingFee || 0);
+      const methodName = String(shipRow?.method_name || '').toLowerCase();
+      const isStandard = methodName.includes('standard');
+      const isPriority = methodName.includes('priority');
+      if (isStandard && (membership.free_standard_delivery || (itemsTotal >= Number(membership.free_delivery_threshold || 0)))) appliedShippingFee = 0;
+      if (isPriority && Number(membership.priority_delivery_discount || 0) > 0) appliedShippingFee = Math.max(0, appliedShippingFee - Number(membership.priority_delivery_discount || 0));
+
+      let discountAmount = 0;
+      const discThresh = Number(membership.discount_threshold || 0);
+      const discPercent = Number(membership.discount_percent || 0);
+      if (discPercent > 0 && itemsTotal >= discThresh) discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
+
+      // apply coupon from session if present
+      const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
+      const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+
+      const subtotal = Number(itemsTotal.toFixed(2));
+      const total = Number((subtotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
       if (total <= 0) return res.status(400).json({ error: 'Invalid total' });
 
       const order = await paypalService.createOrder(total);
@@ -122,16 +148,16 @@ async function captureOrder(req, res, next) {
           const selectedShippingMethodId = req.session?.selectedShippingMethodId || null;
           const pickShipping = () => new Promise((resolve, reject) => {
             if (!selectedShippingMethodId) {
-              return conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
+              return conn.query('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (sErr, sRows = []) => {
                 if (sErr) return reject(sErr);
                 if (!sRows.length) return reject(new Error('NO_SHIP_METHOD'));
                 return resolve(sRows[0]);
               });
             }
-            conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
+            conn.query('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 AND id = ? LIMIT 1', [selectedShippingMethodId], (sErr, sRows = []) => {
               if (sErr) return reject(sErr);
               if (sRows.length) return resolve(sRows[0]);
-              conn.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
+              conn.query('SELECT id, price, method_name FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC LIMIT 1', [], (fErr, fRows = []) => {
                 if (fErr) return reject(fErr);
                 if (!fRows.length) return reject(new Error('NO_SHIP_METHOD'));
                 return resolve(fRows[0]);
@@ -170,21 +196,21 @@ async function captureOrder(req, res, next) {
                 discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
               }
 
-              const totalWithShipping = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
-
               // check for applied coupon in session
               const appliedCoupon = req.session && req.session.appliedCoupon ? req.session.appliedCoupon : null;
               const couponIdToStore = appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null;
               const couponCodeSnapshot = appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null;
               const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+              const subtotal = Number(itemsTotal.toFixed(2));
+              const totalWithShipping = Number((subtotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
 
               conn.query(
-                'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())',
-                [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, totalWithShipping, 'Paid'],
+                'INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, subtotal, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())',
+                [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, subtotal, totalWithShipping, 'Paid'],
                 (oErr, oRes) => {
                   if (oErr) {
                     if (oErr && oErr.code === 'ER_BAD_FIELD_ERROR') {
-                      console.warn('PayPal capture: orders table missing coupon columns, retrying without coupon fields');
+                      console.warn('PayPal capture: orders table missing coupon/subtotal columns, retrying without coupon fields');
                       return conn.query('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shippingMethodId, appliedShippingFee, totalWithShipping, 'Paid'], (o2Err, o2Res) => {
                         if (o2Err) return conn.rollback(() => next(o2Err));
                         const orderId = o2Res.insertId;
@@ -235,50 +261,108 @@ async function captureOrder(req, res, next) {
 
                               // mark user coupon used if applicable
                                   if (appliedCoupon && appliedCoupon.user_coupon_id) {
-                                    conn.query('UPDATE user_coupons SET status = "USED", used_at = NOW() WHERE id = ? AND status = "ASSIGNED"', [appliedCoupon.user_coupon_id], (ucErr) => {
-                                      if (ucErr) console.error('mark user_coupon used error', ucErr);
-                                      // also record per-user usage for global coupons instead of deactivating the coupon
-                                      if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
-                                        conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, used_at, status, min_spend) VALUES (?, ?, ?, NOW(), NOW(), "USED", ?) ', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || ''), Number(appliedCoupon.min_spend || 0)], (insErr) => {
-                                          if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
+                                    conn.query('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ?', [appliedCoupon.user_coupon_id], (selErr, selRows) => {
+                                      if (selErr) { console.error('select user_coupon error', selErr); }
+                                      const uc = selRows && selRows[0];
+                                      const timesUsed = Number(uc?.times_used || 0) + 1;
+                                      const maxUses = Number(uc?.max_uses_per_user || 1);
+                                      const newStatus = (maxUses && timesUsed >= maxUses) ? 'EXHAUSTED' : 'ACTIVE';
+                                      const firstUsed = uc?.first_used_at ? ', first_used_at = first_used_at' : ', first_used_at = NOW()';
+                                      conn.query(`UPDATE user_coupons SET times_used = ?, status = ?, last_used_at = NOW()${firstUsed} WHERE id = ?`, [timesUsed, newStatus, appliedCoupon.user_coupon_id], (ucErr) => {
+                                        if (ucErr) console.error('mark user_coupon used error', ucErr);
+                                        if (appliedCoupon.coupon_id) conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id], () => {});
+                                        // also record per-user usage for global coupons instead of deactivating the coupon
+                                        if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+                                          conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || '')], (insErr) => {
+                                            if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
+                                            // increment master counter and ensure per-user status reflects max_uses_per_user
+                                            if (appliedCoupon.coupon_id) {
+                                              conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id], (upErr) => {
+                                                if (upErr) console.error('paypal increment coupons.current_total_uses error', upErr);
+                                                conn.query('SELECT uc.id, uc.times_used, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.user_id = ? AND uc.coupon_id = ? LIMIT 1', [userId, appliedCoupon.coupon_id], (sErr, sRows = []) => {
+                                                  if (sErr) console.error('paypal select user_coupons after insert error', sErr);
+                                                  const ucRow = sRows && sRows[0];
+                                                  if (ucRow) {
+                                                    const times = Number(ucRow.times_used || 0);
+                                                    const maxU = Number(ucRow.max_uses_per_user || 1);
+                                                    if (maxU && times >= maxU) {
+                                                      conn.query('UPDATE user_coupons SET status = ? WHERE id = ?', ['EXHAUSTED', ucRow.id], (stErr) => { if (stErr) console.error('paypal set EXHAUSTED error', stErr); });
+                                                    }
+                                                  }
+                                                  conn.commit((cmErr) => {
+                                                    if (cmErr) return conn.rollback(() => next(cmErr));
+                                                    const txnId = (payments && payments.id) ? payments.id : orderID;
+                                                    const encodedTxn = encodeURIComponent(txnId || '');
+                                                    const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                                    return sendSuccessRedirect(req, res, `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}`);
+                                                  });
+                                                });
+                                              });
+                                            } else {
+                                              conn.commit((cmErr) => {
+                                                if (cmErr) return conn.rollback(() => next(cmErr));
+                                                const txnId = (payments && payments.id) ? payments.id : orderID;
+                                                const encodedTxn = encodeURIComponent(txnId || '');
+                                                const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                                return sendSuccessRedirect(req, res, `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}`);
+                                              });
+                                            }
+                                          });
+                                        } else {
                                           conn.commit((cmErr) => {
                                             if (cmErr) return conn.rollback(() => next(cmErr));
                                             const txnId = (payments && payments.id) ? payments.id : orderID;
                                             const encodedTxn = encodeURIComponent(txnId || '');
                                             const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
-                                            return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                                            return sendSuccessRedirect(req, res, `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}`);
                                           });
-                                        });
-                                      } else {
-                                        conn.commit((cmErr) => {
-                                          if (cmErr) return conn.rollback(() => next(cmErr));
-                                          const txnId = (payments && payments.id) ? payments.id : orderID;
-                                          const encodedTxn = encodeURIComponent(txnId || '');
-                                          const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
-                                          return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
-                                        });
-                                      }
+                                        }
+                                      });
                                     });
                                   } else {
                                     // no user_coupon; for global coupon record per-user usage
                                     if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
-                                      conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, used_at, status, min_spend) VALUES (?, ?, ?, NOW(), NOW(), "USED", ?)', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || ''), Number(appliedCoupon.min_spend || 0)], (insErr) => {
+                                      conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || '')], (insErr) => {
                                         if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
-                                        conn.commit((cmErr) => {
-                                          if (cmErr) return conn.rollback(() => next(cmErr));
-                                          const txnId = (payments && payments.id) ? payments.id : orderID;
-                                          const encodedTxn = encodeURIComponent(txnId || '');
-                                          const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
-                                          return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
-                                        });
+                                        if (appliedCoupon.coupon_id) {
+                                          conn.query('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id], (upErr) => {
+                                            if (upErr) console.error('paypal increment coupons.current_total_uses error', upErr);
+                                            conn.query('SELECT uc.id, uc.times_used, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.user_id = ? AND uc.coupon_id = ? LIMIT 1', [userId, appliedCoupon.coupon_id], (sErr, sRows = []) => {
+                                              if (sErr) console.error('paypal select user_coupons after insert error', sErr);
+                                              const ucRow = sRows && sRows[0];
+                                              if (ucRow) {
+                                                const times = Number(ucRow.times_used || 0);
+                                                const maxU = Number(ucRow.max_uses_per_user || 1);
+                                                if (maxU && times >= maxU) {
+                                                  conn.query('UPDATE user_coupons SET status = ? WHERE id = ?', ['EXHAUSTED', ucRow.id], (stErr) => { if (stErr) console.error('paypal set EXHAUSTED error', stErr); });
+                                                }
+                                              }
+                                              conn.commit((cmErr) => {
+                                                if (cmErr) return conn.rollback(() => next(cmErr));
+                                                const txnId = (payments && payments.id) ? payments.id : orderID;
+                                                const encodedTxn = encodeURIComponent(txnId || '');
+                                                const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                                return sendSuccessRedirect(req, res, `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}`);
+                                              });
+                                            });
+                                          });
+                                        } else {
+                                          conn.commit((cmErr) => {
+                                            if (cmErr) return conn.rollback(() => next(cmErr));
+                                            const txnId = (payments && payments.id) ? payments.id : orderID;
+                                            const encodedTxn = encodeURIComponent(txnId || '');
+                                            const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                            return sendSuccessRedirect(req, res, `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}`);
+                                          });
+                                        }
                                       });
                                     } else {
                                       conn.commit((cmErr) => {
                                         if (cmErr) return conn.rollback(() => next(cmErr));
-                                        const txnId = (payments && payments.id) ? payments.id : orderID;
-                                        const encodedTxn = encodeURIComponent(txnId || '');
-                                        const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
-                                        return res.json({ success: true, redirect: `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}` });
+                                          const txnId = (payments && payments.id) ? payments.id : orderID;
+                                          const encodedTxn = encodeURIComponent(txnId || '');
+                                          const encodedAmount = encodeURIComponent(amount || totalWithShipping || (itemsTotal + shippingFee) || '');
+                                          return sendSuccessRedirect(req, res, `/payment/success?orderId=${orderId}&method=paypal&txn=${encodedTxn}&amount=${encodedAmount}`);
                                       });
                                     }
                                   }

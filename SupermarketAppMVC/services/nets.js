@@ -2,6 +2,7 @@ const axios = require('axios');
 const db = require('../db');
 const util = require('util');
 const Membership = require('../models/Membership');
+const NetsTransaction = require('../models/NetsTransaction');
 
 async function computeServerCartTotal(req) {
   let cartTotal = null;
@@ -136,3 +137,62 @@ exports.generateQrCode = async (req, res) => {
     return res.redirect('/nets-qr/fail');
   }
 };
+
+/**
+ * Attempt to refund a NETS transaction for the given orderId and amount.
+ * Returns an object { success: boolean, gatewayRef, rawResponse, error }
+ */
+exports.refundNetsTransaction = async (orderId, amount) => {
+  try {
+    const q = util.promisify(db.query).bind(db);
+    // Find the latest nets transaction for the order
+    const rows = await q('SELECT * FROM nets_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [orderId]);
+    const txn = (rows && rows[0]) || null;
+    if (!txn) {
+      return { success: false, error: new Error('No NETS transaction found for this order') };
+    }
+
+    const txnRetrievalRef = txn.nets_txn_id || txn.merchant_txn_ref;
+    if (!txnRetrievalRef) {
+      return { success: false, error: new Error('NETS transaction lacks nets_txn_id / merchant_txn_ref') };
+    }
+
+    // Build refund request - NETS API may differ in production, this is a best-effort endpoint and payload.
+    const endpoint = process.env.NETS_REFUND_ENDPOINT || 'https://sandbox.nets.openapipaas.com/api/v1/common/payments/nets/refund';
+    const requestBody = {
+      txn_retrieval_ref: txnRetrievalRef,
+      amt_in_dollars: Number(amount) || 0,
+      reason: `Refund for order ${orderId}`
+    };
+
+    const response = await axios.post(endpoint, requestBody, {
+      headers: {
+        'api-key': process.env.API_KEY,
+        'project-id': process.env.PROJECT_ID,
+        'Content-Type': 'application/json'
+      },
+      timeout: 20000
+    });
+
+    const respData = response && response.data ? response.data : null;
+
+    // Persist the response into nets_transactions via markStatus so webhooks are traceable
+    try {
+      NetsTransaction.markStatus({ merchantRef: txn.merchant_txn_ref, netsTxnId: txn.nets_txn_id, status: 'REFUNDED', rawResponse: respData, amount }, () => {});
+    } catch (e) {
+      console.error('Failed to persist NETS refund response:', e);
+    }
+
+    // Interpret success heuristically
+    const success = respData && (respData.result?.status === '00' || respData.result?.response_code === '00' || respData.result?.txn_status === 2 || respData.success === true);
+    const gatewayRef = (respData && (respData.result && respData.result.refund_id)) || respData && respData.refund_id || `nets_refund_${txnRetrievalRef}_${Date.now()}`;
+
+    return { success: !!success, gatewayRef, rawResponse: respData };
+  } catch (err) {
+    console.error('refundNetsTransaction error:', err && err.message ? err.message : err);
+    return { success: false, error: err };
+  }
+};
+
+// Export helper for reuse (e.g. Stripe amount computations)
+exports.computeServerCartTotal = computeServerCartTotal;

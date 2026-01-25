@@ -379,6 +379,106 @@ exports.balance = (req, res, next) => {
   });
 };
 
+// Return coupons linked to the user and active global coupons
+exports.userCoupons = (req, res, next) => {
+  const userId = uid(req);
+  if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated' });
+
+  const now = new Date();
+  const nowStr = now.toISOString().slice(0, 19).replace('T', ' ');
+
+  // 1) Fetch user-specific coupons (user_coupons joined to coupons)
+  const userSql = `
+    SELECT uc.id AS user_coupon_id, uc.user_id, uc.coupon_id, uc.coupon_code AS user_coupon_code, uc.times_used, uc.status AS user_status, uc.assigned_at,
+           c.id AS c_id, c.coupon_code AS c_coupon_code, c.description, c.discount_type, c.discount_value, c.valid_from, c.valid_until, c.is_global, c.is_active, c.min_spend, c.is_free_delivery
+    FROM user_coupons uc
+    JOIN coupons c ON c.id = uc.coupon_id
+    WHERE uc.user_id = ?
+    ORDER BY uc.assigned_at DESC
+  `;
+
+  db.query(userSql, [userId], (uErr, uRows = []) => {
+    if (uErr) { console.error('userCoupons - user coupons query error', uErr); return res.status(500).json({ success: false, message: 'Failed to load user coupons' }); }
+
+    // 2) Fetch global coupons that are active and within validity window
+    const globalSql = `
+      SELECT c.*, NULL AS user_coupon_id, 0 AS times_used, 'GLOBAL' AS user_status
+      FROM coupons c
+      WHERE c.is_global = 1 AND c.is_active = 1
+        AND (c.valid_from IS NULL OR c.valid_from <= NOW()) AND (c.valid_until IS NULL OR c.valid_until >= NOW())
+      ORDER BY c.created_at DESC
+    `;
+
+    db.query(globalSql, [], (gErr, gRows = []) => {
+      if (gErr) { console.error('userCoupons - global coupons query error', gErr); return res.status(500).json({ success: false, message: 'Failed to load global coupons' }); }
+
+      console.log('[WalletController.userCoupons] userId:', userId, 'userRows:', (uRows || []).length, 'globalRows:', (gRows || []).length);
+      console.log('[WalletController.userCoupons] nowStr:', nowStr);
+      console.log('[WalletController.userCoupons] globalCoupons raw:', (gRows || []).map(r => ({ id: r.id, code: r.coupon_code, is_global: r.is_global, is_active: r.is_active, valid_from: r.valid_from, valid_until: r.valid_until })));
+
+      // Merge; prefer user-specific records when coupon_id overlaps
+        const userCouponIds = new Set();
+        const merged = [];
+
+        (uRows || []).forEach(r => {
+          const entry = Object.assign({}, r, { 
+            coupon_code: r.c_coupon_code || r.user_coupon_code || r.coupon_code,
+            coupon_id: r.coupon_id || r.c_id
+          });
+          merged.push(entry);
+          if (entry.coupon_id) userCouponIds.add(Number(entry.coupon_id));
+        });
+
+        // append global coupons that are not already represented by user-specific records
+        (gRows || []).forEach(r => {
+          const cid = Number(r.id || r.coupon_id || 0);
+          if (!userCouponIds.has(cid)) merged.push(r);
+        });
+
+          // Create normalized lists for user-specific and global coupons separately
+          const normalize = (c) => ({
+            user_coupon_id: c.user_coupon_id || null,
+            coupon_id: c.coupon_id || c.c_id || c.id || null,
+            coupon_code: c.coupon_code || c.c_coupon_code || c.user_coupon_code || null,
+            description: c.description || null,
+            discount_type: c.discount_type || null,
+            discount_value: c.discount_value || null,
+            min_spend: c.min_spend || 0,
+            is_free_delivery: Number(c.is_free_delivery || 0),
+            is_global: Number(c.is_global || 0),
+            is_active: Number(c.is_active || 0),
+            times_used: Number(c.times_used || 0),
+            user_status: c.user_status || (c.status || null),
+            assigned_at: c.assigned_at || c.created_at || null
+          });
+
+          const userNormalized = (uRows || []).map(normalize);
+          const globalNormalized = (gRows || []).map(normalize);
+
+          // merged for backward compatibility (available first, redeemed last)
+          const normalized = merged.map(normalize);
+
+          // Sort: available first, redeemed last
+          normalized.sort((a, b) => {
+            const rank = s => {
+              if (!s) return 1;
+              const low = String(s).toLowerCase();
+              if (low === 'assigned' || low === 'active' || low === 'global') return 0;
+              if (low === 'exhausted' || low === 'used' || low === 'redeemed') return 2;
+              return 1;
+            };
+            const ra = rank(a.user_status); const rb = rank(b.user_status);
+            if (ra !== rb) return ra - rb;
+            const ta = a.assigned_at ? new Date(a.assigned_at) : new Date(0);
+            const tb = b.assigned_at ? new Date(b.assigned_at) : new Date(0);
+            return tb - ta;
+          });
+
+          return res.json({ success: true, userCoupons: userNormalized, globalCoupons: globalNormalized, coupons: normalized });
+    });
+  });
+};
+
 // Loyalty rewards endpoints moved to LoyaltyPointsController
 // These exports are kept for backwards compatibility but delegate to the new controller
 const LoyaltyPointsController = require('./LoyaltyPointsController');
@@ -467,7 +567,12 @@ exports.pay = async (req, res, next) => {
     const discPercent = Number(membership.discount_percent || 0);
     if (discPercent > 0 && itemsTotal >= discThresh) discountAmount = Number((itemsTotal * (discPercent / 100)).toFixed(2));
 
-    const totalAmount = Number((itemsTotal + appliedShippingFee - discountAmount).toFixed(2));
+    // Apply coupon from session if present
+    const appliedCoupon = (req.session && req.session.appliedCoupon) ? req.session.appliedCoupon : null;
+    const couponDiscount = Number((appliedCoupon && Number(appliedCoupon.discount || 0)) || 0);
+    const subtotal = Number(itemsTotal.toFixed(2));
+    const totalAmount = Number((subtotal + appliedShippingFee - discountAmount - couponDiscount).toFixed(2));
+    
     const balance = Number(currentWallet.balance || 0);
     if (balance < totalAmount) {
       await rollbackSafe('INSUFFICIENT_BALANCE');
@@ -478,8 +583,10 @@ exports.pay = async (req, res, next) => {
     // Deduct balance
     await q('UPDATE user_wallets SET balance = COALESCE(balance,0) - ?, updatedAt = NOW() WHERE user_id = ?', [totalAmount, userId]);
 
-    // Create order
-    const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, totalAmount, 'Paid']);
+    // Create order with coupon tracking
+    const couponIdToStore = appliedCoupon && appliedCoupon.coupon_id ? appliedCoupon.coupon_id : null;
+    const couponCodeSnapshot = appliedCoupon && appliedCoupon.code ? appliedCoupon.code : null;
+    const orderRes = await q('INSERT INTO orders (user_id, delivery_address_id, shipping_method_id, shipping_fee, coupon_id, coupon_code_snapshot, coupon_discount, subtotal, orderDate, totalAmount, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())', [userId, deliveryAddressId, shipRow.id, appliedShippingFee, couponIdToStore, couponCodeSnapshot, couponDiscount, subtotal, totalAmount, 'Paid']);
     const orderId = orderRes && orderRes.insertId;
 
     // Insert order items
@@ -497,6 +604,38 @@ exports.pay = async (req, res, next) => {
     // Clear cart
     await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
 
+    // Mark user coupon as used if applicable and increment master counter
+    try {
+      if (appliedCoupon && appliedCoupon.user_coupon_id) {
+        const rows = await q('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ?', [appliedCoupon.user_coupon_id]);
+        const uc = Array.isArray(rows) && rows.length ? rows[0] : null;
+        const timesUsed = Number(uc?.times_used || 0) + 1;
+        const maxUses = Number(uc?.max_uses_per_user || 1);
+        const newStatus = (maxUses && timesUsed >= maxUses) ? 'EXHAUSTED' : 'ACTIVE';
+        const firstUsed = uc?.first_used_at ? ', first_used_at = first_used_at' : ', first_used_at = NOW()';
+        await q(`UPDATE user_coupons SET times_used = ?, status = ?, last_used_at = NOW()${firstUsed} WHERE id = ?`, [timesUsed, newStatus, appliedCoupon.user_coupon_id]);
+        if (appliedCoupon.coupon_id) {
+          try { await q('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id]); } catch (incErr) { console.error('[Wallet] increment coupons.current_total_uses error', incErr); }
+        }
+      } else if (appliedCoupon && appliedCoupon.coupon_id && Number(appliedCoupon.is_global || 0)) {
+        try {
+          await q('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, appliedCoupon.coupon_id, (appliedCoupon.code || '')]);
+          await q('UPDATE coupons SET current_total_uses = current_total_uses + 1 WHERE id = ?', [appliedCoupon.coupon_id]);
+          try {
+            const rows2 = await q('SELECT uc.id, uc.times_used, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.user_id = ? AND uc.coupon_id = ? LIMIT 1', [userId, appliedCoupon.coupon_id]);
+            const ucRow = Array.isArray(rows2) && rows2.length ? rows2[0] : null;
+            if (ucRow) {
+              const times = Number(ucRow.times_used || 0);
+              const maxU = Number(ucRow.max_uses_per_user || 1);
+              if (maxU && times >= maxU) {
+                await q('UPDATE user_coupons SET status = ? WHERE id = ?', ['EXHAUSTED', ucRow.id]);
+              }
+            }
+          } catch (stErr) { console.error('[Wallet] verify/update user_coupons status error', stErr); }
+        } catch (cErr) { console.error('[Wallet] mark global coupon used error', cErr); }
+      }
+    } catch (e) { console.error('[Wallet] mark user_coupon used error', e); }
+
     // Record wallet transaction (best-effort)
     try {
       await new Promise((resolve) => Wallet.addTransaction({
@@ -512,7 +651,7 @@ exports.pay = async (req, res, next) => {
 
     await commit();
 
-    try { if (req.session) req.session.cart = null; } catch (e) {}
+    try { if (req.session) { req.session.cart = null; req.session.appliedCoupon = null; } } catch (e) {}
     if (req.flash) req.flash('success', 'Order placed and paid with Wallet');
     return res.redirect(`/payment/success?orderId=${orderId}&method=wallet&amount=${encodeURIComponent(totalAmount)}`);
   } catch (ex) {
