@@ -59,7 +59,7 @@
             top: 0; left: 0; right: 0;
             width: 100%;
             height: var(--nav-height);
-            z-index: 1030;
+            z-index: 99999; /* ensure navbar stays above flash messages and other overlays */
             background: var(--brand-surface);
             backdrop-filter: blur(16px) saturate(180%); /* Enhanced glass effect */
             -webkit-backdrop-filter: blur(16px) saturate(180%);
@@ -347,7 +347,7 @@
     </nav>
 
     <!-- Flash messages (rendered only from this partial) -->
-    <div class="container mt-0" style="z-index:1050; position:relative;">
+    <div class="container mt-0" style="z-index:1000; position:relative;">
         <% 
            const successList = Array.isArray(typeof success_msg !== 'undefined' ? success_msg : undefined) ? success_msg : (Array.isArray(typeof success !== 'undefined' ? success : undefined) ? success : ((typeof messages !== 'undefined' && messages && Array.isArray(messages.success)) ? messages.success : []));
            const errorList = Array.isArray(typeof error_msg !== 'undefined' ? error_msg : undefined) ? error_msg : (Array.isArray(typeof error !== 'undefined' ? error : undefined) ? error : ((typeof messages !== 'undefined' && messages && Array.isArray(messages.error)) ? messages.error : []));

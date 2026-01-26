@@ -137,7 +137,17 @@
         nav {
             backdrop-filter: blur(30px);
             background: rgba(255, 255, 255, 0.5);
-            z-index: 1000;
+            z-index: 9999; /* ensure navbar is above transformed/stacking contexts */
+            pointer-events: auto;
+        }
+
+        /* Ensure scroll sections don't visually or interactively cover the fixed nav */
+        .sticky-container {
+            z-index: 0;
+        }
+
+        .scroll-content {
+            z-index: 0;
         }
 
         .get-started-btn {
@@ -456,7 +466,7 @@
                                 <li><i class="fas fa-check text-emerald-500 mr-3"></i>5% discount on orders above S$30</li>
                             </ul>
                         </div>
-                        <button class="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-2 border-emerald-950 hover:bg-emerald-950 hover:text-white">
+                        <button data-href="/membership" class="upgrade-now w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-2 border-emerald-950 hover:bg-emerald-950 hover:text-white">
                             Upgrade Now
                         </button>
                     </div>
@@ -477,7 +487,7 @@
                                 <li><i class="fas fa-star text-emerald-400 mr-3"></i>15% discount on all orders</li>
                             </ul>
                         </div>
-                        <button class="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all bg-emerald-500 text-emerald-950 shadow-lg hover:bg-emerald-400">
+                        <button data-href="/membership" class="upgrade-now w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all bg-emerald-500 text-emerald-950 shadow-lg hover:bg-emerald-400">
                             Upgrade Now
                         </button>
                     </div>
@@ -536,7 +546,11 @@
         </div>
     </footer>
 
+    <script id="__USER__" type="application/json"><%- JSON.stringify(typeof user !== 'undefined' ? user : null) %></script>
     <script>
+        // Server-provided user object (null when not logged in)
+        window.__USER__ = JSON.parse(document.getElementById('__USER__').textContent || 'null');
+
         const sections = document.querySelectorAll('.scroll-section');
         const contents = document.querySelectorAll('.scroll-content');
         const dots = document.querySelectorAll('.dot');
@@ -575,6 +589,23 @@
                 const targetEl = document.getElementById(targetId);
                 if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth' });
             });
+        });
+
+        // Intercept Upgrade clicks on index page: prompt login if not authenticated
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest && e.target.closest('.upgrade-now');
+            if (!btn) return;
+            e.preventDefault();
+            const href = btn.getAttribute('data-href') || '/membership';
+            if (window.__USER__) {
+                window.location.href = href;
+            } else {
+                const ok = confirm('Please log in to access membership plans. Log in now?');
+                if (ok) {
+                    const returnTo = encodeURIComponent(href);
+                    window.location.href = '/login?returnTo=' + returnTo;
+                }
+            }
         });
     </script>
 </body>
