@@ -56,16 +56,19 @@
             <% }) %>
           </div>
         <% } %>
+        <div id="regSummary" class="alert alert-danger d-none"></div>
 
         <form method="post" action="/register" novalidate>
           <div class="row g-3">
             <div class="col-12 col-md-6">
               <label class="form-label small-muted">Username</label>
-              <input name="username" class="form-control" required value="<%= form.username ? form.username : '' %>">
+              <input id="regUsername" name="username" class="form-control" required value="<%= form.username ? form.username : '' %>">
+              <div class="invalid-feedback d-none text-danger mt-1" id="regUsernameErr">Username must be at least 5 characters and include a letter.</div>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label small-muted">Email</label>
-              <input name="email" type="email" class="form-control" required value="<%= form.email ? form.email : '' %>">
+              <input id="regEmail" name="email" type="email" class="form-control" required value="<%= form.email ? form.email : '' %>">
+              <div class="invalid-feedback d-none text-danger mt-1" id="regEmailErr">Please enter a valid email address.</div>
             </div>
 
             <div class="col-12 col-md-6">
@@ -74,7 +77,8 @@
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label small-muted">Contact</label>
-              <input name="contact" class="form-control" required value="<%= form.contact ? form.contact : '' %>">
+              <input id="regContact" name="contact" class="form-control" required value="<%= form.contact ? form.contact : '' %>">
+              <div class="invalid-feedback d-none text-danger mt-1" id="regContactErr">Contact must be numeric and exactly 8 digits.</div>
             </div>
 
             <div class="col-12">
@@ -145,6 +149,85 @@
 
       btn.addEventListener('click', function () {
         setState(!chk.checked);
+      });
+    })();
+
+    // Registration form validation
+    (function(){
+      const form = document.querySelector('form[action="/register"]');
+      if (!form) return;
+      const username = document.getElementById('regUsername');
+      const email = document.getElementById('regEmail');
+      const contact = document.getElementById('regContact');
+      const usernameErr = document.getElementById('regUsernameErr');
+      const emailErr = document.getElementById('regEmailErr');
+      const contactErr = document.getElementById('regContactErr');
+
+      // stricter email validation: allow letters, digits and ._%+- in local part,
+      // domain parts with letters/digits/hyphens and a TLD of at least 2 letters.
+      function isValidEmail(v){ return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(String(v||'').trim()); }
+      function isDigits(v){ return /^\d+$/.test(String(v||'')); } // require at least one digit when used
+      function hasLetter(v){ return /[A-Za-z]/.test(String(v||'')); }
+
+      // helper to mark field validity and toggle inline error
+      function setFieldState(field, errElem, valid) {
+        if (!field) return;
+        if (valid) {
+          field.classList.remove('is-invalid');
+          field.classList.add('is-valid');
+          if (errElem) errElem.classList.add('d-none');
+        } else {
+          field.classList.remove('is-valid');
+          field.classList.add('is-invalid');
+          if (errElem) errElem.classList.remove('d-none');
+        }
+      }
+
+      // clear summary and per-field error on input
+      [username, email, contact].forEach(el => {
+        if (!el) return;
+        el.addEventListener('input', function(){
+          const id = el.id;
+          if (id === 'regUsername') { setFieldState(el, usernameErr, (String(el.value||'').trim().length >=5 && hasLetter(el.value))); }
+          if (id === 'regEmail') { setFieldState(el, emailErr, isValidEmail(el.value)); }
+          if (id === 'regContact') { const v = String(el.value||'').trim(); setFieldState(el, contactErr, isDigits(v) && v.length <= 8); }
+          const summary = document.getElementById('regSummary'); if (summary) { summary.classList.add('d-none'); summary.innerHTML = ''; }
+        });
+      });
+
+      form.addEventListener('submit', function(e){
+        let ok = true;
+        let firstInvalid = null;
+        const errors = [];
+
+        // username min 5 and must include a letter
+        const unameValid = username && String(username.value||'').trim().length >= 5 && hasLetter(username.value);
+        setFieldState(username, usernameErr, unameValid);
+        if (!unameValid) { ok = false; errors.push('Username must be at least 5 characters and include a letter.'); if (!firstInvalid) firstInvalid = username; }
+
+        // email
+        const emailValid = email && isValidEmail(email.value);
+        setFieldState(email, emailErr, emailValid);
+        if (!emailValid) { ok = false; errors.push('Please enter a valid email address.'); if (!firstInvalid) firstInvalid = email; }
+
+        // contact numeric and exactly 8 digits
+        const c = String(contact.value||'').trim();
+        const contactValid = contact && isDigits(c) && c.length === 8;
+        setFieldState(contact, contactErr, contactValid);
+        if (!contactValid) { ok = false; errors.push('Contact must be numeric and exactly 8 digits.'); if (!firstInvalid) firstInvalid = contact; }
+
+        const summary = document.getElementById('regSummary');
+        if (!ok) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (summary) {
+            summary.innerHTML = '<ul style="margin:0;padding-left:18px">' + errors.map(m => '<li>' + m + '</li>').join('') + '</ul>';
+            summary.classList.remove('d-none');
+          }
+          if (firstInvalid && typeof firstInvalid.focus === 'function') firstInvalid.focus();
+        } else {
+          if (summary) { summary.classList.add('d-none'); summary.innerHTML = ''; }
+        }
       });
     })();
   </script>

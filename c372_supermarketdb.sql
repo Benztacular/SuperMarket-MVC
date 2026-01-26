@@ -52,7 +52,7 @@ CREATE TABLE users (
   email VARCHAR(255) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
   address VARCHAR(255) NOT NULL,
-  contact VARCHAR(10) NOT NULL,
+  contact VARCHAR(8) NOT NULL,
   role VARCHAR(10) NOT NULL DEFAULT 'user',
   twoFactorSecret VARCHAR(255),
   twoFactorEnabled TINYINT(1) DEFAULT 0,

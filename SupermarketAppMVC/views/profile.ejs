@@ -549,13 +549,15 @@
                   Username <span class="char-count" id="usernameCount">0/20</span>
                 </label>
                 <input name="username" id="usernameInput" class="input-styled" value="<%= profileUser.username %>" maxlength="20">
+                <div class="text-danger d-none mt-1" id="profileUsernameErr">Username must be at least 5 characters and include a letter.</div>
               </div>
             </div>
 
             <div class="col-md-6">
               <div class="form-group">
                 <label class="form-label-styled">Email Address</label>
-                <input name="email" class="input-styled" value="<%= profileUser.email %>">
+                <input id="profileEmail" name="email" class="input-styled" value="<%= profileUser.email %>">
+                <div class="text-danger d-none mt-1" id="profileEmailErr">Please enter a valid email address.</div>
               </div>
             </div>
 
@@ -569,9 +571,10 @@
             <div class="col-md-6">
               <div class="form-group">
                 <label class="form-label-styled">
-                  Contact Number <span class="char-count" id="contactCount">0/10</span>
+                  Contact Number <span class="char-count" id="contactCount">0/8</span>
                 </label>
-                <input name="contact" id="contactInput" class="input-styled" value="<%= profileUser.contact || '' %>" maxlength="10" placeholder="0123456789">
+                <input name="contact" id="contactInput" class="input-styled" value="<%= profileUser.contact || '' %>" maxlength="8" placeholder="01234567">
+                <div class="text-danger d-none mt-1" id="profileContactErr">Contact must be numeric and exactly 8 digits.</div>
               </div>
             </div>
           </div>
@@ -811,6 +814,62 @@
     </div>
   </div>
 
+  <script>
+    (function(){
+      const detailsForm = document.getElementById('detailsForm');
+      if (!detailsForm) return;
+
+      const usernameInput = document.getElementById('usernameInput');
+      const contactInput = document.getElementById('contactInput');
+      const contactCount = document.getElementById('contactCount');
+      const usernameCount = document.getElementById('usernameCount');
+      const profileEmail = document.getElementById('profileEmail');
+      const profileEmailErr = document.getElementById('profileEmailErr');
+      const profileContactErr = document.getElementById('profileContactErr');
+
+      // stricter email validation: allow letters, digits and ._%+- in local part,
+      // domain parts with letters/digits/hyphens and a TLD of at least 2 letters.
+      function isValidEmail(v){ return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(String(v||'').trim()); }
+      function isDigits(v){ return /^\d*$/.test(String(v||'')); }
+
+      function updateCounts(){
+        if (usernameCount && usernameInput) usernameCount.textContent = (String(usernameInput.value||'').length || 0) + '/20';
+        if (contactCount && contactInput) contactCount.textContent = (String(contactInput.value||'').length || 0) + '/8';
+      }
+
+      updateCounts();
+      usernameInput && usernameInput.addEventListener('input', updateCounts);
+      contactInput && contactInput.addEventListener('input', updateCounts);
+
+      detailsForm.addEventListener('submit', function(e){
+        let ok = true;
+        // username min 5 and must include a letter
+        const uname = String(usernameInput.value||'').trim();
+        if (!usernameInput || uname.length < 5 || !/[A-Za-z]/.test(uname)) {
+          ok = false;
+          if (usernameInput) usernameInput.focus();
+          document.getElementById('profileUsernameErr').classList.remove('d-none');
+        } else {
+          document.getElementById('profileUsernameErr').classList.add('d-none');
+        }
+
+        // email
+        if (ok && profileEmail && !isValidEmail(profileEmail.value)){
+          ok = false; profileEmailErr.classList.remove('d-none'); profileEmail.focus();
+        } else if (profileEmailErr) profileEmailErr.classList.add('d-none');
+
+        // contact numeric and exactly 8 digits
+        if (ok && contactInput){
+          const c = String(contactInput.value||'').trim();
+          if (!isDigits(c) || c.length !== 8) { ok = false; profileContactErr.classList.remove('d-none'); contactInput.focus(); }
+          else profileContactErr.classList.add('d-none');
+        }
+
+        if (!ok){ e.preventDefault(); e.stopPropagation(); }
+      });
+    })();
+  </script>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     lucide.createIcons();
@@ -863,7 +922,7 @@
       updateCount();
     }
     setupCharCount('usernameInput', 'usernameCount', 20);
-    setupCharCount('contactInput', 'contactCount', 10);
+    setupCharCount('contactInput', 'contactCount', 8);
 
     // Avatar bubble buttons: activate and update hash
 
