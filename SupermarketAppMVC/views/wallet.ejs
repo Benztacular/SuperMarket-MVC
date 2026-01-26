@@ -386,8 +386,9 @@
                                     </div>
                                     <div class="text-right">
                                         <% const amt = Number(txn.amount || 0); %>
-                                        <% const isTopUp = String(txn.type || '').toUpperCase() === 'TOP_UP'; %>
-                                        <p class="text-sm font-bold <%= isTopUp ? 'text-green-600' : 'text-rose-600' %>"><%= (isTopUp ? '+' : '-') %>$<%= Math.abs(amt).toFixed(2) %></p>
+                                        <% const ttype = String(txn.type || '').toUpperCase(); %>
+                                        <% const isPositive = (ttype === 'TOP_UP' || ttype === 'REFUND'); %>
+                                        <p class="text-sm font-bold <%= isPositive ? 'text-green-600' : 'text-rose-600' %>"><%= (isPositive ? '+' : '-') %>$<%= Math.abs(amt).toFixed(2) %></p>
                                     </div>
                                 </div>
                             <% }); %>

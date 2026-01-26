@@ -712,6 +712,25 @@ function applyCoupon(req, res) {
           }
 
           let discount = 0;
+          // If coupon is a free-delivery voucher, discount should equal
+          // the shipping fee (selected method price or a fallback active method),
+          // instead of applying to item subtotal.
+          if (Number(coupon.is_free_delivery || 0) === 1) {
+            return db.query('SELECT id, price FROM shipping_methods WHERE is_active = 1 ORDER BY id ASC', [], (smErr, smRows = []) => {
+              if (smErr) { console.error('applyCoupon - shipping_methods lookup error', smErr); return res.status(500).json({ success: false, message: 'Internal error' }); }
+              const selId = req.session && req.session.selectedShippingMethodId ? Number(req.session.selectedShippingMethodId) : null;
+              let found = null;
+              if (selId) found = (smRows || []).find(r => Number(r.id) === Number(selId));
+              if (!found) found = (smRows && smRows.length) ? smRows[0] : null;
+              const shippingPrice = found ? Number(found.price || 0) : 0;
+              discount = Number(shippingPrice.toFixed(2));
+              // store applied coupon in session so final order placement can access it
+              try { if (req.session) req.session.appliedCoupon = { coupon_id: coupon.id, user_coupon_id: userCouponId, code: coupon.coupon_code, discount: discount, is_global: Number(coupon.is_global || 0), is_active: (typeof coupon.is_active !== 'undefined') ? Number(coupon.is_active || 0) : 1, max_uses_per_user: maxUses, min_spend: Number(requiredMinSpend || 0) }; } catch (e) { /* ignore session write errors */ }
+              const newTotal = Number((itemsTotal - discount).toFixed(2));
+              return res.json({ success: true, discount: discount, subtotal: Number(itemsTotal.toFixed(2)), newTotal: newTotal, coupon: { id: coupon.id, code: coupon.coupon_code, type: coupon.discount_type, value: Number(coupon.discount_value) }, userCouponId: userCouponId });
+            });
+          }
+          // non-free-delivery coupons: calculate based on items total
           if (coupon.discount_type === 'PERCENTAGE') {
             discount = Number((itemsTotal * (Number(coupon.discount_value || 0) / 100)).toFixed(2));
           } else {
