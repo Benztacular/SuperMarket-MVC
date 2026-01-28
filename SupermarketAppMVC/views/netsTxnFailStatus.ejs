@@ -1,28 +1,87 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Transaction Failed</title>
+    <style>
+        :root{
+            --bg1: #071029;
+            --bg2: #081226;
+            --card-glass: rgba(255,255,255,0.03);
+            --card-border: rgba(255,255,255,0.04);
+            --accent: #ffd166;
+            --muted: rgba(255,255,255,0.78);
+            --muted-2: rgba(255,255,255,0.65);
+            --fail-red: #ff6b6b;
+            --glass-shadow: rgba(3,10,27,0.6);
+        }
+        html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;color:var(--muted);background:radial-gradient(1200px 600px at 10% 10%, rgba(10,30,60,0.24), transparent), linear-gradient(135deg,var(--bg1) 0%, var(--bg2) 100%);-webkit-font-smoothing:antialiased}
+        .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:36px}
+        .card{width:820px;max-width:94vw;border-radius:16px;padding:26px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.01));box-shadow:0 18px 40px var(--glass-shadow);border:1px solid var(--card-border);position:relative}
+        .card .brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+        .brand .title{font-weight:600;color:#fff;font-size:1.05rem}
+        .subtitle{color:var(--muted-2);font-size:0.9rem}
+
+        .qr-wrap{display:flex;align-items:center;justify-content:center;padding:18px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));border-radius:12px;border:1px solid rgba(255,255,255,0.02)}
+        .qr-box{position:relative;width:100%;min-height:220px;display:flex;align-items:center;justify-content:center}
+
+        /* Central fail card */
+        .fail-card{width:420px;max-width:86%;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.14));border-radius:12px;padding:26px 24px;box-shadow:0 14px 30px rgba(2,6,23,0.6);text-align:center}
+        .fail-icon{width:56px;height:56px;border-radius:50%;background:var(--fail-red);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;margin:6px auto}
+        .fail-title{color:var(--fail-red);margin-top:10px;font-size:1.25rem;font-weight:700}
+        .fail-desc{color:var(--muted-2);margin-top:8px;font-size:0.95rem}
+
+        /* image wrapper + hover overlay */
+        .qr-image-wrap{display:inline-block;border-radius:8px;overflow:hidden;margin-bottom:10px;position:relative}
+        .qr-image-wrap img{display:block;width:120px;height:auto}
+        .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.6));color:#fff;font-weight:700;opacity:0;transition:opacity .18s;border-radius:8px}
+        .qr-image-wrap:hover .overlay{opacity:1}
+
+        .actions{display:flex;justify-content:center;gap:12px;margin-top:14px}
+        .btn{padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:rgba(255,255,255,0.95);text-decoration:none}
+        .btn.primary{background:var(--accent);color:#071029;border:0}
+
+        .info-row{display:flex;justify-content:space-between;align-items:center;margin-top:18px;color:var(--muted-2);font-size:0.9rem}
+
+        @media (max-width:900px){.card{width:92vw;padding:18px}.fail-card{width:92%}.qr-image-wrap img{width:96px}}
+        @media (max-width:480px){.card{padding:14px}.fail-card{padding:18px}}
+    </style>
 </head>
-
 <body>
-        <div class="container">
-            <h1>
-                <%= message %>
-            </h1>
-            <p>Please try again later.</p>
+    <div class="wrap">
+        <div class="card" role="region" aria-label="NETS QR Payment - Failed">
+            <div class="brand">
+                <div>
+                    <div class="title">NETS QR Payment</div>
+                    <div class="subtitle">Transaction Status</div>
+                </div>
+            </div>
 
-            <div className="netsQrPaymentGatewayWebpage">
-                <div className="netsQrTxnFailStatus">
-                    <img src=".././images/redCross.png" height="auto" width="30%" alt="Transaction Fail" />
-                    <h2 className="text">TRANSACTION FAILED</h2>
-                    <div className="button" id="btnFail">
+            <div class="qr-wrap">
+                <div class="qr-box">
+                    <div class="fail-card">
+                        <div class="qr-image-wrap">
+                            <img src="/images/redCross.png" alt="Transaction Fail" />
+                            <div class="overlay">Restart QR</div>
+                        </div>
+                        <div class="fail-icon">✕</div>
+                        <div class="fail-title">TRANSACTION FAILED</div>
+                        <div class="fail-desc"> <%= typeof message !== 'undefined' ? message : 'Payment failed or was cancelled.' %> </div>
+
+                        <div class="actions">
+                            <a class="btn" href="/cart/pay">Back to pay</a>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-</body>
 
+            <div class="info-row">
+                <div class="hint">Reference: <span id="txnRef" style="color:rgba(255,255,255,0.85)"><%= typeof txnRetrievalRef !== 'undefined' ? txnRetrievalRef : '-' %></span></div>
+                <div class="muted">Status: Failed</div>
+            </div>
+        </div>
+    </div>
+
+</body>
 </html>
