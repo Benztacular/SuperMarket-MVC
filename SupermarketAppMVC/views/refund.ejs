@@ -508,7 +508,7 @@
 <body>
   <%- include('partials/header') %>
 
-  <div class="container refund-container">
+  <div class="container refund-container" data-shipping-fee="<%= typeof order !== 'undefined' && order.shipping_fee ? Number(order.shipping_fee) : 0 %>">
     <div class="refund-card">
       <!-- Header -->
       <div class="header-section">
@@ -866,8 +866,8 @@
     const deliveryFeeNotice = document.getElementById('deliveryFeeNotice');
     const deliveryFeeAmountSpan = document.getElementById('deliveryFeeAmount');
     
-    // Get order delivery fee from server-side data
-    const orderShippingFee = <%= Number(order.shipping_fee || 0) %>;
+    // Get order delivery fee from server-side data (read from container data attribute)
+    const orderShippingFee = Number(document.querySelector('.refund-container')?.dataset?.shippingFee || 0);
     
     // Calculate total order quantity
     let totalOrderQty = 0;
