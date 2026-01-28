@@ -313,15 +313,20 @@
                                                     <%= order.status %>
                                                 </span>
                                                 <% // If refunds exist, surface a partial/full refund indicator even if order.status was updated to 'Delivered' per business rules %>
-                                                <% if ((order && typeof order.totalRefunded !== 'undefined') && Number(order.totalRefunded) > 0 && Number(order.totalRefunded) < Number(totalVal || 0)) { %>
+                                                <% 
+                                                    const totRefundNum = Number(order && order.totalRefunded ? order.totalRefunded : 0);
+                                                    const totalNum = Number(totalVal || 0);
+                                                    const EPS = 0.01; // tolerance for floating point
+                                                    if (totRefundNum > EPS && (totRefundNum + EPS) < totalNum) { %>
                                                     <span class="badge rounded-pill fw-bold px-3 py-1 bg-info bg-opacity-10 text-info">
                                                         Partially Refunded
                                                     </span>
-                                                <% } else if ((order && typeof order.totalRefunded !== 'undefined') && Number(order.totalRefunded) >= Number(totalVal || 0)) { %>
-                                                    <span class="badge rounded-pill fw-bold px-3 py-1 bg-danger bg-opacity-10 text-danger">
+                                                <% } else if (totalNum > 0 && Math.abs(totRefundNum - totalNum) <= EPS) { %>
+                                                    <span class="badge rounded-pill fw-bold px-3 py-1 bg-success bg-opacity-10 text-success">
                                                         Refunded
                                                     </span>
-                                                <% } else if (order.refund && order.refund.status === 'PENDING') { %>
+                                                <% } %>
+                                                <% if (order.refund && order.refund.status === 'PENDING') { %>
                                                     <span class="badge rounded-pill fw-bold px-3 py-1 bg-warning bg-opacity-10 text-warning">
                                                         <i data-lucide="clock" style="width: 12px; height: 12px;"></i> Refund Pending
                                                     </span>
@@ -407,20 +412,36 @@
                                                 </div>
                                                 
                                                 <div class="d-flex flex-column gap-3">
-                                                    <% itemsList.forEach(function(item) { %>
-                                                        <div class="d-flex align-items-center justify-content-between p-2 rounded-3 hover-bg-light transition-all">
+                                                    <% itemsList.forEach(function(item) { 
+                                                        const isRefunded = item.isRefunded || false;
+                                                    %>
+                                                        <div class="d-flex align-items-center justify-content-between p-2 rounded-3 hover-bg-light transition-all"<%= isRefunded ? ' style="opacity: 0.5;"' : '' %>>
                                                             <div class="d-flex align-items-center gap-3">
-                                                                    <div style="width: 48px; height: 48px;" class="d-flex align-items-center justify-content-center text-secondary bg-light rounded-3 overflow-hidden">
+                                                                    <div style="width: 48px; height: 48px;<%= isRefunded ? ' filter: grayscale(100%);' : '' %>" class="d-flex align-items-center justify-content-center text-secondary bg-light rounded-3 overflow-hidden">
                                                                         <img src="/images/<%= item.image || 'default.png' %>" alt="" style="width:100%;height:100%;object-fit:cover;"/>
                                                                     </div>
                                                                     <div>
-                                                                        <p class="fw-bold text-dark mb-0 small"><%= item.name %></p>
-                                                                        <p class="text-muted small mb-0" style="font-size: 0.75rem;">Qty: <%= item.qty %></p>
+                                                                        <p class="fw-bold text-dark mb-0 small" style="<%= isRefunded ? 'text-decoration: line-through;' : '' %>"><%= item.name %>
+                                                                        <% if (isRefunded) { %>
+                                                                            <span class="badge bg-warning text-dark ms-2" style="font-size: 0.65rem;">REFUNDED</span>
+                                                                        <% } %>
+                                                                                                                                                </p>
+                                                                                                                                                <% 
+                                                                                                                                                    const refundedQty = Number(item.refundedQty || 0);
+                                                                                                                                                    const originalQty = Number(item.qty || 0);
+                                                                                                                                                    const remainingQty = Math.max(0, originalQty - refundedQty);
+                                                                                                                                                %>
+                                                                                                                                                <p class="text-muted small mb-0" style="font-size: 0.75rem;<%= isRefunded ? ' text-decoration: line-through;' : '' %>">
+                                                                                                                                                    Qty: <%= remainingQty %>
+                                                                                                                                                    <% if (refundedQty > 0) { %>
+                                                                                                                                                        <span class="small text-muted"> (refunded <%= refundedQty %>)</span>
+                                                                                                                                                    <% } %>
+                                                                                                                                                </p>
                                                                     </div>
                                                                 </div>
-                                                            <div class="fw-bold text-dark small px-2">
-                                                                $<%= (item.price * item.qty).toFixed(2) %>
-                                                            </div>
+                                                                                                                        <div class="fw-bold text-dark small px-2" style="<%= isRefunded ? 'text-decoration: line-through;' : '' %>">
+                                                                                                                                $<%= (item.price * Math.max(0, (item.qty - (item.refundedQty || 0)))).toFixed(2) %>
+                                                                                                                        </div>
                                                         </div>
                                                     <% }); %>
                                                 </div>
@@ -449,10 +470,20 @@
                                                                                                                     const eligibleForRefund = ['Pending', 'Paid', 'Delivered'].includes(order.status);
                                                                                                                     const totRefund = (typeof order.totalRefunded !== 'undefined') ? Number(order.totalRefunded || 0) : 0;
                                                                                                                     const hasRefundRow = order.refund && order.refund.id;
-                                                                                                                    // If a refund row exists in SQL or totalRefunded > 0, show refund badge/button
-                                                                                                                    if (hasRefundRow || totRefund > 0) {
-                                                                                                                        const shownAmount = (totRefund > 0) ? totRefund : (order.refund && order.refund.amount ? Number(order.refund.amount) : Number(totalVal || 0));
-                                                                                                                        if (shownAmount >= Number(totalVal || 0) && Number(totalVal || 0) > 0) { %>
+                                                                                                                    
+                                                                                                                    // Check refund status FIRST before showing amounts
+                                                                                                                    if (order.refund && order.refund.status === 'PENDING') { %>
+                                                                                                                        <div class="d-grid">
+                                                                                                                            <button type="button" class="btn btn-warning text-white rounded-pill fw-bold btn-sm py-2 w-100" disabled title="Refund Pending">
+                                                                                                                                <i data-lucide="clock"></i> Pending Refund: $<%= Number(order.refund.amount || 0).toFixed(2) %>
+                                                                                                                            </button>
+                                                                                                                        </div>
+                                                                                                                    <% } else if (hasRefundRow || totRefund > 0) { %>
+                                                                                                                        <% 
+                                                                                                                            // Show refund amounts for SUCCESS/APPROVED status
+                                                                                                                            const shownAmount = (totRefund > 0) ? totRefund : (order.refund && order.refund.amount ? Number(order.refund.amount) : Number(totalVal || 0));
+                                                                                                                        %>
+                                                                                                                        <% if (Number(totalVal || 0) > 0 && Math.abs(shownAmount - Number(totalVal || 0)) <= EPS) { %>
                                                                                                                             <div class="d-grid">
                                                                                                                                 <button type="button" class="btn bg-success text-white rounded-pill fw-bold btn-sm py-2 w-100" disabled title="Refunded">
                                                                                                                                     <i data-lucide="check-circle"></i> Refunded: $<%= shownAmount.toFixed(2) %>
@@ -460,24 +491,23 @@
                                                                                                                             </div>
                                                                                                                         <% } else { %>
                                                                                                                             <div class="d-grid">
-                                                                                                                                <button type="button" class="btn btn-info text-white rounded-pill fw-bold btn-sm py-2 w-100" disabled title="Partially Refunded">
+                                                                                                                                <button type="button" class="btn btn-info text-white rounded-pill fw-bold btn-sm py-2 w-100" onclick="openRefundPopup(this)"
+                                                                                                                                    data-refund='<%- JSON.stringify(order.refundedDetails || []) %>'
+                                                                                                                                    data-original-total="<%= Number(totalVal || 0).toFixed(2) %>"
+                                                                                                                                    data-refunded-total="<%= Number(order.totalRefunded || 0).toFixed(2) %>"
+                                                                                                                                    data-requested-total="<%= Number((order.refund && (order.refund.requested_amount || order.refund.amount)) || 0).toFixed(2) %>"
+                                                                                                                                    data-actual-total="<%= Number((order.refund && order.refund.amount) || Number(order.totalRefunded || 0)).toFixed(2) %>">
                                                                                                                                     <i data-lucide="info"></i> Partially Refunded: $<%= shownAmount.toFixed(2) %>
                                                                                                                                 </button>
                                                                                                                             </div>
-                                                                                                                        <% }
-                                                                                                                    } else if (order.refund && order.refund.status === 'PENDING') { %>
-                                                                                                                        <div class="d-grid">
-                                                                                                                            <button type="button" class="btn btn-warning text-white rounded-pill fw-bold btn-sm py-2 w-100" disabled title="Refund Pending">
-                                                                                                                                <i data-lucide="clock"></i> Refund Pending
-                                                                                                                            </button>
-                                                                                                                        </div>
-                                                                                                                    <% } else if (eligibleForRefund) { %>
+                                                                                                                        <% } %>
+                                                    <% } else if (eligibleForRefund) { %>
                                                             <div class="d-grid">
-                                                                <a href="/orders/<%= orderIdStr %>/refund" class="btn btn-outline-danger rounded-pill fw-bold btn-sm py-2 w-100">
-                                                                    <i data-lucide=""></i> Request Refund
-                                                                </a>
-                                                            </div>
-                                                        <% } %>
+                                                                                                                                <a href="/orders/<%= orderIdStr %>/refund" class="btn btn-outline-danger rounded-pill fw-bold btn-sm py-2 w-100">
+                                                                                                                                    <i data-lucide=""></i> Request Refund
+                                                                                                                                </a>
+                                                                                                                            </div>
+                                                                                                                        <% } %>
 
                                                         <% if (order.status === 'Delivered') { %>
                                                             <a href="/orders/<%= orderIdStr %>/review" class="btn btn-success text-white rounded-pill fw-bold btn-sm py-2 d-flex align-items-center justify-content-center gap-2">
@@ -493,6 +523,7 @@
                                             </div>
                                         </div>
                                     </div>
+                            <% /* Inline refund panel removed: using a popup modal instead. */ %>
     
                                 </div>
                             </div>
@@ -551,6 +582,18 @@
             }
         }
 
+        // Toggle inline refund details for an order
+        function toggleRefundInline(id) {
+            const el = document.getElementById(`refundInline-${id}`);
+            if (!el) return;
+            if (el.style.display === 'none' || el.style.display === '') {
+                el.style.display = 'block';
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
         // Filtering Logic
         let currentFilter = 'All';
         
@@ -587,11 +630,11 @@
             let hasVisible = false;
 
                     cards.forEach(card => {
-                    const rawStatus = (card.dataset.status || '').toString().toLowerCase();
+                    const rawStatus = (card.dataset.status || '').toString().trim().toLowerCase();
                     // Treat fully 'Refunded' orders as 'Cancelled' for filter/tab selection only
                     const status = (rawStatus === 'refunded') ? 'cancelled' : rawStatus;
                     const terms = (card.dataset.searchTerms || '').toString().toLowerCase();
-                    const filterNorm = (currentFilter || '').toString().toLowerCase();
+                    const filterNorm = (currentFilter || '').toString().trim().toLowerCase();
                     const refunded = Number(card.dataset.refunded || 0);
                     const totalAmt = Number(card.dataset.total || 0);
 
@@ -602,8 +645,8 @@
                         // treat 'processing' as including paid/payment statuses
                         matchesFilter = status.includes('process') || status.includes('paid') || status.includes('payment');
                     } else if (filterNorm === 'cancelled') {
-                        // treat orders as cancelled only when status is cancelled
-                        matchesFilter = (status === 'cancelled');
+                        // treat orders as cancelled when status is cancelled OR when fully refunded
+                        matchesFilter = (status === 'cancelled') || (refunded >= totalAmt && totalAmt > 0);
                     } else if (filterNorm === 'delivered') {
                         // include delivered OR partially refunded orders (partial refunds considered delivered)
                         matchesFilter = (status === 'delivered') || (refunded > 0 && refunded < totalAmt);
@@ -732,6 +775,121 @@
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             const modal = new bootstrap.Modal(document.getElementById('refundStatusModal'));
             modal.show();
+        }
+
+        // Show detailed refunded items modal populated from data attributes
+        function openRefundPopup(btn) {
+            if (!btn) return;
+            const payload = btn.getAttribute('data-refund') || '[]';
+            let details = [];
+            try { details = JSON.parse(payload); } catch (e) { console.error('openRefundPopup parse error', e); details = []; }
+
+            const originalTotal = parseFloat(btn.getAttribute('data-original-total') || '0') || 0;
+            const refundedTotal = parseFloat(btn.getAttribute('data-refunded-total') || '0') || 0;
+            const btnRequestTotal = btn.getAttribute('data-requested-total') || '';
+            const btnActualTotal = btn.getAttribute('data-actual-total') || '';
+            const updatedTotal = Math.max(0, originalTotal - refundedTotal);
+            const fullRefund = refundedTotal >= (originalTotal - 0.005);
+
+            // Build list html
+            let itemsHtml = '';
+            if (Array.isArray(details) && details.length) {
+                details.forEach(function(r){
+                    const name = r.name || r.productName || 'Item';
+                    const img = r.image || 'default.png';
+                    const unitPrice = Number(r.unitPrice || r.price || 0);
+                    const originalQty = Number(r.originalQty || 0);
+                    const remainingQty = Number(r.remainingQty || Math.max(0, (originalQty - (r.refundedQty || 0))));
+                    const lineOriginal = Number(r.lineOriginalTotal || (originalQty * unitPrice));
+                    const lineRemaining = Number(r.lineRemainingTotal || (remainingQty * unitPrice));
+                    const refundedLine = Number(r.refundedAmountLine || (lineOriginal - lineRemaining));
+
+                    itemsHtml += `
+                        <div class="list-group-item d-flex align-items-center gap-3 py-3">
+                            <img src="/images/${img}" alt="" class="rounded-3" style="width:64px;height:64px;object-fit:cover;border:1px solid #e9ecef;">
+                            <div style="flex:1;min-width:0;">
+                                <div class="fw-bold mb-1">${escapeHtml(name)}</div>
+                                <div class="small text-muted" style="font-size:0.92rem;">Original: <span style="font-variant-numeric: tabular-nums;">${originalQty} × $${unitPrice.toFixed(2)}</span> = <span class="fw-semibold">$${lineOriginal.toFixed(2)}</span></div>
+                                <div class="small text-muted" style="font-size:0.92rem;">Now: <span style="font-variant-numeric: tabular-nums;">${remainingQty} × $${unitPrice.toFixed(2)}</span> = <span class="fw-semibold">$${lineRemaining.toFixed(2)}</span> <span class="text-success ms-2">(Amount: <span style="font-variant-numeric: tabular-nums;">$${refundedLine.toFixed(2)}</span>)</span></div>
+                            </div>
+                            <div class="text-end" style="min-width:120px;">
+                                <div class="small text-muted">Amount</div>
+                                <div class="fs-5 fw-bold text-success" style="font-variant-numeric: tabular-nums;">$${refundedLine.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                itemsHtml = `<div class="text-muted">No detailed per-item data available. Total refunded: $${refundedTotal.toFixed(2)}</div>`;
+            }
+
+            // Remove existing modal if present
+            const existing = document.getElementById('refundDetailsModal');
+            if (existing) existing.remove();
+
+            const modalHtml = `
+                <div class="modal fade" id="refundDetailsModal" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered modal-lg">
+                        <div class="modal-content rounded-4 shadow-lg border-0">
+                            <div class="modal-header border-0 pb-0">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="bg-success bg-gradient text-white rounded-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px;">
+                                        <i data-lucide="repeat" style="width:22px;height:22px;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="modal-title mb-0">${fullRefund ? 'Order Fully Refunded' : 'Refund Details'}</h5>
+                                        <div class="small text-muted">${fullRefund ? 'All items & quantities were refunded — full order amount returned.' : 'Per-item refund breakdown and updated totals'}</div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body pt-3">
+                                <div class="row align-items-center mb-3">
+                                                        <div class="col-md-4 mb-2 mb-md-0">
+                                                            <div class="p-3 bg-light rounded-3">
+                                                                <div class="small text-muted">Original</div>
+                                                                <div class="fs-4 fw-bold" style="font-variant-numeric: tabular-nums;">$${originalTotal.toFixed(2)}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4 mb-2 mb-md-0">
+                                                            <div class="p-3 bg-white border rounded-3">
+                                                                <div class="small text-muted">Requested Refund</div>
+                                                                <div class="fs-5 fw-bold text-warning" style="font-variant-numeric: tabular-nums;">$${(parseFloat(btnRequestTotal || '0') || 0).toFixed(2)}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <div class="p-3 bg-white border rounded-3">
+                                                                <div class="small text-muted">Actual Refunded</div>
+                                                                    <div class="fs-5 fw-bold ${fullRefund ? 'text-danger' : 'text-success'}" style="font-variant-numeric: tabular-nums;">$${(parseFloat(btnActualTotal || '0') || updatedTotal).toFixed(2)}</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                <div class="list-group">
+                                    ${itemsHtml}
+                                </div>
+                            </div>
+                            <div class="modal-footer border-0">
+                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const mEl = document.getElementById('refundDetailsModal');
+            const modal = new bootstrap.Modal(mEl);
+            modal.show();
+            // re-create icons inside modal
+            lucide.createIcons();
+        }
+
+        // small HTML escape for injected strings in modal
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"'`]/g, function (s) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',"`":'&#96;'})[s];
+            });
         }
     </script>
 </body>

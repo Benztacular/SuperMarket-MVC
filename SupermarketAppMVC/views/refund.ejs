@@ -633,15 +633,54 @@
               Refund Amount
             </h3>
             
-            <label for="amount" class="form-label">
-              How much would you like to refund? <span class="required">*</span>
+            <label class="form-label">
+              Select item(s) to refund <span class="required">*</span>
             </label>
-            
+
+            <div class="mb-3">
+              <% if (items && items.length) { %>
+                <% items.forEach(function(it){ const itPrice = Number(it.price || 0); const itQty = Number(it.quantity || 0); const img = it.image || ''; %>
+                  <div class="d-flex align-items-center mb-3 refund-item">
+                    <input class="form-check-input refund-item-checkbox" type="checkbox" value="<%= it.id %>" id="refund_item_<%= it.id %>" data-price="<%= itPrice %>" data-max="<%= itQty %>">
+
+                    <img src="/images/<%= img %>" alt="<%= it.productName %>" style="width:64px;height:64px;object-fit:cover;border-radius:8px;margin-left:12px;margin-right:12px;border:1px solid #e5e7eb;">
+
+                    <div style="flex:1; min-width:0;">
+                      <label class="form-check-label" for="refund_item_<%= it.id %>">
+                        <strong style="display:block;"> <%= it.productName %> </strong>
+                        <small class="text-muted">$<%= itPrice.toFixed(2) %> each &middot; Ordered: <%= itQty %></small>
+                      </label>
+                    </div>
+
+                    <div style="width:120px; margin-left:12px;">
+                      <input type="number" min="1" max="<%= itQty %>" value="<%= itQty %>" id="refund_qty_<%= it.id %>" class="form-control refund-qty-input" disabled>
+                      <small class="text-muted">Qty to refund</small>
+                    </div>
+                  </div>
+                <% }); %>
+              <% } else { %>
+                <div class="text-muted">No order items found.</div>
+              <% } %>
+            </div>
+
+            <label for="amount" class="form-label">
+              Refund Amount (calculated from selected items)
+            </label>
             <div class="amount-input-wrapper">
               <span class="currency-symbol">$</span>
-              <!-- Always refund full paid amount: submit hidden field, show readonly display -->
-              <input type="hidden" name="amount" id="amount" value="<%= Number(order.totalAmount || 0).toFixed(2) %>">
-              <input type="text" class="form-control amount-input" value="$<%= Number(order.totalAmount || 0).toFixed(2) %>" disabled aria-disabled="true">
+              <input type="hidden" name="amount" id="amount" value="0.00">
+              <input type="text" class="form-control amount-input" id="amountDisplay" value="$0.00" disabled aria-disabled="true">
+            </div>
+            
+            <!-- Delivery Fee Indicator (shown when all items selected) -->
+            <div id="deliveryFeeNotice" style="display:none; margin-top:16px; padding:14px 18px; background:linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-radius:10px; border-left:4px solid #10b981;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <i data-lucide="truck" style="width:20px; height:20px; color:#059669;"></i>
+                <div style="flex:1;">
+                  <div style="font-weight:600; color:#065f46; font-size:14px;">Full Refund - Delivery Fee Included</div>
+                  <div style="color:#047857; font-size:13px; margin-top:2px;">Delivery fee <span id="deliveryFeeAmount" style="font-weight:700;">+$0.00</span> will be refunded</div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -817,6 +856,125 @@
           lucide.createIcons();
         });
       }
+    }
+
+    // Refund item selection logic (checkbox + per-item qty)
+    const itemCheckboxes = document.querySelectorAll('.refund-item-checkbox');
+    const qtyInputs = document.querySelectorAll('.refund-qty-input');
+    const amountInput = document.getElementById('amount');
+    const amountDisplay = document.getElementById('amountDisplay');
+    const deliveryFeeNotice = document.getElementById('deliveryFeeNotice');
+    const deliveryFeeAmountSpan = document.getElementById('deliveryFeeAmount');
+    
+    // Get order delivery fee from server-side data
+    const orderShippingFee = <%= Number(order.shipping_fee || 0) %>;
+    
+    // Calculate total order quantity
+    let totalOrderQty = 0;
+    itemCheckboxes.forEach(cb => {
+      totalOrderQty += Number(cb.dataset.max || 0);
+    });
+
+    function updateRefundAmount() {
+      let total = 0;
+      let totalSelectedQty = 0;
+      const selectedIds = [];
+      const selectedQtys = [];
+      
+      itemCheckboxes.forEach(cb => {
+        const id = cb.value;
+        const price = Number(cb.dataset.price || 0);
+        const max = Number(cb.dataset.max || 0);
+        const qtyEl = document.getElementById('refund_qty_' + id);
+        let qty = qtyEl ? Number(qtyEl.value || 0) : 0;
+        if (isNaN(qty) || qty < 1) qty = 1;
+        if (qty > max) qty = max;
+
+        if (cb.checked) {
+          total += price * qty;
+          totalSelectedQty += qty;
+          selectedIds.push(id);
+          selectedQtys.push(qty);
+        }
+      });
+      
+      // Check if this is a full refund (all items + all quantities)
+      const allItemsChecked = Array.from(itemCheckboxes).every(cb => cb.checked);
+      const isFullRefund = allItemsChecked && (totalSelectedQty >= totalOrderQty);
+      
+      // If full refund, add delivery fee
+      if (isFullRefund && orderShippingFee > 0) {
+        total += orderShippingFee;
+        deliveryFeeNotice.style.display = 'block';
+        deliveryFeeAmountSpan.textContent = '+$' + orderShippingFee.toFixed(2);
+      } else {
+        deliveryFeeNotice.style.display = 'none';
+      }
+
+      amountInput.value = Number(total || 0).toFixed(2);
+      if (amountDisplay) amountDisplay.value = '$' + Number(total || 0).toFixed(2);
+
+      // remove existing hidden inputs for itemIds and itemQtys
+      const existingIds = document.querySelectorAll('input[name="itemIds[]"]');
+      existingIds.forEach(e => e.remove());
+      const existingQtys = document.querySelectorAll('input[name="itemQtys[]"]');
+      existingQtys.forEach(e => e.remove());
+
+      // append new hidden inputs (paired arrays)
+      const form = document.getElementById('refundForm');
+      if (form) {
+        selectedIds.forEach((id, idx) => {
+          const hId = document.createElement('input');
+          hId.type = 'hidden';
+          hId.name = 'itemIds[]';
+          hId.value = id;
+          form.appendChild(hId);
+
+          const hQty = document.createElement('input');
+          hQty.type = 'hidden';
+          hQty.name = 'itemQtys[]';
+          hQty.value = selectedQtys[idx];
+          form.appendChild(hQty);
+        });
+      }
+      
+      // Refresh lucide icons for the delivery notice
+      lucide.createIcons();
+    }
+
+    itemCheckboxes.forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const id = cb.value;
+        const qtyEl = document.getElementById('refund_qty_' + id);
+        if (qtyEl) qtyEl.disabled = !cb.checked;
+        updateRefundAmount();
+      });
+    });
+
+    // keep qty inputs synced and recalc total on manual qty change
+    document.querySelectorAll('.refund-qty-input').forEach(qi => {
+      qi.addEventListener('input', (e) => {
+        const max = Number(qi.max || 0);
+        let v = Number(qi.value || 0);
+        if (isNaN(v) || v < 1) v = 1;
+        if (v > max) v = max;
+        qi.value = v;
+        updateRefundAmount();
+      });
+    });
+
+    // prevent submit if no items selected
+    const refundForm = document.getElementById('refundForm');
+    if (refundForm) {
+      refundForm.addEventListener('submit', function(e){
+        const amt = Number((document.getElementById('amount') || {}).value || 0);
+        const anyChecked = Array.from(itemCheckboxes).some(cb => cb.checked);
+        if (!anyChecked || amt <= 0) {
+          e.preventDefault();
+          alert('Please select at least one item to refund.');
+          return false;
+        }
+      });
     }
     
     function handleFile(file) {

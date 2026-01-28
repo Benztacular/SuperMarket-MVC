@@ -137,6 +137,11 @@
     .status-shipped { background: #f0fdf4; color: #15803d; }
     .status-delivered { background: #f0fdf4; color: #15803d; }
     .status-cancelled { background: #fef2f2; color: #b91c1c; }
+
+    /* Refunded / disabled visuals (use classes instead of inline styles) */
+    .refunded { opacity: 0.5; }
+    .text-refunded { text-decoration: line-through; }
+    .img-refunded { filter: grayscale(100%); }
   </style>
 </head>
 <body>
@@ -206,26 +211,32 @@
                        const qty = item.quantity || item.cartQty || 0;
                        const total = price * qty;
                        sum += total;
+                       const isRefunded = item.isRefunded || false;
                     %>
-                    <tr>
+                    <tr<%= isRefunded ? ' class="refunded"' : '' %>>
                       <td>
                         <div class="d-flex align-items-center gap-3">
                           <% if(item.image) { %>
-                            <img src="/images/<%= item.image %>" alt="Product" class="rounded border" style="width: 48px; height: 48px; object-fit: cover;">
+                            <img src="/images/<%= item.image %>" alt="Product" class="rounded border img-thumb<%= isRefunded ? ' img-refunded' : '' %>" style="width: 48px; height: 48px; object-fit: cover;">
                           <% } else { %>
                             <div class="bg-light rounded border d-flex align-items-center justify-content-center text-muted" style="width: 48px; height: 48px;">
                                 <i class="bi bi-box"></i>
                             </div>
                           <% } %>
                           <div>
-                            <div class="fw-medium text-dark"><%= item.productName || 'Product #' + item.product_id %></div>
+                            <div class="fw-medium text-dark<%= isRefunded ? ' text-refunded' : '' %>">
+                              <%= item.productName || 'Product #' + item.product_id %>
+                              <% if (isRefunded) { %>
+                                <span class="badge bg-warning text-dark ms-2" style="font-size: 10px; vertical-align: middle;">REFUNDED</span>
+                              <% } %>
+                            </div>
                             <small class="text-muted">ID: <%= item.product_id %></small>
                           </div>
                         </div>
                       </td>
-                      <td class="text-center">$<%= price.toFixed(2) %></td>
-                      <td class="text-center"><%= qty %></td>
-                      <td class="text-end fw-medium">$<%= total.toFixed(2) %></td>
+                      <td class="text-center<%= isRefunded ? ' text-refunded' : '' %>">$<%= price.toFixed(2) %></td>
+                      <td class="text-center<%= isRefunded ? ' text-refunded' : '' %>"><%= qty %></td>
+                      <td class="text-end fw-medium<%= isRefunded ? ' text-refunded' : '' %>">$<%= total.toFixed(2) %></td>
                     </tr>
                     <% }); %>
                   <% } else { %>
@@ -240,16 +251,31 @@
                 <div class="row justify-content-end">
                     <div class="col-md-5">
                         <div class="d-flex justify-content-between mb-2">
-                            <span class="text-muted">Subtotal</span>
-                            <span class="fw-medium">$<%= sum.toFixed(2) %></span>
+                          <span class="text-muted">Subtotal</span>
+                          <span class="fw-medium">$<%= (typeof subtotal !== 'undefined' ? Number(subtotal).toFixed(2) : Number(sum || 0).toFixed(2)) %></span>
                         </div>
                         <div class="d-flex justify-content-between mb-2">
-                            <span class="text-muted">Shipping</span>
-                            <span class="text-success">Free</span>
+                          <span class="text-muted">Shipping</span>
+                          <span class="text-sm text-gray-600 fw-medium"><%= (typeof shippingFee !== 'undefined' ? (Number(shippingFee) === 0 ? 'Free' : ('$' + Number(shippingFee).toFixed(2))) : '—') %></span>
                         </div>
+
+                        <% if (typeof membershipDiscount !== 'undefined' && Number(membershipDiscount) > 0) { %>
+                        <div class="d-flex justify-content-between mb-2">
+                          <span class="text-muted">Membership (<%= membershipName || 'Member' %>)</span>
+                          <span class="text-sm text-success">- $<%= Number(membershipDiscount || 0).toFixed(2) %></span>
+                        </div>
+                        <% } %>
+
+                        <% if (typeof couponDiscount !== 'undefined' && Number(couponDiscount) > 0) { %>
+                        <div class="d-flex justify-content-between mb-2">
+                          <span class="text-muted">Coupon<% if (couponCode) { %> (<%= couponCode %>)<% } %></span>
+                          <span class="text-sm text-success">- $<%= Number(couponDiscount || 0).toFixed(2) %></span>
+                        </div>
+                        <% } %>
+
                         <div class="d-flex justify-content-between pt-3 border-top mt-3">
-                            <span class="fw-bold fs-5">Total</span>
-                            <span class="fw-bold fs-5 text-primary">$<%= (order.totalAmount || order.total || sum).toFixed(2) %></span>
+                          <span class="fw-bold fs-5">Total</span>
+                          <span class="fw-bold fs-5 text-primary">$<%= (typeof calculatedTotal !== 'undefined' && calculatedTotal !== null) ? Number(calculatedTotal).toFixed(2) : (Number(order.totalAmount || order.total || sum).toFixed(2)) %></span>
                         </div>
                     </div>
                 </div>
@@ -297,24 +323,68 @@
             <div class="d-flex gap-3">
                 <i class="bi bi-geo-alt info-icon mt-1"></i>
                 <div>
-                    <% if(order.address) { %>
-                        <div class="fw-medium text-dark lh-base">
+                        <% 
+                          // Prefer the `deliveryAddress` object passed from the controller.
+                          // Fallback to `order.delivery_*` fields (older shape), then `order.address`.
+                          const addr = (typeof deliveryAddress !== 'undefined' && deliveryAddress) ? deliveryAddress : 
+                                       ((order && (order.delivery_block_number || order.delivery_street_name || order.address)) ? order : null);
+                        %>
+                        <% if (addr && typeof deliveryAddress !== 'undefined' && deliveryAddress) { %>
+                          <div class="fw-medium text-dark lh-base">
+                            <% if (addr.recipient_name) { %>
+                              <div><strong><%= addr.recipient_name %></strong></div>
+                            <% } %>
+                            <div>
+                              <% if (addr.block_number) { %><%= addr.block_number %> <% } %>
+                              <% if (addr.street_name) { %><%= addr.street_name %><% } %>
+                              <% if (addr.unit_number) { %> , Unit <%= addr.unit_number %><% } %>
+                            </div>
+                            <div class="text-muted small mt-1">Postal: <%= addr.postal_code || '-' %></div>
+                            <div class="text-muted small"><%= addr.country || 'Singapore' %></div>
+                          </div>
+                        <% } else if (addr && order && order.delivery_block_number) { %>
+                          <div class="fw-medium text-dark lh-base">
+                            <% if (order.delivery_recipient_name) { %>
+                              <div><strong><%= order.delivery_recipient_name %></strong></div>
+                            <% } %>
+                            <div>
+                              <% if (order.delivery_block_number) { %><%= order.delivery_block_number %> <% } %>
+                              <% if (order.delivery_street_name) { %><%= order.delivery_street_name %><% } %>
+                              <% if (order.delivery_unit_number) { %> , Unit <%= order.delivery_unit_number %><% } %>
+                            </div>
+                            <div class="text-muted small mt-1">Postal: <%= order.delivery_postal_code || '-' %></div>
+                            <div class="text-muted small"><%= order.delivery_country || 'Singapore' %></div>
+                          </div>
+                        <% } else if(order.address) { %>
+                          <div class="fw-medium text-dark lh-base">
                             <%= order.address %>
-                        </div>
-                        <!-- Optional: Mock city/country if you don't have distinct fields -->
-                        <div class="text-muted small mt-1">Singapore</div> 
-                    <% } else { %>
-                        <span class="text-muted fst-italic">No address provided</span>
-                    <% } %>
+                          </div>
+                          <div class="text-muted small mt-1">Singapore</div>
+                        <% } else { %>
+                          <span class="text-muted fst-italic">No address provided</span>
+                        <% } %>
                 </div>
             </div>
             
             <div class="mt-4 pt-3 border-top">
-                <div class="section-title mb-2" style="border:none;">Payment Info</div>
-                <div class="d-flex align-items-center gap-2 text-muted">
-                    <i class="bi bi-credit-card"></i>
-                    <span>Paid via Credit Card</span>
-                </div>
+              <div class="section-title mb-2" style="border:none;">Payment Info</div>
+              <% const pm = (typeof paymentMethod !== 'undefined' && paymentMethod) ? paymentMethod : (order && order.payment_method) ? order.payment_method : 'Card'; %>
+              <div class="d-flex align-items-center gap-2 text-muted">
+                <% if (typeof pm === 'string' && pm.toLowerCase().includes('paypal')) { %>
+                  <i class="bi bi-paypal"></i>
+                  <span>Paid via PayPal</span>
+                <% } else if (typeof pm === 'string' && (pm.toLowerCase().includes('nets') || pm.toLowerCase().includes('net')) ) { %>
+                  <i class="bi bi-qr-code"></i>
+                  <span>Paid via NETS</span>
+                <% } else if (typeof pm === 'string' && (pm.toLowerCase().includes('card') || pm.toLowerCase().includes('stripe'))) { %>
+                  <i class="bi bi-credit-card"></i>
+                  <span>Paid via Card</span>
+                <% } else { %>
+                  <i class="bi bi-wallet2"></i>
+                  <span>Paid via <%= pm %></span>
+                <% } %>
+              </div>
+                <!-- Transaction ID intentionally hidden in admin view; only show payment method -->
             </div>
           </div>
 

@@ -77,15 +77,98 @@ exports.transactions = (req, res, next) => {
   const page = Math.max(1, Number(req.query.page || 1));
   const per = Math.max(1, Math.min(100, Number(req.query.per || 5)));
   const offset = (page - 1) * per;
+  const type = (req.query.type || 'all').toLowerCase(); // 'all', 'wallet', or 'loyalty'
 
-  const countSql = 'SELECT COUNT(*) AS cnt FROM wallet_transactions WHERE user_id = ?';
-  db.query(countSql, [userId], (cErr, cRows = []) => {
+  // Count total transactions based on type filter
+  let countSql, countParams;
+  if (type === 'wallet') {
+    countSql = 'SELECT COUNT(*) AS cnt FROM wallet_transactions WHERE user_id = ?';
+    countParams = [userId];
+  } else if (type === 'loyalty') {
+    countSql = 'SELECT COUNT(*) AS cnt FROM loyalty_points_transactions WHERE user_id = ?';
+    countParams = [userId];
+  } else {
+    // Count both wallet and loyalty transactions
+    countSql = `
+      SELECT (
+        (SELECT COUNT(*) FROM wallet_transactions WHERE user_id = ?) +
+        (SELECT COUNT(*) FROM loyalty_points_transactions WHERE user_id = ?)
+      ) AS cnt
+    `;
+    countParams = [userId, userId];
+  }
+
+  db.query(countSql, countParams, (cErr, cRows = []) => {
     if (cErr) return res.status(500).json({ success: false, error: 'Count failed' });
     const total = (cRows && cRows[0] && Number(cRows[0].cnt)) || 0;
-    const sql = 'SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?';
-    db.query(sql, [userId, per, offset], (err, rows = []) => {
+    
+    // Fetch transactions based on type filter
+    let sql, sqlParams;
+    if (type === 'wallet') {
+      sql = `
+        SELECT 
+          id, 
+          'wallet' AS transaction_type,
+          type,
+          amount AS amount_value,
+          NULL AS points,
+          description,
+          createdAt
+        FROM wallet_transactions 
+        WHERE user_id = ? 
+        ORDER BY createdAt DESC 
+        LIMIT ? OFFSET ?
+      `;
+      sqlParams = [userId, per, offset];
+    } else if (type === 'loyalty') {
+      sql = `
+        SELECT 
+          id,
+          'loyalty' AS transaction_type,
+          type,
+          NULL AS amount_value,
+          points,
+          description,
+          createdAt
+        FROM loyalty_points_transactions 
+        WHERE user_id = ? 
+        ORDER BY createdAt DESC 
+        LIMIT ? OFFSET ?
+      `;
+      sqlParams = [userId, per, offset];
+    } else {
+      // Union both wallet and loyalty transactions
+      sql = `
+        (SELECT 
+          id, 
+          'wallet' AS transaction_type,
+          type,
+          amount AS amount_value,
+          NULL AS points,
+          description,
+          createdAt
+        FROM wallet_transactions 
+        WHERE user_id = ?)
+        UNION ALL
+        (SELECT 
+          id,
+          'loyalty' AS transaction_type,
+          type,
+          NULL AS amount_value,
+          points,
+          description,
+          createdAt
+        FROM loyalty_points_transactions 
+        WHERE user_id = ?)
+        ORDER BY createdAt DESC 
+        LIMIT ? OFFSET ?
+      `;
+      sqlParams = [userId, userId, per, offset];
+    }
+
+    db.query(sql, sqlParams, (err, rows = []) => {
       if (err) return res.status(500).json({ success: false, error: 'Failed to load transactions' });
-      return res.json({ success: true, transactions: rows || [], page, per, total });
+      return res.json({ success: true, transactions: rows || [], page, per, total, type });
     });
   });
 };

@@ -765,8 +765,30 @@
             <!-- Refund Amount -->
             <div class="amount-display">
               <div class="amount-label">Refund Amount Requested</div>
-              <div class="amount-value">$<%= Number(refund.amount || 0).toFixed(2) %></div>
+              <div class="amount-value">$<%= Number(refund.requested_amount || refund.amount || 0).toFixed(2) %></div>
             </div>
+            
+            <% if (refund.status !== 'PENDING' && refund.requested_amount && Number(refund.requested_amount) !== Number(refund.amount)) { %>
+            <!-- Actual Refunded Amount (if different) -->
+            <div class="amount-display" style="margin-top: 15px; border-top: 2px solid #e5e7eb; padding-top: 15px;">
+              <div class="amount-label" style="color: #10b981;">
+                <i data-lucide="check-circle" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle;"></i>
+                Actual Amount Refunded
+              </div>
+              <div class="amount-value" style="color: #10b981;">$<%= Number(refund.amount || 0).toFixed(2) %></div>
+              <% if (refund.admin_note && refund.admin_note.trim() !== '') { %>
+              <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
+                <strong>Admin Note:</strong> <%= refund.admin_note %>
+              </div>
+              <% } %>
+            </div>
+            <% } else if (refund.status !== 'PENDING') { %>
+            <!-- Same amount - show as actual refunded -->
+            <div style="margin-top: 10px; font-size: 12px; color: #10b981; font-weight: 600;">
+              <i data-lucide="check-circle" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i>
+              Actual refunded amount matches requested amount
+            </div>
+            <% } %>
 
             <!-- Customer Reason -->
             <div class="reason-section">
@@ -774,8 +796,44 @@
                 <i data-lucide="message-square" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle;"></i>
                 Customer's Reason
               </div>
-              <p class="reason-text"><%= refund.reason || 'No reason provided' %></p>
+              <% 
+                // Strip the ' | items: [...]' metadata from reason display
+                let displayReason = refund.reason || 'No reason provided';
+                const itemsIndex = displayReason.indexOf(' | items: ');
+                if (itemsIndex !== -1) {
+                  displayReason = displayReason.substring(0, itemsIndex);
+                }
+              %>
+              <p class="reason-text"><%= displayReason %></p>
             </div>
+
+            <!-- Selected Items for Refund -->
+            <% if (refund.selectedItems && refund.selectedItems.length > 0) { %>
+              <div class="reason-section" style="margin-top: 25px;">
+                <div class="reason-title" style="margin-bottom: 15px;">
+                  <i data-lucide="package" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle;"></i>
+                  Items Selected for Refund
+                  <% if (refund.isFullRefund) { %>
+                    <span class="status-badge" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); font-size: 11px; padding: 4px 10px; margin-left: 8px;">FULL REFUND</span>
+                  <% } else { %>
+                    <span class="status-badge" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); font-size: 11px; padding: 4px 10px; margin-left: 8px;">PARTIAL REFUND</span>
+                  <% } %>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                  <% refund.selectedItems.forEach(function(item) { %>
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #f9fafb; border-radius: 10px; border: 1px solid #e5e7eb;">
+                      <img src="/images/<%= item.image %>" alt="<%= item.productName %>" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid #d1d5db;">
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 4px;"><%= item.productName %></div>
+                        <div style="font-size: 13px; color: #6b7280;">
+                          $<%= Number(item.price || 0).toFixed(2) %> × <%= item.refundQty %> qty = <strong style="color: #10b981;">$<%= (Number(item.price || 0) * Number(item.refundQty || 0)).toFixed(2) %></strong>
+                        </div>
+                      </div>
+                    </div>
+                  <% }); %>
+                </div>
+              </div>
+            <% } %>
 
             <!-- Additional Notes (if exists) -->
             <% if (refund.additionalNotes) { %>

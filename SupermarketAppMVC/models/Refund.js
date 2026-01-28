@@ -3,13 +3,14 @@ const db = require('../db');
 class Refund {
   static create(data, callback) {
     const sql = `
-      INSERT INTO refunds (order_id, user_id, amount, currency, method, reason, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'PENDING')
+      INSERT INTO refunds (order_id, user_id, amount, requested_amount, currency, method, reason, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')
     `;
     db.query(sql, [
       data.orderId,
       data.userId,
       data.amount,
+      data.amount, // requested_amount is same as amount initially
       data.currency || 'SGD',
       data.method,
       data.reason

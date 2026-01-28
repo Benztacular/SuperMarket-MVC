@@ -742,9 +742,23 @@
         <div id="walletTransactionsModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
             <div class="bg-white rounded-[1rem] shadow-2xl w-full max-w-3xl transform scale-95 modal-content overflow-hidden max-h-[80vh]">
                 <div class="flex items-center justify-between p-4 border-b border-slate-100">
-                    <h3 class="text-lg font-bold">All Wallet Transactions</h3>
+                    <h3 class="text-lg font-bold">All Transactions</h3>
                     <button onclick="toggleModal('walletTransactionsModal')" class="text-slate-400 hover:text-slate-700 p-2 rounded-full"><i class="ph-bold ph-x"></i></button>
                 </div>
+                
+                <!-- Filter Buttons -->
+                <div class="px-4 pt-4 flex gap-2">
+                    <button onclick="filterTransactions('all')" id="filter-all" class="px-4 py-2 rounded-lg text-xs font-bold bg-fresh-600 text-white transition-all">
+                        All
+                    </button>
+                    <button onclick="filterTransactions('wallet')" id="filter-wallet" class="px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+                        <i class="ph-bold ph-wallet"></i> Wallet
+                    </button>
+                    <button onclick="filterTransactions('loyalty')" id="filter-loyalty" class="px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+                        <i class="ph-bold ph-star"></i> Loyalty Points
+                    </button>
+                </div>
+                
                 <div class="p-4 overflow-y-auto" style="max-height:60vh">
                     <div id="walletTxContainer" class="space-y-2">
                         <!-- transactions will be rendered here -->
@@ -1010,12 +1024,13 @@
             });
         })();
 
-        // Wallet 'View All' pagination and modal
+        // Wallet 'View All' pagination and modal with filter support
         (function(){
             const btn = document.getElementById('walletViewAllBtn');
             const modalId = 'walletTransactionsModal';
             const container = document.getElementById('walletTxContainer');
             const paginationEl = document.getElementById('walletTxPagination');
+            let currentFilter = 'all'; // 'all', 'wallet', or 'loyalty'
 
             if(!btn) return;
 
@@ -1024,10 +1039,28 @@
                 await loadPage(1);
             });
 
+            // Make filterTransactions globally available
+            window.filterTransactions = async function(type){
+                currentFilter = type;
+                // Update button styles
+                ['all', 'wallet', 'loyalty'].forEach(t => {
+                    const btn = document.getElementById('filter-' + t);
+                    if(!btn) return;
+                    if(t === type){
+                        btn.classList.remove('bg-slate-100', 'text-slate-600');
+                        btn.classList.add('bg-fresh-600', 'text-white');
+                    } else {
+                        btn.classList.remove('bg-fresh-600', 'text-white');
+                        btn.classList.add('bg-slate-100', 'text-slate-600');
+                    }
+                });
+                await loadPage(1);
+            };
+
             async function loadPage(page){
                 const per = 5;
                 try{
-                    const resp = await fetch('/api/wallet/transactions?page=' + page + '&per=' + per, { credentials: 'same-origin' });
+                    const resp = await fetch('/api/wallet/transactions?page=' + page + '&per=' + per + '&type=' + currentFilter, { credentials: 'same-origin' });
                     if(!resp.ok) throw new Error('Failed to fetch');
                     const payload = await resp.json();
                     renderTransactions(payload.transactions || []);
@@ -1049,7 +1082,26 @@
                 txns.forEach((tx, idx) => {
                     const div = document.createElement('div');
                     div.className = 'tx-item flex items-center justify-between group hover:bg-slate-50 p-3 -mx-3 rounded-2xl transition-all border border-transparent hover:border-slate-100 card-elevated';
+                    
+                    const isLoyalty = tx.transaction_type === 'loyalty';
+                    const isWallet = tx.transaction_type === 'wallet';
+                    
                     const left = document.createElement('div');
+                    left.className = 'flex items-center gap-3';
+                    
+                    // Add icon based on transaction type
+                    const icon = document.createElement('div');
+                    icon.className = 'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0';
+                    if(isLoyalty){
+                        icon.className += ' bg-orange-100';
+                        icon.innerHTML = '<i class="ph-fill ph-star text-orange-600"></i>';
+                    } else {
+                        icon.className += ' bg-fresh-100';
+                        icon.innerHTML = '<i class="ph-fill ph-wallet text-fresh-600"></i>';
+                    }
+                    left.appendChild(icon);
+                    
+                    const info = document.createElement('div');
                     const title = document.createElement('p');
                     title.className = 'text-sm font-bold text-slate-900';
                     title.textContent = tx.description || tx.type || 'Transaction';
@@ -1057,17 +1109,30 @@
                     meta.className = 'text-xs text-slate-500';
                     const date = new Date(tx.createdAt || tx.created_at || Date.now());
                     meta.textContent = date.toLocaleString() + (tx.reference_id ? ' • Ref: ' + tx.reference_id : '');
-                    left.appendChild(title);
-                    left.appendChild(meta);
+                    info.appendChild(title);
+                    info.appendChild(meta);
+                    left.appendChild(info);
 
                     const right = document.createElement('div');
                     right.className = 'text-right';
-                    const amt = Number(tx.amount || 0);
-                    const isTopUp = String(tx.type || '').toUpperCase() === 'TOP_UP';
-                    const p = document.createElement('p');
-                    p.className = 'text-sm font-bold ' + (isTopUp ? 'text-green-600' : 'text-rose-600');
-                    p.textContent = (isTopUp ? '+' : '-') + '$' + Math.abs(amt).toFixed(2);
-                    right.appendChild(p);
+                    
+                    if(isLoyalty){
+                        // Display points
+                        const pts = Number(tx.points || 0);
+                        const isEarn = String(tx.type || '').toUpperCase() === 'EARN';
+                        const p = document.createElement('p');
+                        p.className = 'text-sm font-bold ' + (isEarn ? 'text-green-600' : 'text-rose-600');
+                        p.textContent = (isEarn ? '+' : '-') + Math.abs(pts) + ' pts';
+                        right.appendChild(p);
+                    } else {
+                        // Display amount
+                        const amt = Number(tx.amount_value || tx.amount || 0);
+                        const isTopUp = String(tx.type || '').toUpperCase() === 'TOP_UP';
+                        const p = document.createElement('p');
+                        p.className = 'text-sm font-bold ' + (isTopUp ? 'text-green-600' : 'text-rose-600');
+                        p.textContent = (isTopUp ? '+' : '-') + '$' + Math.abs(amt).toFixed(2);
+                        right.appendChild(p);
+                    }
 
                     div.appendChild(left);
                     div.appendChild(right);

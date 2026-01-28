@@ -918,7 +918,7 @@ function orderHistoryPage(req, res) {
     }
 
     const itemsSql = `
-      SELECT oi.order_id, oi.quantity AS qty, oi.price, p.productName, p.image
+      SELECT oi.order_id, oi.id, oi.product_id, oi.quantity AS qty, oi.price, p.productName, p.image
       FROM order_items oi
       LEFT JOIN products p ON p.id = oi.product_id
       WHERE oi.order_id IN (?)
@@ -928,13 +928,20 @@ function orderHistoryPage(req, res) {
       const itemsByOrder = (itemRows || []).reduce((acc, r) => {
         const id = r.order_id;
         acc[id] = acc[id] || [];
-        acc[id].push({ name: r.productName || r.product_name || '', qty: r.qty || r.quantity || 0, price: Number(r.price || 0), image: r.image || r.product_image || '' });
+        acc[id].push({ 
+          id: r.id,
+          productId: r.product_id,
+          name: r.productName || r.product_name || '', 
+          qty: r.qty || r.quantity || 0, 
+          price: Number(r.price || 0), 
+          image: r.image || r.product_image || '' 
+        });
         return acc;
       }, {});
 
       // Load refund status for each order
       const refundSql = `
-        SELECT order_id, id, status, amount, createdAt, admin_note
+        SELECT order_id, id, status, amount, requested_amount, createdAt, admin_note, reason
         FROM refunds
         WHERE order_id IN (?)
         ORDER BY createdAt DESC
@@ -947,6 +954,44 @@ function orderHistoryPage(req, res) {
           return acc;
         }, {});
 
+        // Parse selected items from successful refunds and build a map of refunded item ids -> refundedQty per order
+        // Support both formats: [{id,qty}, ...] and [id, id, ...] and allow matching by order_item id or product_id.
+        const refundedItemsByOrder = {};
+        (refundRows || []).filter(r => r.status === 'SUCCESS').forEach(refund => {
+          const orderId = refund.order_id;
+          if (!refundedItemsByOrder[orderId]) refundedItemsByOrder[orderId] = new Map();
+
+          const reasonStr = refund.reason || '';
+          const itemsMatch = reasonStr.match(/\| items: (\[.*?\])$/);
+          if (itemsMatch) {
+            try {
+              const selectedItems = JSON.parse(itemsMatch[1]);
+              if (Array.isArray(selectedItems)) {
+                selectedItems.forEach(si => {
+                  // si may be a number (id) or an object { id, qty }
+                  const idVal = Number((si && typeof si === 'object') ? (si.id ?? si.productId ?? si.product_id) : si);
+                  if (isNaN(idVal)) return;
+                  const qtyVal = (si && typeof si === 'object') ? (Number(si.qty) || Number(si.qty || si.quantity) || null) : null;
+                  // accumulate if multiple refunds
+                  const existing = refundedItemsByOrder[orderId].get(idVal);
+                  if (existing == null) {
+                    refundedItemsByOrder[orderId].set(idVal, qtyVal);
+                  } else {
+                    // if either is null, keep null (unknown/full). otherwise sum quantities
+                    if (existing === null || qtyVal === null) {
+                      refundedItemsByOrder[orderId].set(idVal, null);
+                    } else {
+                      refundedItemsByOrder[orderId].set(idVal, existing + qtyVal);
+                    }
+                  }
+                });
+              }
+            } catch (e) {
+              console.error('Failed to parse refund items JSON:', e);
+            }
+          }
+        });
+
         // Also aggregate total refunded amounts per order (successful refunds)
         db.query('SELECT order_id, COALESCE(SUM(amount),0) AS totalRefunded FROM refunds WHERE order_id IN (?) AND status = ? GROUP BY order_id', [orderIds, 'SUCCESS'], (aggErr, aggRows = []) => {
           if (aggErr) { console.error('Error loading refund aggregates:', aggErr); }
@@ -958,6 +1003,62 @@ function orderHistoryPage(req, res) {
             o.items = itemsByOrder[o.id] || [];
             o.refund = refundsByOrder[o.id] || null;
             o.totalRefunded = refunded;
+
+            // Mark items as refunded only when refunded qty covers the item quantity.
+            // Support matching by order_items.id or by product_id (in case reason used product ids).
+            const refundedMap = refundedItemsByOrder[o.id] || new Map();
+            o.items.forEach(item => {
+              const orderItemId = Number(item.id);
+              const productId = Number(item.productId || item.product_id || 0);
+              let refundedQty = null;
+
+              if (refundedMap.has(orderItemId)) refundedQty = refundedMap.get(orderItemId);
+              else if (productId && refundedMap.has(productId)) refundedQty = refundedMap.get(productId);
+
+              if (refundedQty === null && (refundedMap.has(orderItemId) || refundedMap.has(productId))) {
+                // null indicates unknown/unspecified qty => mark as refunded
+                item.isRefunded = true;
+              } else if (typeof refundedQty === 'number') {
+                item.isRefunded = refundedQty >= Number(item.qty || 0);
+              } else {
+                item.isRefunded = false;
+              }
+            });
+
+            // Build refundedDetails array for view (name, image, refundedQty, unitPrice, total)
+            o.refundedDetails = [];
+            if (refundedMap && typeof refundedMap.forEach === 'function') {
+              refundedMap.forEach((qtyVal, idKey) => {
+                const idNum = Number(idKey);
+                const matched = o.items.find(it => Number(it.id) === idNum || Number(it.productId || it.product_id || 0) === idNum);
+                const qtyToShow = qtyVal === null ? (matched ? Number(matched.qty || 0) : null) : Number(qtyVal || 0);
+                if (matched) {
+                  const unitPrice = Number(matched.price || 0);
+                  // Attach refundedQty to the matched order item for view consumption
+                  const assignedQty = (qtyToShow === null) ? Number(matched.qty || 0) : Number(qtyToShow || 0);
+                  matched.refundedQty = assignedQty;
+                  const originalQty = Number(matched.qty || 0);
+                  const remainingQty = Math.max(0, originalQty - assignedQty);
+                  const lineOriginalTotal = Number((unitPrice * originalQty).toFixed(2));
+                  const lineRemainingTotal = Number((unitPrice * remainingQty).toFixed(2));
+                  const refundedAmountLine = Number((lineOriginalTotal - lineRemainingTotal).toFixed(2));
+                  o.refundedDetails.push({
+                    id: idNum,
+                    name: matched.name || matched.productName || 'Item',
+                    image: matched.image || 'default.png',
+                    refundedQty: assignedQty,
+                    originalQty,
+                    remainingQty,
+                    unitPrice,
+                    lineOriginalTotal,
+                    lineRemainingTotal,
+                    refundedAmountLine
+                  });
+                } else {
+                  o.refundedDetails.push({ id: idNum, name: 'Unknown item', image: 'default.png', qty: qtyToShow, unitPrice: 0, total: 0 });
+                }
+              });
+            }
 
             // Normalize statuses to support UI filters and the requested business rules
             const s = (o.status || '').toString().trim();
@@ -1083,9 +1184,111 @@ exports.adminDetails = (req, res, next) => {
   db.query(orderSql, [req.params.id], (err, orderRows) => {
     if (err) return next(err);
     if (!orderRows?.length) return res.status(404).render('adminOrderDetails', { order: null, items: [] });
+    const order = orderRows[0];
     db.query(itemsSql, [req.params.id], (itemErr, itemRows) => {
       if (itemErr) return next(itemErr);
-      res.render('adminOrderDetails', { order: orderRows[0], items: itemRows || [] });
+      const items = itemRows || [];
+      // compute subtotal from items (fallback if order.subtotal missing)
+      const itemsSubtotal = items.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.quantity || 0)), 0);
+
+      // prepare values from order
+      const shippingFee = Number(order.shipping_fee || 0);
+      const couponDiscount = Number(order.coupon_discount || 0);
+      const couponCode = order.coupon_code_snapshot || null;
+
+      // load delivery address and shipping method (parallel)
+      const addrPromise = new Promise((resolve) => {
+        if (!order.delivery_address_id) return resolve(null);
+        db.query('SELECT * FROM delivery_addresses WHERE id = ? LIMIT 1', [order.delivery_address_id], (aErr, aRows = []) => {
+          if (aErr) { console.error('adminDetails - load delivery address error', aErr); return resolve(null); }
+          resolve(aRows[0] || null);
+        });
+      });
+
+      const shipPromise = new Promise((resolve) => {
+        if (!order.shipping_method_id) return resolve(null);
+        db.query('SELECT * FROM shipping_methods WHERE id = ? LIMIT 1', [order.shipping_method_id], (sErr, sRows = []) => {
+          if (sErr) { console.error('adminDetails - load shipping method error', sErr); return resolve(null); }
+          resolve(sRows[0] || null);
+        });
+      });
+
+      // detect payment info (paypal/stripe/nets) for nicer display
+      const txnPromise = new Promise((resolve) => {
+        db.query('SELECT paypal_order_id, payment_time FROM paypal_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [order.id], (pErr, pRows = []) => {
+          if (!pErr && pRows && pRows[0]) return resolve({ method: 'PayPal', id: pRows[0].paypal_order_id, date: pRows[0].payment_time });
+          db.query('SELECT stripe_txn_id, stripe_charge_id, payment_time FROM stripe_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [order.id], (sErr, sRows = []) => {
+            if (!sErr && sRows && sRows[0]) return resolve({ method: 'Card', id: sRows[0].stripe_txn_id || sRows[0].stripe_charge_id, date: sRows[0].payment_time });
+            db.query('SELECT nets_txn_id, merchant_txn_ref, payment_time FROM nets_transactions WHERE order_id = ? ORDER BY id DESC LIMIT 1', [order.id], (nErr, nRows = []) => {
+              if (!nErr && nRows && nRows[0]) return resolve({ method: 'NETS', id: nRows[0].nets_txn_id || nRows[0].merchant_txn_ref, date: nRows[0].payment_time });
+              return resolve({ method: order.payment_method || 'Card', id: order.transaction_id || null });
+            });
+          });
+        });
+      });
+
+      Promise.all([addrPromise, shipPromise, txnPromise]).then(([deliveryAddress, shippingMethod, txnInfo]) => {
+        // Load refund data to determine which items were refunded
+        db.query('SELECT * FROM refunds WHERE order_id = ? AND status = ? ORDER BY id DESC LIMIT 1', [order.id, 'SUCCESS'], (refErr, refRows = []) => {
+          let refundedItemIds = new Set();
+          if (!refErr && refRows && refRows[0]) {
+            try {
+              const match = (refRows[0].reason || '').match(/\| items: (\[.*?\])/);
+              if (match && match[1]) {
+                const selectedItems = JSON.parse(match[1]);
+                selectedItems.forEach(si => refundedItemIds.add(Number(si.id)));
+              }
+            } catch (e) {
+              console.error('adminDetails - failed to parse refund items', e);
+            }
+          }
+          
+          // Mark items as refunded
+          items.forEach(item => {
+            item.isRefunded = refundedItemIds.has(Number(item.id));
+          });
+
+        // compute membership discount based on stored subtotal or itemsSubtotal
+        const subtotalForDiscount = Number(order.subtotal || itemsSubtotal || 0);
+        Membership.getUserMembership(order.user_id, (mErr, membership) => {
+          if (mErr) console.error('adminDetails - membership lookup failed', mErr);
+          if (!membership) membership = { plan_name: 'Free', discount_percent: 0, discount_threshold: 0 };
+          const discPercent = Number(membership.discount_percent || 0);
+          const discThresh = Number(membership.discount_threshold || 0);
+          let membershipDiscount = 0;
+          if (discPercent > 0 && subtotalForDiscount >= discThresh) {
+            membershipDiscount = Number((subtotalForDiscount * (discPercent / 100)).toFixed(2));
+          }
+
+          // calculate final total as subtotal + shipping - membership - coupon
+          const subtotal = Number(order.subtotal != null ? order.subtotal : itemsSubtotal);
+          const calculatedTotal = Number(subtotal || 0) + Number(shippingFee || 0) - Number(membershipDiscount || 0) - Number(couponDiscount || 0);
+
+          return res.render('adminOrderDetails', {
+            order: order,
+            items: items,
+            subtotal: subtotal,
+            itemsSubtotal: itemsSubtotal,
+            shippingFee: shippingFee,
+            shippingMethod: shippingMethod || null,
+            deliveryAddress: deliveryAddress || null,
+            membershipDiscount: membershipDiscount,
+            membershipName: membership.plan_name || 'Free',
+            couponDiscount: couponDiscount,
+            couponCode: couponCode,
+            calculatedTotal: calculatedTotal,
+            paymentMethod: txnInfo && txnInfo.method,
+            transactionId: txnInfo && txnInfo.id
+          });
+        });
+        });
+      }).catch((e) => {
+        console.error('adminDetails - parallel load error', e);
+        // fallback render with best-effort values
+        const subtotal = Number(order.subtotal != null ? order.subtotal : itemsSubtotal);
+        const calculatedTotal = Number(subtotal || 0) + Number(shippingFee || 0) - Number(0) - Number(couponDiscount || 0);
+        return res.render('adminOrderDetails', { order: order, items: items, subtotal: subtotal, itemsSubtotal: itemsSubtotal, shippingFee: shippingFee, membershipDiscount: 0, couponDiscount: couponDiscount, calculatedTotal: calculatedTotal, paymentMethod: order.payment_method || 'Card', transactionId: order.transaction_id || null, deliveryAddress: null, shippingMethod: null });
+      });
     });
   });
 };

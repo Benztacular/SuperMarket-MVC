@@ -385,6 +385,7 @@ CREATE TABLE refunds (
   order_id INT NOT NULL,
   user_id INT NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
+  requested_amount DECIMAL(10,2) NULL COMMENT 'Original amount requested by customer',
   currency VARCHAR(10) DEFAULT 'SGD',
   method VARCHAR(50),
   gateway_ref VARCHAR(100),
@@ -552,5 +553,29 @@ CREATE TABLE loyalty_redemptions (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (reward_id) REFERENCES loyalty_rewards(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- MIGRATION: Add requested_amount to refunds table
+-- ============================================================
+-- Add `requested_amount` column in a way compatible with older MySQL versions
+-- (some MySQL versions do not support `ADD COLUMN IF NOT EXISTS`).
+-- This block checks INFORMATION_SCHEMA and runs ALTER only if column is missing.
+SET @col_count := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'refunds'
+    AND COLUMN_NAME = 'requested_amount'
+);
+SET @ddl := IF(@col_count = 0,
+  'ALTER TABLE refunds ADD COLUMN requested_amount DECIMAL(10,2) NULL COMMENT ''Original amount requested by customer'' AFTER amount;',
+  'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Backfill requested_amount for existing records (set to current amount)
+UPDATE refunds SET requested_amount = amount WHERE requested_amount IS NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;
