@@ -33,7 +33,7 @@ exports.page = (req, res) => {
   if (!userId) return res.redirect('/login');
 
   const sql = `
-    SELECT ci.id AS cart_id, ci.quantity AS qty,
+    SELECT ci.id AS cart_id, ci.quantity AS qty, COALESCE(ci.selected, 1) AS selected,
            p.*, p.quantity AS stock_qty
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
@@ -67,10 +67,12 @@ exports.page = (req, res) => {
         price,
         quantity,
         stock,
+        selected: Number(r.selected) === 1,
         image: r.image || r.img || ''
       };
     });
-    const total = items.reduce((s, it) => s + it.price * it.quantity, 0);
+    console.log('[CartController.page] Items:', items.map(i => ({ id: i.id, selected: i.selected })));
+    const total = items.filter(it => it.selected).reduce((s, it) => s + it.price * it.quantity, 0);
     return res.render('cart', { items, cartItems: items, total });
   });
 };
@@ -133,7 +135,7 @@ exports.add = function (req, res, next) {
 
       if (cartRow) {
         const newQty = existingInCart + allowedToAdd;
-        db.query('UPDATE cart_items SET quantity = ? WHERE id = ?', [newQty, cartRow.id], (uErr) => {
+        db.query('UPDATE cart_items SET quantity = ?, selected = 1 WHERE id = ?', [newQty, cartRow.id], (uErr) => {
           if (uErr) return next(uErr);
           const msg = allowedToAdd < qty ? `Added ${allowedToAdd} (limited by stock)` : 'Added to cart';
           if (wantsJSON) return res.json({ success:true, message: msg, cartItem: { product_id: productId, quantity: newQty }, available, inCart: newQty });
@@ -141,7 +143,7 @@ exports.add = function (req, res, next) {
           return res.redirect(fallback);
         });
       } else {
-        db.query('INSERT INTO cart_items (user_id, product_id, quantity) VALUES (?, ?, ?)', [userId, productId, allowedToAdd], (iErr, info) => {
+        db.query('INSERT INTO cart_items (user_id, product_id, quantity, selected) VALUES (?, ?, ?, 1)', [userId, productId, allowedToAdd], (iErr, info) => {
           if (iErr) return next(iErr);
           const msg = allowedToAdd < qty ? `Added ${allowedToAdd} (limited by stock)` : 'Added to cart';
           if (wantsJSON) return res.json({ success:true, message: msg, cartItemId: info.insertId, cartItem: { product_id: productId, quantity: allowedToAdd }, available, inCart: allowedToAdd });
@@ -347,9 +349,10 @@ exports.confirmPayment = function (req, res) {
                p.price AS unit_price, p.productName AS product_name, p.quantity AS stock
         FROM cart_items ci
         JOIN products p ON p.id = ci.product_id
-        WHERE ci.user_id = ?
+        WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1
         FOR UPDATE
       `;
+
       conn.query(cartSql, [userId], (err, cartRows) => {
         if (err) return rollbackFail('Failed to read cart', err);
         console.log('confirmPayment: cartRows count =', (cartRows || []).length);
@@ -540,7 +543,7 @@ exports.pay = function (req, res) {
       p.quantity AS stock
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
-    WHERE ci.user_id = ?
+    WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1
   `;
 
   db.query(sql, [userId], (err, rows) => {
@@ -735,7 +738,7 @@ exports.checkoutPage = function (req, res) {
       p.quantity AS stock
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
-    WHERE ci.user_id = ?
+    WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1
   `;
 
   db.query(sql, [userId], (err, rows) => {
@@ -744,13 +747,7 @@ exports.checkoutPage = function (req, res) {
       return res.status(500).render('checkout', { items: [], cartItems: [], total: 0, error: 'Failed to load checkout' });
     }
 
-    // If client provided selected cart item ids via query param `items[]`, filter to those only
-    let selectedIds = req.query && (req.query.items || req.query['items[]']) ? req.query.items || req.query['items[]'] : null;
-    if (selectedIds && !Array.isArray(selectedIds)) selectedIds = String(selectedIds).split(',').map(s => s.trim()).filter(Boolean);
-    const filteredRows = Array.isArray(selectedIds) && selectedIds.length ? (rows || []).filter(r => selectedIds.includes(String(r.cart_id || r.id))) : (rows || []);
-
-    // persist selected cart ids in session so later order creation can respect the selection
-    try { req.session.selectedCartItemIds = Array.isArray(selectedIds) && selectedIds.length ? selectedIds : null; } catch (e) { /* ignore if session not writable */ }
+    const filteredRows = rows || [];
 
     const items = (filteredRows || []).map(r => ({
       id: r.product_id,
@@ -863,5 +860,27 @@ exports.selectShippingMethod = function (req, res) {
 
     req.session.selectedShippingMethodId = shippingMethodId;
     return res.json({ success: true, shippingMethodId });
+  });
+};
+
+// Toggle cart item selection state (database-backed)
+exports.toggleSelection = function (req, res) {
+  const userId = uid(req);
+  if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated' });
+
+  const cartItemId = Number(req.body.cart_item_id || req.body.id || 0);
+  const selected = req.body.selected === true || req.body.selected === 'true' || req.body.selected === 1 || req.body.selected === '1' ? 1 : 0;
+
+  if (!cartItemId) return res.status(400).json({ success: false, message: 'Missing cart item id' });
+
+  db.query('UPDATE cart_items SET selected = ? WHERE id = ? AND user_id = ?', [selected, cartItemId, userId], (err, result) => {
+    if (err) {
+      console.error('toggleSelection error', err);
+      return res.status(500).json({ success: false, message: 'Failed to update selection' });
+    }
+    if (!result || result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Cart item not found' });
+    }
+    return res.json({ success: true, cart_item_id: cartItemId, selected });
   });
 };

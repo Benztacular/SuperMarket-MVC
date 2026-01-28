@@ -23,7 +23,7 @@ async function createOrder(req, res, next) {
       SELECT ci.quantity AS quantity, p.price AS price
       FROM cart_items ci
       JOIN products p ON p.id = ci.product_id
-      WHERE ci.user_id = ?
+      WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1
     `;
 
     db.query(cartSql, [userId], async (err, rows) => {
@@ -125,7 +125,7 @@ async function captureOrder(req, res, next) {
                p.price AS unit_price, p.quantity AS stock, p.productName
         FROM cart_items ci
         JOIN products p ON p.id = ci.product_id
-        WHERE ci.user_id = ?
+        WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1
         FOR UPDATE
       `;
       conn.query(cartSql, [userId], (cErr, cartRows) => {

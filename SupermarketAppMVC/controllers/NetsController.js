@@ -90,7 +90,7 @@ function createOrderFromCart(userId, txnRetrievalRef, options, callback) {
     try {
       await begin();
 
-      const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity, p.price AS unit_price, p.quantity AS stock, p.productName FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? FOR UPDATE`, [userId])) || [];
+      const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity, p.price AS unit_price, p.quantity AS stock, p.productName FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1 FOR UPDATE`, [userId])) || [];
       if (!cartRows.length) throw new Error('Cart empty');
       const insufficient = cartRows.find(r => Number(r.quantity) > Number(r.stock));
       if (insufficient) throw new Error(`Insufficient stock for ${insufficient.productName}`);

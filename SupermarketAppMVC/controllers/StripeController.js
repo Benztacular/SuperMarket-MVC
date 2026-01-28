@@ -27,7 +27,7 @@ async function createPaymentIntent(req, res, next) {
             SELECT ci.quantity AS quantity, p.price AS price
             FROM cart_items ci
             JOIN products p ON p.id = ci.product_id
-            WHERE ci.user_id = ?
+            WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1
           `;
           const rows = await new Promise((resolve, reject) => db.query(cartSql, [userId], (e, r) => e ? reject(e) : resolve(r || [])));
           const items = rows || [];
@@ -137,7 +137,7 @@ async function confirmPayment(req, res, next) {
 
     await begin();
 
-    const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity, p.price AS unit_price, p.quantity AS stock, p.productName FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? FOR UPDATE`, [userId])) || [];
+    const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity, p.price AS unit_price, p.quantity AS stock, p.productName FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1 FOR UPDATE`, [userId])) || [];
     if (!cartRows.length) { rollback(() => res.status(400).json({ error: 'Cart empty' })); return; }
 
     for (const r of cartRows) {

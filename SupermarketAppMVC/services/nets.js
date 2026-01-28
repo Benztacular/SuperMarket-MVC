@@ -15,7 +15,7 @@ async function computeServerCartTotal(req) {
       `SELECT ci.product_id, ci.quantity, p.price AS unit_price, p.quantity AS stock
        FROM cart_items ci
        JOIN products p ON p.id = ci.product_id
-       WHERE ci.user_id = ?`,
+       WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1`,
       [userId]
     ) || [];
 

@@ -595,7 +595,7 @@ exports.pay = async (req, res, next) => {
     }
 
     // Load cart items
-    const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity AS cart_qty, p.quantity AS stock_qty, p.price AS price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? FOR UPDATE`, [userId])) || [];
+    const cartRows = (await q(`SELECT ci.id AS cart_id, ci.product_id, ci.quantity AS cart_qty, p.quantity AS stock_qty, p.price AS price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1 FOR UPDATE`, [userId])) || [];
     if (!cartRows.length) {
       await rollbackSafe('EMPTY_CART');
       if (req.flash) req.flash('error', 'Your cart is empty');

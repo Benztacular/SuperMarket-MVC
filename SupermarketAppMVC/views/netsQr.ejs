@@ -72,7 +72,7 @@
 
             <div class="actions">
                 <div class="timer" id="timer">Time remaining: 5:00</div>
-                <a class="cancel" href="/">Cancel</a>
+                <a class="cancel" href="/cart/pay" id="nets-cancel">Cancel</a>
             </div>
         </div>
     </div>
@@ -126,6 +126,21 @@
         };
         const timerInterval = setInterval(updateTimer, 1000);
         updateTimer();
+
+        // Close SSE and route back to payment page when user cancels
+        const cancelBtn = document.getElementById('nets-cancel');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                if (s2sNetsTxnStatus) {
+                    try { s2sNetsTxnStatus.close(); } catch (e) { /* ignore */ }
+                }
+                // clear timer
+                try { clearInterval(timerInterval); } catch (e) {}
+                // redirect back to pay page
+                window.location.href = cancelBtn.getAttribute('href') || '/cart/pay';
+            }, false);
+        }
     </script>
 </body>
 </html>

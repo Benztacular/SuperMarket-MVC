@@ -363,7 +363,8 @@
         <%
           const rows = (cartItems || items || []);
           function price(n){ const v = Number(n||0); return isFinite(v) ? v.toFixed(2) : '0.00'; }
-          const sum = rows.reduce((s, it)=> s + Number(it.price||0)*Number(it.quantity||0), 0);
+          const selectedRows = rows.filter(it => it.selected);
+          const sum = selectedRows.reduce((s, it)=> s + Number(it.price||0)*Number(it.quantity||0), 0);
         %>
 
         <div class="list-group border-0">
@@ -377,7 +378,7 @@
             <!-- Modern Card Item -->
             <div class="cart-item-card d-flex flex-column flex-sm-row align-items-sm-center gap-4" data-cart-id="<%= it.id %>" data-price="<%= it.price %>" data-qty="<%= it.quantity %>" data-stock="<%= it.stock || 0 %>">
               <div class="form-check me-3" style="align-self:flex-start;">
-                <input class="form-check-input select-item" type="checkbox" value="<%= it.id %>" id="select-item-<%= it.id %>" checked>
+                <input class="form-check-input select-item" type="checkbox" value="<%= it.id %>" id="select-item-<%= it.id %>" <%= it.selected ? 'checked' : '' %>>
               </div>
               
               <!-- Image -->
@@ -553,7 +554,27 @@
 
         // listen for selection changes
         document.addEventListener('change', function (e) {
-          if (e.target.matches('.select-item') || e.target.matches('.qty-input')) {
+          if (e.target.matches('.select-item')) {
+            // Save selection state to database
+            const checkbox = e.target;
+            const cartItemId = checkbox.value;
+            const selected = checkbox.checked;
+            
+            fetch('/cart/toggle-selection', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ cart_item_id: cartItemId, selected: selected })
+            }).then(r => r.json()).then(data => {
+              if (!data.success) {
+                console.error('Failed to save selection state:', data.message);
+              }
+            }).catch(err => {
+              console.error('Error saving selection:', err);
+            });
+            
+            computeSelectedSubtotal();
+          }
+          if (e.target.matches('.qty-input')) {
             computeSelectedSubtotal();
           }
         }, true);

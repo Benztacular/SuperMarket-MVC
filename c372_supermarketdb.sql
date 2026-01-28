@@ -123,6 +123,7 @@ CREATE TABLE cart_items (
   user_id INT NOT NULL,
   product_id INT NOT NULL,
   quantity INT NOT NULL,
+  selected TINYINT(1) DEFAULT 1 NOT NULL,
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
@@ -576,6 +577,6 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- Backfill requested_amount for existing records (set to current amount)
-UPDATE refunds SET requested_amount = amount WHERE requested_amount IS NULL;
+UPDATE refunds SET requested_amount = amount WHERE requested_amount IS NULL AND id > 0;
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -362,7 +362,7 @@ const checkout = function (req, res, next) {
             const originalShippingFee = Number(shipRow.price || 0);
 
             // Respect any selected cart item ids saved in session (from cart page)
-            let cartSql = 'SELECT ci.id AS cart_id, ci.product_id, ci.quantity AS cart_qty, p.quantity AS stock_qty, p.price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ?';
+            let cartSql = 'SELECT ci.id AS cart_id, ci.product_id, ci.quantity AS cart_qty, p.quantity AS stock_qty, p.price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1';
             const cartParams = [userId];
             const sel = req.session?.selectedCartItemIds;
             if (Array.isArray(sel) && sel.length) {
@@ -698,7 +698,7 @@ function applyCoupon(req, res) {
 
       function continueWithCartTotal(requiredMinSpend, userCouponId, coupon, maxUses) {
         // compute cart subtotal (respect selectedCartItemIds in session)
-        let cartSql = 'SELECT ci.quantity AS qty, p.price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ?';
+        let cartSql = 'SELECT ci.quantity AS qty, p.price FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.user_id = ? AND COALESCE(ci.selected, 1) = 1';
         const params = [userId];
         const sel = req.session?.selectedCartItemIds;
         if (Array.isArray(sel) && sel.length) { cartSql += ' AND ci.id IN (?)'; params.push(sel); }

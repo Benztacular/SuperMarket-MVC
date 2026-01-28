@@ -197,6 +197,7 @@ app.post('/cart/remove/:id', requireUser, CartController.remove);
 app.post('/addToCart', requireUser, CartController.add);
 app.post('/cart/update', requireUser, CartController.update);
 app.post('/cart/remove', requireUser, CartController.remove);
+app.post('/cart/toggle-selection', requireUser, CartController.toggleSelection);
 app.get('/cart/pay', CartController.pay);
 app.get('/cart/checkout', requireUser, CartController.checkoutPage);
 app.post('/shipping/select', requireUser, ensure(CartController.selectShippingMethod, 'CartController.selectShippingMethod'));
