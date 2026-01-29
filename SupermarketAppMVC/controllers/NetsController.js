@@ -200,7 +200,7 @@ function createOrderFromCart(userId, txnRetrievalRef, options, callback) {
         }
       }
 
-      await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
+      await q('DELETE FROM cart_items WHERE user_id = ? AND COALESCE(selected,1) = 1', [userId]);
 
       await commit();
       return callback(null, orderId, total);

@@ -432,7 +432,7 @@
           </a>
 
           <% if (rows.length > 0) { %>
-            <form action="/cart/clear" method="POST" class="d-inline">
+            <form id="clear-cart-form" action="/cart/clear" method="POST" class="d-inline">
               <button type="submit" class="btn btn-link text-danger text-decoration-none d-flex align-items-center gap-2 fw-medium p-0" style="font-size: 0.9rem;" onclick="return confirm('Are you sure you want to clear your entire cart?')">
                 Clear Cart
               </button>
@@ -640,6 +640,28 @@
           });
           // allow form to submit
         });
+
+        // Clear cart handler: send selected items[] when present, otherwise confirm full clear
+        const clearForm = document.getElementById('clear-cart-form');
+        if (clearForm) {
+          clearForm.addEventListener('submit', function (ev) {
+            const selected = Array.from(document.querySelectorAll('.select-item')).filter(c => c.checked).map(c => c.value);
+            const existing = clearForm.querySelectorAll('input[name="items[]"].dynamic-clear');
+            existing.forEach(n => n.remove());
+            if (selected.length) {
+              selected.forEach(id => {
+                const inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'items[]'; inp.value = id; inp.className = 'dynamic-clear';
+                clearForm.appendChild(inp);
+              });
+              return; // submit normally
+            }
+            // no selected items: ask confirmation (keep existing confirm behavior)
+            if (!confirm('No items selected. This will clear your entire cart. Continue?')) {
+              ev.preventDefault();
+              return;
+            }
+          });
+        }
       })();
 
   </script>

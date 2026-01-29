@@ -121,7 +121,7 @@ async function placeOrder(req, res) {
       if (!items.length) {
         if (req.session) req.session.cart = null;
         if (Cart.clearByUser) return Cart.clearByUser(userId, () => res.redirect(`/orders/${orderId}/receipt`));
-        return db.query('DELETE FROM cart_items WHERE user_id = ?', [userId], () => res.redirect(`/orders/${orderId}/receipt`));
+          return db.query('DELETE FROM cart_items WHERE user_id = ? AND COALESCE(selected,1) = 1', [userId], () => res.redirect(`/orders/${orderId}/receipt`));
       }
 
       let pending = items.length;
@@ -157,7 +157,7 @@ async function placeOrder(req, res) {
           });
         }
 
-        db.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (dErr) => {
+          db.query('DELETE FROM cart_items WHERE user_id = ? AND COALESCE(selected,1) = 1', [userId], (dErr) => {
           if (dErr) console.error('Failed to clear cart', dErr);
           return res.redirect(`/orders/${orderId}/receipt`);
         });

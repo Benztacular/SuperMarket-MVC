@@ -278,7 +278,27 @@ exports.clear = (req, res) => {
   if (!userId) return res.redirect('/login');
 
   const wantsJSON = req.xhr || (req.headers.accept || '').includes('application/json');
-  db.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (err, result) => {
+
+  // Allow clearing only selected items when `items[]` is provided in body or query.
+  let selectedIds = null;
+  if (req.body && (req.body.items || req.body['items[]'])) selectedIds = req.body.items || req.body['items[]'];
+  if (!selectedIds && req.query && (req.query.items || req.query['items[]'])) selectedIds = req.query.items || req.query['items[]'];
+  if (selectedIds && !Array.isArray(selectedIds)) {
+    selectedIds = String(selectedIds).split(',').map(s => s.trim()).filter(Boolean);
+  }
+  selectedIds = (selectedIds || []).map(s => Number(s)).filter(n => Number.isFinite(n) && n > 0);
+
+  let sql, params;
+  if (selectedIds && selectedIds.length) {
+    const placeholders = selectedIds.map(() => '?').join(',');
+    sql = `DELETE FROM cart_items WHERE user_id = ? AND id IN (${placeholders})`;
+    params = [userId, ...selectedIds];
+  } else {
+    sql = 'DELETE FROM cart_items WHERE user_id = ?';
+    params = [userId];
+  }
+
+  db.query(sql, params, (err, result) => {
     if (err) {
       console.error('Cart.clear - delete error', err);
       return wantsJSON
@@ -287,7 +307,10 @@ exports.clear = (req, res) => {
     }
 
     if (wantsJSON) return res.json({ success: true, removed: result?.affectedRows || 0 });
-    if (req.flash) req.flash('success', 'Cart cleared');
+    if (req.flash) {
+      if (selectedIds && selectedIds.length) req.flash('success', `Removed ${result?.affectedRows || 0} item(s) from cart`);
+      else req.flash('success', 'Cart cleared');
+    }
     return res.redirect('/cart');
   });
 };

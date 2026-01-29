@@ -205,7 +205,7 @@ async function confirmPayment(req, res, next) {
       await q('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(r.quantity), r.product_id]);
     }
 
-    await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
+    await q('DELETE FROM cart_items WHERE user_id = ? AND COALESCE(selected,1) = 1', [userId]);
 
     // Persist stripe transaction record (best-effort)
     try {

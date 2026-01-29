@@ -684,8 +684,8 @@ exports.pay = async (req, res, next) => {
       await q('UPDATE products SET quantity = quantity - ? WHERE id = ?', [Number(row.cart_qty), row.product_id]);
     }
 
-    // Clear cart
-    await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
+    // Clear cart (only remove items that were selected/checked for this purchase)
+    await q('DELETE FROM cart_items WHERE user_id = ? AND COALESCE(selected,1) = 1', [userId]);
 
     // Mark user coupon as used if applicable and increment master counter
     try {

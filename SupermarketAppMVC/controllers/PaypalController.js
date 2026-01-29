@@ -244,7 +244,7 @@ async function captureOrder(req, res, next) {
 
                     Promise.all(updates)
                       .then(() => {
-                        conn.query('DELETE FROM cart_items WHERE user_id = ?', [userId], (dErr) => {
+                        conn.query('DELETE FROM cart_items WHERE user_id = ? AND COALESCE(selected,1) = 1', [userId], (dErr) => {
                           if (dErr) return conn.rollback(() => next(dErr));
 
                           // persist paypal transaction
