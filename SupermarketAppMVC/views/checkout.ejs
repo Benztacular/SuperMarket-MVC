@@ -601,8 +601,11 @@
           <!-- Prominent Coupon Widget -->
           <div class="coupon-widget" aria-live="polite">
             <div class="coupon-top d-flex align-items-center justify-content-between">
-              <div class="coupon-badge">Promo</div>
-              <div class="coupon-hint small text-muted">Have a code? Apply it here</div>
+              <div class="coupon-hint small text-muted d-flex align-items-center gap-2">
+                <span class="coupon-hint-text">Have a code? Apply it here</span>
+                <div class="coupon-badge-inline">My Codes</div>
+                <span class="coupon-hint-msg visually-hidden ms-2" aria-live="polite" style="font-weight:600;color:#10b981;"></span>
+              </div>
             </div>
 
             <div class="coupon-input-row d-flex align-items-center">
@@ -715,19 +718,270 @@
 
   <%- include('partials/footer') %>
   <style>
-    /* Coupon widget styles */
-    .coupon-widget{ border:1px solid rgba(34,197,94,0.12); background:linear-gradient(90deg, rgba(240,255,244,1) 0%, rgba(255,255,255,1) 100%); padding:14px; border-radius:10px; margin-top:12px; box-shadow:0 6px 18px rgba(16,24,40,0.03); }
-    .coupon-top{ margin-bottom:8px; }
-    .coupon-badge{ background: linear-gradient(90deg,#10b981,#059669); color:white; padding:6px 10px; border-radius:999px; font-weight:600; font-size:0.8rem; }
-    .coupon-input-row{ gap:8px; }
-    .coupon-input{ padding:10px 12px; font-size:0.95rem; border-radius:8px; border:1px solid rgba(15,23,42,0.06); box-shadow:inset 0 1px 0 rgba(255,255,255,0.6); }
-    .coupon-apply-btn{ padding:8px 14px; border-radius:8px; margin-left:6px; background:#065f46; border-color:#065f46; color:#fff; }
-    .coupon-apply-btn[disabled]{ opacity:0.6; }
-    .coupon-message{ color:#b91c1c; }
-    .coupon-chip{ margin-top:8px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.15); padding:6px 10px; border-radius:999px; gap:8px; display:inline-flex; }
-    .chip-code{ font-weight:700; color:#064e3b; margin-right:8px; }
-    .chip-amount{ font-weight:600; margin-right:6px; }
-    .chip-remove{ color:#064e3b; font-weight:700; text-decoration:none; margin-left:8px; }
+    /* Premium Coupon Widget Design */
+    .coupon-widget{ 
+      position: relative;
+      border: none;
+      background: linear-gradient(145deg, #ffffff 0%, #f8fffe 100%); 
+      padding: 28px; 
+      border-radius: 20px; 
+      margin-top: 24px; 
+      margin-bottom: 24px;
+      box-shadow: 
+        0 10px 40px -10px rgba(16, 185, 129, 0.15),
+        0 0 0 1px rgba(16, 185, 129, 0.08),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+      overflow: hidden;
+    }
+
+    .coupon-widget::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+    }
+    
+    .coupon-top{ 
+      margin-bottom: 20px; 
+      padding-bottom: 16px;
+      border-bottom: 2px dashed rgba(16, 185, 129, 0.15);
+    }
+    
+    .coupon-hint {
+      font-size: 0.95rem;
+      color: #475569;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .coupon-hint::before {
+      content: '🎟️';
+      font-size: 1.2rem;
+    }
+    
+    .coupon-badge-inline{ 
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+      color: white; 
+      padding: 10px 20px; 
+      border-radius: 25px; 
+      font-weight: 700; 
+      font-size: 0.8rem; 
+      cursor: pointer;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: pulse-glow 2.5s ease-in-out infinite;
+      box-shadow: 
+        0 4px 15px rgba(16, 185, 129, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .coupon-badge-inline::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+
+    .coupon-badge-inline:hover::before {
+      width: 300px;
+      height: 300px;
+    }
+    
+    .coupon-badge-inline:hover {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      transform: translateY(-2px) scale(1.05);
+      animation: none;
+      box-shadow: 
+        0 8px 25px rgba(16, 185, 129, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    .coupon-badge-inline:active {
+      transform: translateY(0) scale(1.02);
+    }
+    
+    @keyframes pulse-glow {
+      0%, 100% {
+        box-shadow: 
+          0 4px 15px rgba(16, 185, 129, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+      50% {
+        box-shadow: 
+          0 4px 15px rgba(16, 185, 129, 0.3),
+          0 0 0 10px rgba(16, 185, 129, 0),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+    }
+    
+    .coupon-input-row{ 
+      gap: 14px; 
+      margin-top: 20px;
+    }
+    
+    .coupon-input{ 
+      padding: 16px 18px; 
+      font-size: 0.95rem; 
+      border-radius: 14px; 
+      border: 2px solid #e2e8f0; 
+      box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.04),
+        inset 0 1px 2px rgba(0, 0, 0, 0.02);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      flex: 1;
+      font-weight: 500;
+      color: #1e293b;
+      background: #ffffff;
+    }
+
+    .coupon-input::placeholder {
+      color: #94a3b8;
+      font-weight: 400;
+    }
+    
+    .coupon-input:focus {
+      outline: none;
+      border-color: #10b981;
+      box-shadow: 
+        0 0 0 4px rgba(16, 185, 129, 0.12),
+        0 2px 8px rgba(16, 185, 129, 0.15),
+        inset 0 1px 2px rgba(0, 0, 0, 0.02);
+      transform: translateY(-1px);
+    }
+    
+    .coupon-apply-btn{ 
+      padding: 16px 28px; 
+      border-radius: 14px; 
+      background: linear-gradient(135deg, #047857 0%, #065f46 100%); 
+      border: none; 
+      color: #fff; 
+      font-weight: 700;
+      font-size: 0.95rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 
+        0 4px 12px rgba(6, 95, 70, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      letter-spacing: 0.3px;
+      cursor: pointer;
+    }
+    
+    .coupon-apply-btn:hover:not([disabled]) {
+      background: linear-gradient(135deg, #065f46 0%, #064e3b 100%);
+      transform: translateY(-2px);
+      box-shadow: 
+        0 6px 20px rgba(6, 95, 70, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .coupon-apply-btn:active:not([disabled]) {
+      transform: translateY(0);
+      box-shadow: 
+        0 2px 8px rgba(6, 95, 70, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    
+    .coupon-apply-btn[disabled]{ 
+      opacity: 0.6; 
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: 0 2px 8px rgba(6, 95, 70, 0.2);
+    }
+    
+    .coupon-message{ 
+      color: #dc2626; 
+      margin-top: 14px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-left: 4px solid #dc2626;
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.1);
+    }
+    
+    .coupon-chip{ 
+      margin-top: 18px; 
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%); 
+      border: 2px solid rgba(16, 185, 129, 0.3); 
+      padding: 14px 18px; 
+      border-radius: 14px; 
+      gap: 14px; 
+      display: inline-flex;
+      align-items: center;
+      box-shadow: 
+        0 4px 12px rgba(16, 185, 129, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+      animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .chip-code{ 
+      font-weight: 700; 
+      color: #064e3b; 
+      margin-right: 14px;
+      font-size: 0.95rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    
+    .chip-amount{ 
+      font-weight: 700; 
+      margin-right: 10px;
+      font-size: 1rem;
+      color: #059669;
+    }
+    
+    .chip-remove{ 
+      color: #dc2626; 
+      font-weight: 700; 
+      text-decoration: none; 
+      margin-left: 14px;
+      font-size: 1.1rem;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: rgba(220, 38, 38, 0.1);
+      border: 1px solid rgba(220, 38, 38, 0.2);
+    }
+    
+    .chip-remove:hover {
+      background: rgba(220, 38, 38, 0.2);
+      transform: scale(1.15) rotate(90deg);
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+    }
+
+    .chip-remove:active {
+      transform: scale(1.05) rotate(90deg);
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
@@ -865,6 +1119,10 @@
             body: JSON.stringify({ code })
           }).then(r => r.json()).then(json => {
             applyCouponBtn.disabled = false;
+            // Ensure the My Codes badge stays visible regardless of outcome
+            const promoButton = document.querySelector('.coupon-badge-inline');
+            if (promoButton) promoButton.style.display = '';
+
             if (!json || !json.success) {
               applyCouponBtn.textContent = 'Apply';
               const msg = (json && json.message) ? json.message : 'Failed to apply coupon';
@@ -891,11 +1149,15 @@
             if (couponMessageEl) { couponMessageEl.style.display = 'none'; couponMessageEl.textContent = ''; }
             if (couponInput) couponInput.disabled = true;
             applyCouponBtn.textContent = 'Applied';
+            // keep My Codes visible after successful apply as well
+            if (promoButton) promoButton.style.display = '';
             updateShipping();
           }).catch(err => {
             console.error('apply coupon err', err);
             applyCouponBtn.disabled = false;
             applyCouponBtn.textContent = 'Apply';
+            // ensure badge stays visible on network error too
+            try { const promoButton = document.querySelector('.coupon-badge-inline'); if (promoButton) promoButton.style.display = ''; } catch(e){}
             alert('Failed to apply coupon');
           });
         });
@@ -907,11 +1169,14 @@
             fetch('/api/coupons/remove', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(r => r.json()).then(json => {
             couponDiscount = 0; appliedCoupon = null;
             if (appliedChip && appliedCodeEl && appliedAmountEl) { appliedChip.style.display = 'none'; appliedCodeEl.textContent = ''; appliedAmountEl.textContent = '- $0.00'; }
-            if (couponInput) { couponInput.disabled = false; couponInput.value = ''; }
-            if (applyCouponBtn) applyCouponBtn.textContent = 'Apply';
+            // Re-enable input and button for new coupon
+            if (couponInput) { couponInput.disabled = false; couponInput.value = ''; couponInput.focus(); }
+            if (applyCouponBtn) { applyCouponBtn.disabled = false; applyCouponBtn.textContent = 'Apply'; }
             if (couponMessageEl) { couponMessageEl.style.display = 'none'; couponMessageEl.textContent = ''; }
+            // make sure My Codes is visible after removal
+            try { const promoButton = document.querySelector('.coupon-badge-inline'); if (promoButton) promoButton.style.display = ''; } catch(e){}
             updateShipping();
-          }).catch(err => { console.error('remove coupon err', err); couponDiscount = 0; appliedCoupon = null; updateShipping(); });
+          }).catch(err => { console.error('remove coupon err', err); couponDiscount = 0; appliedCoupon = null; if (couponInput) { couponInput.disabled = false; couponInput.value = ''; } if (applyCouponBtn) { applyCouponBtn.disabled = false; applyCouponBtn.textContent = 'Apply'; } updateShipping(); });
         });
       }
       if (shippingRadios.length){
@@ -1056,6 +1321,321 @@
           Promise.all(tasks).then(() => { window.location = '/cart/pay'; }).catch(() => { window.location = '/cart/pay'; });
         });
       }
+    })();
+  </script>
+
+  <!-- Coupon Modal -->
+  <div id="couponModal" class="modal fade" tabindex="-1" aria-labelledby="couponModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+        <div class="modal-header" style="border-bottom: 1px solid #e2e8f0; padding: 1.5rem;">
+          <h5 class="modal-title" id="couponModalLabel" style="font-weight: 700; color: var(--brand-dark); font-size: 1.25rem;">
+            <i data-lucide="ticket" style="width: 20px; height: 20px; margin-right: 8px;"></i>
+            Your Coupons
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="couponModalBody" style="padding: 1rem; max-height: 400px; overflow-y: auto;">
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="text-muted mt-2 mb-0">Loading your coupons...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .coupon-card {
+      background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 100%);
+      border: 2px solid #10b981;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .coupon-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2);
+      border-color: #059669;
+    }
+    .coupon-card.used {
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      border-color: #cbd5e1;
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .coupon-card.used:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    .coupon-code {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #059669;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 1px;
+      margin-bottom: 0.5rem;
+    }
+    .coupon-card.used .coupon-code {
+      color: #64748b;
+    }
+    .coupon-description {
+      font-size: 0.9rem;
+      color: #0f172a;
+      margin-bottom: 0.5rem;
+      line-height: 1.4;
+    }
+    .coupon-card.used .coupon-description {
+      color: #64748b;
+    }
+    .coupon-details {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .coupon-detail-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .coupon-badge {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      background: #10b981;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .coupon-card.used .coupon-badge {
+      background: #94a3b8;
+    }
+    .empty-coupons {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #64748b;
+    }
+    .empty-coupons i {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 1rem;
+      opacity: 0.3;
+    }
+  </style>
+
+  <script>
+    (function() {
+      const promoButton = document.querySelector('.coupon-badge-inline');
+      const couponModal = document.getElementById('couponModal');
+      const couponModalBody = document.getElementById('couponModalBody');
+      const couponCodeInput = document.getElementById('couponCodeInput');
+      
+      if (!promoButton || !couponModal) return;
+
+      let bsCouponModal = null;
+      if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        bsCouponModal = new bootstrap.Modal(couponModal);
+      }
+
+      // client-side flash/toast utility (keeps layout intact)
+      function showFlash(message, type='success'){
+        try {
+          let container = document.querySelector('.client-flash-container');
+          if (!container) {
+            container = document.createElement('div');
+            container.className = 'client-flash-container';
+            container.setAttribute('aria-live','polite');
+            Object.assign(container.style, { position: 'fixed', top: '18px', right: '18px', zIndex: 1080 });
+            document.body.appendChild(container);
+          }
+          const el = document.createElement('div');
+          el.className = 'client-flash-item';
+          el.textContent = message;
+          Object.assign(el.style, {
+            background: type==='error' ? '#fee2e2' : '#ecfdf5',
+            color: type==='error' ? '#991b1b' : '#065f46',
+            padding: '10px 14px',
+            marginTop: '8px',
+            borderRadius: '8px',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
+            fontWeight: 600,
+            minWidth: '200px'
+          });
+          container.appendChild(el);
+          setTimeout(()=>{ el.style.transition='opacity 240ms ease'; el.style.opacity = '0'; setTimeout(()=>{ try{ container.removeChild(el); }catch(e){} }, 260); }, 3000);
+        } catch(e) { console.error('showFlash err', e); }
+      }
+
+      // Make My Codes badge clickable
+      promoButton.style.cursor = 'pointer';
+      promoButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!bsCouponModal) return;
+
+        // Show loading state
+        couponModalBody.innerHTML = `
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="text-muted mt-2 mb-0">Loading your coupons...</p>
+          </div>
+        `;
+
+        // Fetch user coupons
+        fetch('/api/user/coupons', {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (!data || !data.success) {
+            couponModalBody.innerHTML = `
+              <div class="empty-coupons">
+                <i data-lucide="alert-circle"></i>
+                <p class="mb-0">Failed to load coupons</p>
+              </div>
+            `;
+            lucide.createIcons();
+            return;
+          }
+
+          const coupons = data.coupons || [];
+          if (coupons.length === 0) {
+            couponModalBody.innerHTML = `
+              <div class="empty-coupons">
+                <i data-lucide="ticket"></i>
+                <h6 style="color: #0f172a; font-weight: 600;">No coupons available</h6>
+                <p class="mb-0">Check back later for exclusive offers!</p>
+              </div>
+            `;
+            lucide.createIcons();
+            return;
+          }
+
+          // Render coupons
+          let html = '';
+          coupons.forEach(coupon => {
+            const code = coupon.coupon_code || '';
+            const desc = coupon.description || 'Discount coupon';
+            const isUsed = coupon.user_status && (
+              String(coupon.user_status).toLowerCase() === 'exhausted' ||
+              String(coupon.user_status).toLowerCase() === 'used' ||
+              String(coupon.user_status).toLowerCase() === 'redeemed'
+            );
+            const usedClass = isUsed ? 'used' : '';
+            const badgeText = isUsed ? 'Used' : (coupon.is_global ? 'Global' : 'Personal');
+            
+            let discountText = '';
+            if (coupon.discount_type === 'PERCENTAGE') {
+              discountText = `${coupon.discount_value}% OFF`;
+            } else if (coupon.discount_type === 'FIXED') {
+              discountText = `$${Number(coupon.discount_value || 0).toFixed(2)} OFF`;
+            }
+
+            const minSpend = coupon.min_spend ? `Min: $${Number(coupon.min_spend).toFixed(2)}` : '';
+            const freeDelivery = coupon.is_free_delivery ? 'Free Delivery' : '';
+
+            html += `
+              <div class="coupon-card ${usedClass}" data-code="${code}" data-used="${isUsed}">
+                <span class="coupon-badge">${badgeText}</span>
+                <div class="coupon-code">${code}</div>
+                <div class="coupon-description">${desc}</div>
+                <div class="coupon-details">
+                  ${discountText ? `<div class="coupon-detail-item"><i data-lucide="tag" style="width: 14px;"></i> ${discountText}</div>` : ''}
+                  ${minSpend ? `<div class="coupon-detail-item"><i data-lucide="shopping-cart" style="width: 14px;"></i> ${minSpend}</div>` : ''}
+                  ${freeDelivery ? `<div class="coupon-detail-item"><i data-lucide="truck" style="width: 14px;"></i> ${freeDelivery}</div>` : ''}
+                </div>
+              </div>
+            `;
+          });
+
+          couponModalBody.innerHTML = html;
+          lucide.createIcons();
+
+          // Add click handlers to coupon cards
+          const couponCards = couponModalBody.querySelectorAll('.coupon-card');
+          couponCards.forEach(card => {
+            const isUsed = card.dataset.used === 'true';
+            if (!isUsed) {
+              card.addEventListener('click', function() {
+                const code = this.dataset.code;
+                if (code && couponCodeInput) {
+                  // If input is disabled (coupon already applied), remove it first
+                  const applyCouponBtn = document.getElementById('applyCouponBtn');
+                  const appliedChip = document.getElementById('appliedCouponChip');
+                  const couponMessageEl = document.getElementById('couponMessage');
+                  
+                  if (couponCodeInput.disabled) {
+                    // Remove current coupon first
+                    fetch('/api/coupons/remove', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                      .then(() => {
+                        // Reset UI
+                        if (appliedChip) appliedChip.style.display = 'none';
+                        if (couponMessageEl) { couponMessageEl.style.display = 'none'; couponMessageEl.textContent = ''; }
+                        
+                        // Re-enable and autofill new code
+                        couponCodeInput.disabled = false;
+                        couponCodeInput.value = code;
+                        if (applyCouponBtn) { applyCouponBtn.disabled = false; applyCouponBtn.textContent = 'Apply'; }
+                        couponCodeInput.focus();
+                        if (bsCouponModal) bsCouponModal.hide();
+                        
+                        // Show success message (always show flash)
+                        showFlash('✓ New code ready! Click Apply');
+                      })
+                      .catch(() => {
+                        // Even if remove fails, still try to autofill
+                        couponCodeInput.disabled = false;
+                        couponCodeInput.value = code;
+                        if (applyCouponBtn) { applyCouponBtn.disabled = false; applyCouponBtn.textContent = 'Apply'; }
+                        couponCodeInput.focus();
+                        if (bsCouponModal) bsCouponModal.hide();
+                      });
+                  } else {
+                    // No coupon applied, just autofill
+                    couponCodeInput.value = code;
+                    couponCodeInput.focus();
+                    if (bsCouponModal) bsCouponModal.hide();
+                    
+                    // Show success message (always show flash)
+                    showFlash('✓ Code applied! Click Apply');
+                  }
+                }
+              });
+            }
+          });
+        })
+        .catch(err => {
+          console.error('Failed to fetch coupons:', err);
+          couponModalBody.innerHTML = `
+            <div class="empty-coupons">
+              <i data-lucide="wifi-off"></i>
+              <p class="mb-0">Failed to load coupons. Please try again.</p>
+            </div>
+          `;
+          lucide.createIcons();
+        });
+
+        bsCouponModal.show();
+      });
     })();
   </script>
 </body>

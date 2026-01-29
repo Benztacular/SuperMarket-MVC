@@ -290,6 +290,21 @@ app.get('/api/wallet/transactions', requireUser, (req, res, next) => {
   return WalletController.transactions(req, res, next);
 });
 
+// Wallet -> Membership quick-upgrade: redirect to membership checkout for FreshPlus
+app.get('/wallet/membership/upgrade', requireUser, (req, res, next) => {
+  try {
+    const MembershipModel = require('./models/Membership');
+    MembershipModel.getAllPlans((err, plans) => {
+      if (err) return next(err);
+      const candidates = (plans || []).filter(p => !!p && p.plan_name);
+      // Prefer plan names containing 'fresh' (case-insensitive), fallback to the first paid plan
+      let plan = candidates.find(p => String(p.plan_name).toLowerCase().includes('fresh')) || candidates.find(p => Number(p.price || 0) > 0) || candidates[0] || null;
+      if (!plan) return res.redirect('/membership');
+      return res.redirect(`/membership/checkout?planId=${plan.id}`);
+    });
+  } catch (e) { return next(e); }
+});
+
 // Membership page (public - shows plans; shows user's active membership if logged in)
 app.get('/membership', ensure(MembershipController.membershipPage, 'MembershipController.membershipPage'));
 
