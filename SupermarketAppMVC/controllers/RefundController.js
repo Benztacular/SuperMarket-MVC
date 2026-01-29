@@ -249,7 +249,7 @@ exports.submitRequest = (req, res) => {
               let sum = 0;
               let totalRefundedQty = 0;
               let totalOrderQty = 0;
-              
+
               selectedItemsWithQty = normalizedItemIds.map((id, idx) => {
                 const row = rowsById[Number(id)];
                 if (!row) return null;
@@ -263,19 +263,45 @@ exports.submitRequest = (req, res) => {
                 return { id: Number(id), unitPrice, qty: reqQty };
               }).filter(Boolean);
 
-              // Calculate total quantity across all order items
+              // Calculate total quantity across all order items and compute subtotal
+              let subtotal = 0;
               allOiRows.forEach(row => {
                 totalOrderQty += Number(row.quantity || 0);
+                subtotal += Number(row.price || 0) * Number(row.quantity || 0);
               });
 
               // Check if this is a full refund (all items and quantities match)
               const isFullRefund = (totalRefundedQty >= totalOrderQty) && (normalizedItemIds.length === allOiRows.length);
-              
-              // If full refund, include shipping fee
-              if (isFullRefund && order.shipping_fee) {
+
+              // Adjust for membership / order-level discounts by prorating the discount across items
+              try {
                 const shippingFee = Number(order.shipping_fee || 0);
-                sum += shippingFee;
-                console.log('RefundController.submitRequest - Full refund detected, including shipping fee:', shippingFee);
+                const orderTotalNum = Number(order.totalAmount || 0);
+
+                // net subtotal after discounts (exclude shipping)
+                const netSubtotalAfterDiscount = Math.max(0, orderTotalNum - shippingFee);
+                const discountOnSubtotal = Math.max(0, subtotal - netSubtotalAfterDiscount);
+
+                // Prorate discount to selected items (only across item subtotal)
+                let proratedDiscountForSelected = 0;
+                if (subtotal > 0) {
+                  proratedDiscountForSelected = (sum * discountOnSubtotal) / subtotal;
+                }
+
+                // Subtract prorated discount from selected items sum
+                sum = Math.max(0, sum - proratedDiscountForSelected);
+
+                // If full refund, include shipping fee AFTER discount adjustments
+                if (isFullRefund && shippingFee) {
+                  sum += shippingFee;
+                  console.log('RefundController.submitRequest - Full refund detected, including shipping fee:', shippingFee);
+                }
+              } catch (discountErr) {
+                console.error('RefundController.submitRequest - discount adjustment error', discountErr);
+                // fallback: if anything goes wrong, keep original sum and include shipping for full refund
+                if (isFullRefund && order.shipping_fee) {
+                  sum += Number(order.shipping_fee || 0);
+                }
               }
 
               proceedWithRequestedAmount(sum);

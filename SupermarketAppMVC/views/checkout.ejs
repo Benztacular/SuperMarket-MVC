@@ -1240,38 +1240,53 @@
                 // unselect others
                 container.querySelectorAll('label.address-card').forEach(function(l){ l.classList.remove('active'); const inp = l.querySelector('input[name="address_id"]'); if (inp) inp.checked = false; });
                 container.appendChild(label);
-                // attach change handler to new radio
-                const newRadio = label.querySelector('input[name="address_id"]');
-                if (newRadio){
-                  newRadio.addEventListener('change', function(e){
-                    fetch(addressForm.action, { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest' }, body: new URLSearchParams({ address_id: e.target.value }).toString() });
-                  });
-                }
+                    const available = [];
+                    const redeemed = [];
+                    coupons.forEach(coupon => {
+                      const used = Number(coupon.times_used || 0) > 0 || (coupon.user_status && (
+                        String(coupon.user_status).toLowerCase() === 'exhausted' ||
+                        String(coupon.user_status).toLowerCase() === 'used' ||
+                        String(coupon.user_status).toLowerCase() === 'redeemed'
+                      ));
+                      if (used) redeemed.push(coupon); else available.push(coupon);
+                    });
 
-                  // validateAddress helper used by inline and modal forms
-                  function validateAddress(form) {
-                    if (!form) return false;
-                    // use browser's constraint validation where possible
-                    if (typeof form.reportValidity === 'function') {
-                      return form.reportValidity();
-                    }
-                    // fallback simple checks
-                    const contact = (form.contact_number && form.contact_number.value || '').trim();
-                    const block = (form.block_number && form.block_number.value || '').trim();
-                    const unit = (form.unit_number && form.unit_number.value || '').trim();
-                    const postal = (form.postal_code && form.postal_code.value || '').trim();
-                    const contactOk = /^\d{8}$/.test(contact);
-                    const blockOk = /^(?:\d{3}[A-Za-z]?|[A-Za-z]{3})$/.test(block);
-                    const unitOk = /^#?\d{2}-\d{2}$/.test(unit);
-                    const postalOk = /^\d{6}$/.test(postal);
-                    if (!contactOk) { alert('Contact number must be exactly 8 digits'); return false; }
-                    if (!blockOk) { alert('Block must be 3 digits optionally followed by 1 letter, or 3 letters'); return false; }
-                    if (!unitOk) { alert('Unit number must follow format 12-34 (dash required)'); return false; }
-                    if (!postalOk) { alert('Postal code must be exactly 6 digits'); return false; }
-                    // force country to Singapore if present
-                    if (form.country) form.country.value = 'Singapore';
-                    return true;
-                  }
+                    let html = '';
+                    const renderCard = (coupon) => {
+                      const code = coupon.coupon_code || '';
+                      const desc = coupon.description || 'Discount coupon';
+                      const isUsed = Number(coupon.times_used || 0) > 0 || (coupon.user_status && (
+                        String(coupon.user_status).toLowerCase() === 'exhausted' ||
+                        String(coupon.user_status).toLowerCase() === 'used' ||
+                        String(coupon.user_status).toLowerCase() === 'redeemed'
+                      ));
+                      const usedClass = isUsed ? 'used' : '';
+                      const badgeText = isUsed ? 'Used' : (coupon.is_global ? 'Global' : 'Personal');
+
+                      let discountText = '';
+                      if (coupon.discount_type === 'PERCENTAGE') discountText = `${coupon.discount_value}% OFF`;
+                      else if (coupon.discount_type === 'FIXED') discountText = `$${Number(coupon.discount_value || 0).toFixed(2)} OFF`;
+
+                      const minSpend = coupon.min_spend ? `Min: $${Number(coupon.min_spend).toFixed(2)}` : '';
+                      const freeDelivery = coupon.is_free_delivery ? 'Free Delivery' : '';
+
+                      return `
+                        <div class="coupon-card ${usedClass}" data-code="${code}" data-used="${isUsed}">
+                          <span class="coupon-badge">${badgeText}</span>
+                          <div class="coupon-code">${code}</div>
+                          <div class="coupon-description">${desc}</div>
+                          <div class="coupon-details">
+                            ${discountText ? `<div class="coupon-detail-item"><i data-lucide="tag" style="width: 14px;"></i> ${discountText}</div>` : ''}
+                            ${minSpend ? `<div class="coupon-detail-item"><i data-lucide="shopping-cart" style="width: 14px;"></i> ${minSpend}</div>` : ''}
+                            ${freeDelivery ? `<div class="coupon-detail-item"><i data-lucide="truck" style="width: 14px;"></i> ${freeDelivery}</div>` : ''}
+                          </div>
+                        </div>
+                      `;
+                    };
+
+                    available.forEach(c => { html += renderCard(c); });
+                    if (available.length && redeemed.length) html += `<div class="empty-coupons text-center py-2" style="opacity:0.7">Redeemed / Expired</div>`;
+                    redeemed.forEach(c => { html += renderCard(c); });
               }
               if (bsModal) bsModal.hide();
             }).catch(()=>{ if (bsModal) bsModal.hide(); });
@@ -1530,30 +1545,38 @@
             return;
           }
 
-          // Render coupons
-          let html = '';
+          // Render coupons: available first, redeemed/used last
+          const available = [];
+          const redeemed = [];
           coupons.forEach(coupon => {
-            const code = coupon.coupon_code || '';
-            const desc = coupon.description || 'Discount coupon';
-            const isUsed = coupon.user_status && (
+            const used = Number(coupon.times_used || 0) > 0 || (coupon.user_status && (
               String(coupon.user_status).toLowerCase() === 'exhausted' ||
               String(coupon.user_status).toLowerCase() === 'used' ||
               String(coupon.user_status).toLowerCase() === 'redeemed'
-            );
+            ));
+            if (used) redeemed.push(coupon); else available.push(coupon);
+          });
+
+          let html = '';
+          const renderCard = (coupon) => {
+            const code = coupon.coupon_code || '';
+            const desc = coupon.description || 'Discount coupon';
+            const isUsed = Number(coupon.times_used || 0) > 0 || (coupon.user_status && (
+              String(coupon.user_status).toLowerCase() === 'exhausted' ||
+              String(coupon.user_status).toLowerCase() === 'used' ||
+              String(coupon.user_status).toLowerCase() === 'redeemed'
+            ));
             const usedClass = isUsed ? 'used' : '';
             const badgeText = isUsed ? 'Used' : (coupon.is_global ? 'Global' : 'Personal');
-            
+
             let discountText = '';
-            if (coupon.discount_type === 'PERCENTAGE') {
-              discountText = `${coupon.discount_value}% OFF`;
-            } else if (coupon.discount_type === 'FIXED') {
-              discountText = `$${Number(coupon.discount_value || 0).toFixed(2)} OFF`;
-            }
+            if (coupon.discount_type === 'PERCENTAGE') discountText = `${coupon.discount_value}% OFF`;
+            else if (coupon.discount_type === 'FIXED') discountText = `$${Number(coupon.discount_value || 0).toFixed(2)} OFF`;
 
             const minSpend = coupon.min_spend ? `Min: $${Number(coupon.min_spend).toFixed(2)}` : '';
             const freeDelivery = coupon.is_free_delivery ? 'Free Delivery' : '';
 
-            html += `
+            return `
               <div class="coupon-card ${usedClass}" data-code="${code}" data-used="${isUsed}">
                 <span class="coupon-badge">${badgeText}</span>
                 <div class="coupon-code">${code}</div>
@@ -1565,7 +1588,11 @@
                 </div>
               </div>
             `;
-          });
+          };
+
+          available.forEach(c => { html += renderCard(c); });
+          if (available.length && redeemed.length) html += `<div class="empty-coupons text-center py-2" style="opacity:0.7">Redeemed / Expired</div>`;
+          redeemed.forEach(c => { html += renderCard(c); });
 
           couponModalBody.innerHTML = html;
           lucide.createIcons();

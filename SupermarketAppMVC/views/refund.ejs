@@ -508,7 +508,7 @@
 <body>
   <%- include('partials/header') %>
 
-  <div class="container refund-container" data-shipping-fee="<%= typeof order !== 'undefined' && order.shipping_fee ? Number(order.shipping_fee) : 0 %>">
+  <div class="container refund-container" data-shipping-fee="<%= typeof order !== 'undefined' && order.shipping_fee ? Number(order.shipping_fee) : 0 %>" data-order-total="<%= Number(order.totalAmount || 0).toFixed(2) %>" data-total-refunded="<%= Number(totalRefunded || 0).toFixed(2) %>">
     <div class="refund-card">
       <!-- Header -->
       <div class="header-section">
@@ -670,6 +670,31 @@
               <span class="currency-symbol">$</span>
               <input type="hidden" name="amount" id="amount" value="0.00">
               <input type="text" class="form-control amount-input" id="amountDisplay" value="$0.00" disabled aria-disabled="true">
+            </div>
+            <div id="refundWarning" style="display:none; color:#dc2626; margin-top:8px; font-weight:600;"></div>
+
+            <!-- Refund breakdown -->
+            <div id="refundBreakdown" style="display:none; margin-top:14px; padding:12px 14px; background:#f8faf9; border-radius:8px; border:1px solid #e6eef0;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <div style="color:#374151;">Selected items subtotal</div>
+                <div id="selectedSubtotalDisplay" style="font-weight:700; color:#111827;">$0.00</div>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <div style="color:#374151;">Prorated discount</div>
+                <div id="proratedDiscountDisplay" style="font-weight:700; color:#059669;">-$0.00</div>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <div style="color:#374151;">Shipping (if included)</div>
+                <div id="shippingDisplay" style="font-weight:700; color:#111827;">$0.00</div>
+              </div>
+              <hr style="border:none; border-top:1px solid #e6eef0; margin:8px 0;" />
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-weight:700; color:#111827;">Final refund</div>
+                <div id="finalRefundDisplay" style="font-weight:900; color:#065f46; font-size:16px;">$0.00</div>
+              </div>
+              <div id="remainingCapContainer" style="display:none; margin-top:8px; color:#6b7280; font-size:13px;">
+                Remaining refundable cap: <span id="remainingCapDisplay" style="font-weight:700; color:#dc2626;">$0.00</span>
+              </div>
             </div>
             
             <!-- Delivery Fee Indicator (shown when all items selected) -->
@@ -875,12 +900,20 @@
       totalOrderQty += Number(cb.dataset.max || 0);
     });
 
+    // Calculate total order items subtotal (used to prorate discounts)
+    let totalOrderItemsSubtotal = 0;
+    itemCheckboxes.forEach(cb => {
+      const price = Number(cb.dataset.price || 0);
+      const max = Number(cb.dataset.max || 0);
+      totalOrderItemsSubtotal += price * max;
+    });
+
     function updateRefundAmount() {
-      let total = 0;
+      let selectedSum = 0;
       let totalSelectedQty = 0;
       const selectedIds = [];
       const selectedQtys = [];
-      
+
       itemCheckboxes.forEach(cb => {
         const id = cb.value;
         const price = Number(cb.dataset.price || 0);
@@ -891,28 +924,88 @@
         if (qty > max) qty = max;
 
         if (cb.checked) {
-          total += price * qty;
+          selectedSum += price * qty;
           totalSelectedQty += qty;
           selectedIds.push(id);
           selectedQtys.push(qty);
         }
       });
-      
+
       // Check if this is a full refund (all items + all quantities)
       const allItemsChecked = Array.from(itemCheckboxes).every(cb => cb.checked);
       const isFullRefund = allItemsChecked && (totalSelectedQty >= totalOrderQty);
-      
-      // If full refund, add delivery fee
-      if (isFullRefund && orderShippingFee > 0) {
-        total += orderShippingFee;
-        deliveryFeeNotice.style.display = 'block';
-        deliveryFeeAmountSpan.textContent = '+$' + orderShippingFee.toFixed(2);
-      } else {
-        deliveryFeeNotice.style.display = 'none';
+
+      // Read order totals for discount/proration logic
+      const container = document.querySelector('.refund-container');
+      const orderTotal = Number(container?.dataset?.orderTotal || 0);
+      const totalRefundedSoFar = Number(container?.dataset?.totalRefunded || 0);
+
+      // Prorate order-level discounts across items
+      let adjustedSum = selectedSum;
+      let proratedDiscountForSelected = 0;
+      let shippingIncludedForDisplay = 0;
+      try {
+        const shippingFee = Number(orderShippingFee || 0);
+        const subtotalAll = Number(totalOrderItemsSubtotal || 0);
+        const netSubtotalAfterDiscount = Math.max(0, orderTotal - shippingFee);
+        const discountOnSubtotal = Math.max(0, subtotalAll - netSubtotalAfterDiscount);
+
+        if (subtotalAll > 0) {
+          proratedDiscountForSelected = (selectedSum * discountOnSubtotal) / subtotalAll;
+        }
+
+        adjustedSum = Math.max(0, selectedSum - proratedDiscountForSelected);
+
+        if (isFullRefund && shippingFee > 0) {
+          adjustedSum += shippingFee;
+          shippingIncludedForDisplay = shippingFee;
+          deliveryFeeNotice.style.display = 'block';
+          deliveryFeeAmountSpan.textContent = '+$' + shippingFee.toFixed(2);
+        } else {
+          deliveryFeeNotice.style.display = 'none';
+        }
+      } catch (e) {
+        console.error('updateRefundAmount - discount proration error', e);
       }
 
-      amountInput.value = Number(total || 0).toFixed(2);
-      if (amountDisplay) amountDisplay.value = '$' + Number(total || 0).toFixed(2);
+      // Cap to remaining refundable amount (orderTotal - totalRefundedSoFar)
+      const remaining = Math.max(0, orderTotal - totalRefundedSoFar);
+      const refundWarning = document.getElementById('refundWarning');
+      if (adjustedSum > remaining) {
+        adjustedSum = remaining;
+        if (refundWarning) {
+          refundWarning.style.display = 'block';
+          refundWarning.textContent = `Amount capped to remaining refundable amount $${remaining.toFixed(2)}`;
+        }
+      } else if (refundWarning) {
+        refundWarning.style.display = 'none';
+        refundWarning.textContent = '';
+      }
+
+      amountInput.value = Number(adjustedSum || 0).toFixed(2);
+      if (amountDisplay) amountDisplay.value = '$' + Number(adjustedSum || 0).toFixed(2);
+
+      // Populate breakdown UI
+      const breakdown = document.getElementById('refundBreakdown');
+      const selSub = document.getElementById('selectedSubtotalDisplay');
+      const prDisc = document.getElementById('proratedDiscountDisplay');
+      const shipDisp = document.getElementById('shippingDisplay');
+      const finalDisp = document.getElementById('finalRefundDisplay');
+      const remCont = document.getElementById('remainingCapContainer');
+      const remDisp = document.getElementById('remainingCapDisplay');
+
+      if (breakdown) breakdown.style.display = (selectedSum > 0) ? 'block' : 'none';
+      if (selSub) selSub.textContent = '$' + Number(selectedSum || 0).toFixed(2);
+      if (prDisc) prDisc.textContent = '-$' + Number(proratedDiscountForSelected || 0).toFixed(2);
+      if (shipDisp) shipDisp.textContent = (shippingIncludedForDisplay > 0) ? '+$' + Number(shippingIncludedForDisplay).toFixed(2) : '$0.00';
+      if (finalDisp) finalDisp.textContent = '$' + Number(adjustedSum || 0).toFixed(2);
+
+      if (remaining < (Number(selectedSum || 0) - Number(proratedDiscountForSelected || 0) + Number(shippingIncludedForDisplay || 0))) {
+        if (remCont) remCont.style.display = 'block';
+        if (remDisp) remDisp.textContent = '$' + Number(remaining || 0).toFixed(2);
+      } else if (remCont) {
+        remCont.style.display = 'none';
+      }
 
       // remove existing hidden inputs for itemIds and itemQtys
       const existingIds = document.querySelectorAll('input[name="itemIds[]"]');

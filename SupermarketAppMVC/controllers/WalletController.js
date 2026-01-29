@@ -485,14 +485,29 @@ exports.userCoupons = (req, res, next) => {
 
     // 2) Fetch global coupons that are active and within validity window
     const globalSql = `
-      SELECT c.*, NULL AS user_coupon_id, 0 AS times_used, 'GLOBAL' AS user_status
+      SELECT c.*, NULL AS user_coupon_id,
+        COALESCE(
+          (SELECT uc.times_used FROM user_coupons uc WHERE uc.coupon_id = c.id AND uc.user_id = ? LIMIT 1),
+          (SELECT COUNT(*) FROM orders o WHERE o.coupon_id = c.id AND o.user_id = ?),
+          0
+        ) AS times_used,
+        'GLOBAL' AS user_status
       FROM coupons c
       WHERE c.is_global = 1 AND c.is_active = 1
         AND (c.valid_from IS NULL OR c.valid_from <= NOW()) AND (c.valid_until IS NULL OR c.valid_until >= NOW())
+        AND (c.total_usage_limit IS NULL OR c.current_total_uses < c.total_usage_limit)
+        AND (
+          c.max_uses_per_user IS NULL OR
+          COALESCE(
+            (SELECT uc.times_used FROM user_coupons uc WHERE uc.coupon_id = c.id AND uc.user_id = ? LIMIT 1),
+            (SELECT COUNT(*) FROM orders o WHERE o.coupon_id = c.id AND o.user_id = ?),
+            0
+          ) < c.max_uses_per_user
+        )
       ORDER BY c.created_at DESC
     `;
 
-    db.query(globalSql, [], (gErr, gRows = []) => {
+    db.query(globalSql, [userId, userId, userId, userId], (gErr, gRows = []) => {
       if (gErr) { console.error('userCoupons - global coupons query error', gErr); return res.status(500).json({ success: false, message: 'Failed to load global coupons' }); }
 
       console.log('[WalletController.userCoupons] userId:', userId, 'userRows:', (uRows || []).length, 'globalRows:', (gRows || []).length);

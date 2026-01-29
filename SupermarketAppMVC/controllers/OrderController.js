@@ -446,8 +446,11 @@ const checkout = function (req, res, next) {
                             }));
 
                             Promise.all(stockPromises).then(() => {
-                              const markUserCoupon = userCouponIdToMark ? new Promise((resolve, reject) => {
-                                conn.query('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ?', [userCouponIdToMark], (selErr, selRows) => {
+                              // mark user_coupon as used if applicable (transactional, inline)
+                              const couponToMark = (typeof appliedCoupon !== 'undefined' && appliedCoupon && appliedCoupon.coupon_id) ? appliedCoupon : ((req.session && req.session.appliedCoupon) ? req.session.appliedCoupon : null);
+
+                              const markUserCoupon = userCouponIdToMark ? new Promise((resolve) => {
+                                conn.query('SELECT uc.times_used, uc.first_used_at, uc.coupon_id, c.max_uses_per_user FROM user_coupons uc JOIN coupons c ON c.id = uc.coupon_id WHERE uc.id = ? FOR UPDATE', [userCouponIdToMark], (selErr, selRows) => {
                                   if (selErr) { console.error('select user_coupon error', selErr); return resolve(); }
                                   const uc = selRows && selRows[0];
                                   const timesUsed = Number(uc?.times_used || 0) + 1;
@@ -464,9 +467,9 @@ const checkout = function (req, res, next) {
                               }) : Promise.resolve();
 
                               markUserCoupon.then(() => {
-                                // additionally mark global coupon as used (single-use) if applicable
-                                const markGlobal = (req.session && req.session.appliedCoupon && req.session.appliedCoupon.coupon_id && Number(req.session.appliedCoupon.is_global || 0)) ? new Promise((resolve) => {
-                                  const ac = req.session.appliedCoupon;
+                                // additionally mark global coupon as used (create user_coupons row if needed)
+                                const markGlobal = (couponToMark && couponToMark.coupon_id && Number(couponToMark.is_global || 0)) ? new Promise((resolve) => {
+                                  const ac = couponToMark;
                                   conn.query('INSERT INTO user_coupons (user_id, coupon_id, coupon_code, assigned_at, times_used, first_used_at, last_used_at, status) VALUES (?, ?, ?, NOW(), 1, NOW(), NOW(), "ACTIVE") ON DUPLICATE KEY UPDATE times_used = times_used + 1, last_used_at = NOW()', [userId, ac.coupon_id, (ac.code || '')], (insErr) => {
                                     if (insErr) console.error('mark global coupon used (insert user_coupons) error', insErr);
                                     if (ac && ac.coupon_id) {

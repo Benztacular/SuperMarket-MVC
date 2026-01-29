@@ -408,16 +408,21 @@ const MembershipController = {
       const userId = uid(req);
       if (!userId) return res.redirect('/login');
       const planId = Number(req.body.planId || 0);
-      const total = Number(req.body.cartTotal || 0);
       const period = String(req.body.period || 'monthly').toLowerCase();
-      if (!planId || total <= 0) return res.redirect('/membership');
-      // store pending membership in session so Nets success handler can apply it
-      req.session.pendingMembership = { planId: planId, period: period }; 
-      // delegate to NETS service to render QR view directly
-      const netsService = require('../services/nets');
-      req.body = req.body || {};
-      req.body.cartTotal = total;
-      return netsService.generateQrCode(req, res, next);
+      if (!planId) return res.redirect('/membership');
+      // Fetch plan price server-side to ensure correct membership amount
+      Membership.getPlanById(planId, (err, plan) => {
+        if (err || !plan) return res.redirect('/membership');
+        const total = Number(plan.price || 0);
+        if (total <= 0) return res.redirect('/membership');
+        // store pending membership in session so Nets success handler can apply it
+        req.session.pendingMembership = { planId: planId, period: period };
+        // delegate to NETS service to render QR view directly
+        const netsService = require('../services/nets');
+        req.body = req.body || {};
+        req.body.cartTotal = total;
+        return netsService.generateQrCode(req, res, next);
+      });
     } catch (e) { next(e); }
   }
 };

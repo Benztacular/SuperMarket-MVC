@@ -65,12 +65,20 @@ async function computeServerCartTotal(req) {
 }
 
 exports.generateQrCode = async (req, res) => {
-  // Prefer server-computed total; fall back to client-supplied value
+  // Prefer server-computed total; but if server total is null or zero and
+  // a client-supplied membership amount exists, use the client value.
   let cartTotal = await computeServerCartTotal(req);
-  if (cartTotal == null) {
-    const fromBody = req.body && (req.body.cartTotal || req.body.total);
-    cartTotal = fromBody != null ? Number(fromBody) : 0;
+  const fromBody = req.body && (req.body.cartTotal || req.body.total);
+  // If this request is for a pending membership purchase, prefer the
+  // client-supplied / controller-provided plan amount to avoid including
+  // shipping defaults (membership is not a physical shipment).
+  const isMembershipFlow = req.session && req.session.pendingMembership;
+  if (isMembershipFlow && fromBody != null && Number(fromBody) > 0) {
+    cartTotal = Number(fromBody);
+  } else if (cartTotal == null || (Number(cartTotal || 0) <= 0 && fromBody != null && Number(fromBody) > 0)) {
+    cartTotal = fromBody != null ? Number(fromBody) : (cartTotal == null ? 0 : Number(cartTotal || 0));
   }
+  cartTotal = Number(cartTotal || 0);
 
   try {
     const requestBody = {
